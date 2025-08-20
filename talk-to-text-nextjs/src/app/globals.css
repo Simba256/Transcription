@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #003366; /* Talk to Text Canada Navy */
+  --primary-foreground: #ffffff;
+  --secondary: #f3f2ff; /* Light lavender */
+  --secondary-foreground: #171717;
+  --muted: #f8f9fa;
+  --muted-foreground: #6b7280;
+  --accent: #e5e1ff; /* Lavender */
+  --accent-foreground: #171717;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #003366;
+  --radius: 0.5rem;
+  
+  /* Talk to Text Canada Brand Colors */
+  --ttt-navy: #003366;
+  --ttt-navy-light: #0061df;
+  --ttt-navy-dark: #002347;
+  --ttt-lavender-light: #e6d9f7;
+  --ttt-lavender: #e5e1ff;
+  --ttt-lavender-dark: #b29dd9;
+  --ttt-greytext: #2c3e50;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: "Inter", var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius: var(--radius);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --card: #1a1a1a;
+    --card-foreground: #ededed;
+    --popover: #1a1a1a;
+    --popover-foreground: #ededed;
+    --primary: #4080ff;
+    --primary-foreground: #000000;
+    --secondary: #1a1a1a;
+    --secondary-foreground: #ededed;
+    --muted: #1a1a1a;
+    --muted-foreground: #a1a1aa;
+    --accent: #1a1a1a;
+    --accent-foreground: #ededed;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #4080ff;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Utility classes for Talk to Text Canada branding */
+.bg-ttt-navy { background-color: var(--ttt-navy); }
+.bg-ttt-lavender-light { background-color: var(--ttt-lavender-light); }
+.bg-ttt-lavender { background-color: var(--ttt-lavender); }
+.bg-ttt-lavender-dark { background-color: var(--ttt-lavender-dark); }
+.text-ttt-navy { color: var(--ttt-navy); }
+.text-ttt-greytext { color: var(--ttt-greytext); }
+.border-ttt-navy { border-color: var(--ttt-navy); }
+
+/* Main content panels similar to original design */
+.main-panel {
+  max-width: 960px;
+  margin: 2em auto;
+  padding: 1em 2em;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+.content-panel {
+  background: #fff;
+  padding: 1em;
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.05);
+  margin-bottom: 2em;
+}

@@ -1,0 +1,187 @@
+Talk to Text Canada — Technical Brief for Developers
+
+**Purpose:** Give any incoming developer everything needed to understand the system, run it locally, deploy to WHC, and safely ship improvements without breaking core business rules.
+
+1) Product snapshot (what it MUST do)
+    • Services: **AI-only**, **Human-only**, **Hybrid (Human+AI)**, **LegalScript Studio** (legal document production).
+    • Upload → **auto-transcribe with Speechmatics** → client edits in dashboard → **download**.
+    • **Download rules:** AI/standard = **locked PDF** (non‑editable). LegalScript = **editable .docx**.
+    • **Trial:** up to **3 uploads or 3 hours** via coupon system under `InitialTrial/`.
+    • **Payments:** Stripe subscriptions + webhooks update client access.
+    • Legal clients can upload templates or use an **Ontario Court Forms** library.
+    • Branding: **Navy `#003366`** primary + light/dark lavender accents; logo on every page.
+
+2) Tech stack & major components
+    • **Backend:** Flask (Python 3.11+). Primary entry: `app/webhook_app.py` (merged version).
+    • **ASR:** Speechmatics (REST). Wrapper lives in `app/speechmatics_handler.py` & `transcription/`.
+    • **Docs:** DOCX generation/merge, DOCX→PDF, **PDF locking** utility.
+    • **Frontend:** Flask/Jinja templates + SCSS compiled to `app/static`.
+    • **Payments:** Stripe (Checkout + Webhooks).
+    • **Hosting:** WHC (Web Hosting Canada) via cPanel **Python App (Passenger/WGSI)**.
+
+3) Environment & secrets (do not commit)
+`.env` lives in `config/.env` and is loaded by `dotenv` and `utils.init_env()`:
+    • `SPEECHMATICS_API_KEY`, `SPEECHMATICS_USER_ID`, `SPEECHMATICS_BASE_URL`
+    • `FLASK_SECRET_KEY`
+    • `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+    • `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+    • `CLIENT_FILES_DIR` (absolute or project‑relative base path for client data)
+
+**Note:** Any path used for uploads/finals must be **writable** on WHC.
+
+4) Data model (conceptual)
+**Client** `{client_id, subscription_status, metadata}`
+
+**Project** `{project_id, client_id, project_name, intake_data(JSON), status}`
+
+**Filesystem per project**
+client_files/<client_id>/projects/<project_id>_<project_name>/
+-uploaded_content/
+-transcripts/
+-previews/
+-final/--------#-FINAL-OUTPUTS-HERE
+-intake/--------#-per-project-JSON
+-legal_templates/---#-optional-client-provided
+**Canon file names:**
+    • AI: `final/FinalDocument.pdf` (locked)
+    • LegalScript: `final/FinalDocument.docx`
+
+5) Core routes & flows
+Upload & ASR
+    • `GET|POST /upload` → expects `client_id`, `project_name`, `file`.
+    • Saves to `uploaded_content/` → calls `transcribe_audio(client_id, project_name, path)`.
+    • Returns JSON `{status, transcript_path}` on success.
+
+Editing
+    • `transcript_editor.html` (AI clients): edit/format + tools; persists back to project.
+
+Downloads (strict rules)
+    • `GET /download/pdf/<client_id>/<project_id>`
+    • If missing, builds **locked PDF** from latest DOCX; **disables editing**.
+    • `GET /download/docx/<client_id>/<project_id>`
+    • LegalScript deliverables only (kept editable).
+
+Trial
+    • Views in `InitialTrial/templates/` (`upload.html`, `download.html`, `initial_trial_landing.html`).
+    • Logic in `InitialTrial/Modules/coupon_handler.py` enforcing **3 uploads / 3 hours**.
+
+Intake & project control
+    • **Intake CRUD** per project (route present/expected): load/edit/save JSON used in merges.
+    • **Project switcher** in dashboard to move between existing projects.
+
+Stripe
+    • Checkout link creation (automation WIP).
+    • Webhooks call `update_client_meta_payment`/`update_client_config_billing` to toggle access.
+
+Policy pages
+    • Privacy Policy, Terms, NDA — render + allow **.docx** downloads.
+
+6) Directory map (representative)
+C:\DEV\TALKTOTEXTCANADA
+│-README.md
+│-requirements.txt
+│
+├─admin/
+│--dashboard.html
+│
+├─app/
+│-│-webhook_app.py
+│-│-client_config.py
+│-│-speechmatics_handler.py
+│-│-test_flask.py
+│-│-intake.json-#-example-schema
+│-│-intake.ada--#-example-schema
+│-│
+│-├─client_files/
+│-│--└─-<client_id>/projects/<project_id>_<project_name>/
+│-│----├─-uploaded_content/
+│-│----├─-transcripts/
+│-│----├─-previews/
+│-│----├─-final/
+│-│----└─-intake/
+│-│
+│-├─templates/
+│-│--index.html,-welcome.html,-upload.html,-download.html,
+│-│--transcript_editor.html,-about.html,-about-founder.html-(members-only),
+│-│--thank_you.html,-admin-pages,-policy-pages
+│-│
+│-└─static/images/
+│
+├─InitialTrial/
+│-├─-Modules/coupon_handler.py
+│-└─-templates/upload.html,-download.html,-initial_trial_landing.html
+│
+├─config/-.env
+└─transcription/,-utils/,-generate_pdf.py,-...
+
+7) Branding & SCSS standards
+    • Primary: **`#003366`**; Accents: **lavender (light/dark)**.
+    • Keep **American spelling** in code identifiers; **Canadian English** in UI.
+    • Migrate Sass from `@import` → **`@use`**; define global tokens (colors/spacing/typography) and consume them everywhere.
+
+8) What’s DONE vs TODO
+**DONE / in place**
+    • Upload triggers Speechmatics transcription.
+    • Locked-PDF generation on demand (creates if missing) + route added.
+    • Trial system + coupon logic exists.
+    • Stripe integration present in prior `webhook_app.py`; merged into current (needs validation).
+    • Members-only founder page; link from authenticated `welcome.html` pending.
+
+**TODO (highest impact first)**
+1. **Finalize `webhook_app.py` merge** → remove duplicate routes, validate imports/paths, unify env loading.
+2. **Dashboard polish**
+    • AI editor: templates, tools, autosave, better UX.
+    • LegalScript: template upload, “Finished Work” list, **preview-before-download**, subscription panel.
+3. **Intake CRUD** (server + UI) and ensure merge pipeline uses intake data reliably.
+4. **Project switcher** (UI + server queries) with safe access control per client.
+5. **Stripe** → automate checkout link creation, verify webhook flows and metadata updates end-to-end.
+6. **Branding consistency** on `about.html`, `pricing.html`, `index.html`, `thank_you.html`.
+7. **SCSS** → fix undefined variables, compile clean with `@use`.
+8. **WHC deployment** → production `requirements.txt`, Passenger/WGSI config, runbook.
+
+9) Developer quick-start (local)
+1. Python 3.11+, create venv.
+2. `pip install -r requirements.txt`.
+3. Create `config/.env` with keys in §3.
+4. Ensure `CLIENT_FILES_DIR` exists and is writable.
+5. Run: `flask --app app/webhook_app.py run` (or `python app/wsgi.py`).
+6. Smoke test:
+    • Upload at `/upload`.
+    • Ensure transcript path returns.
+    • Check `/download/pdf/<client_id>/<project_id>` creates a locked PDF.
+    • Check `/download/docx/<client_id>/<project_id>` serves LegalScript doc.
+
+10) WHC deployment checklist (Passenger)
+    • Create Python App in cPanel → point to **WSGI entry** (e.g., `app/wsgi.py`).
+    • Upload code **without** `venv/`; inside WHC virtualenv run `pip install -r requirements.txt`.
+    • Place `.env` in `config/` on server; verify absolute paths.
+    • Ensure `client_files/` is writable; verify static file mapping.
+    • Configure Stripe Webhook URL to the deployed domain (HTTPS).
+
+11) Acceptance criteria (MVP)
+    • End-to-end: upload → ASR → edit → download (locked PDF for AI; .docx for LegalScript).
+    • Trial strictly limits **3 uploads / 3 hours**.
+    • Stripe checkout + webhook flips subscription state; dashboard shows plan, status, expiry.
+    • Intake CRUD + project switcher fully functional.
+    • SCSS compiles clean; consistent branding and logo across all pages.
+    • All finals saved to `final/` with canonical names.
+
+12) Security & compliance notes
+    • **No emailing** of transcripts; downloads are direct to the client device.
+    • **PDF locking** required for AI transcripts; LegalScript remains editable.
+    • Aim for **Canadian data residency** where practical; Speechmatics can be brought on‑prem later.
+    • Enforce auth on member‑only routes (about‑founder, dashboards, downloads).
+
+13) Common pitfalls (“don’t break these”)
+    • Don’t change the **download defaults** (locked PDF vs editable DOCX).
+    • Don’t write outside `CLIENT_FILES_DIR` or break the folder naming.
+    • Don’t commit `.env` or secrets; don’t include `venv/` in deliverables.
+    • Don’t hardcode Stripe keys or product IDs in templates.
+
+14) Glossary
+    • **LegalScript Studio:** Legal document creation workflow, editable outputs.
+    • **Locked PDF:** PDF with editing disabled, produced from DOCX when needed.
+    • **Intake:** Project-specific data used in merges/templates.
+
+15) Contact
+    • **Product Owner:** Jennifer Ouellette — prefers direct, precise updates and fast iteration.

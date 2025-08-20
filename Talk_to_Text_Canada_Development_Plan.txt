@@ -1,0 +1,479 @@
+Talk to Text Canada - Comprehensive Development Plan
+========================================================
+
+EXECUTIVE SUMMARY
+-----------------
+This plan outlines the complete development roadmap for Talk to Text Canada, an AI-powered transcription platform with multiple service tiers and legal document production capabilities. The platform supports AI-only, Human-only, Hybrid, and LegalScript Studio services with strict download rules and a freemium model.
+
+PROJECT OVERVIEW
+-----------------
+• Platform Type: AI Transcription Platform with Legal Document Production
+• Core Technology: Flask + Speechmatics ASR + Stripe Payments
+• Target Market: Legal professionals and general transcription users
+• Business Model: Freemium (3 uploads/3 hours trial) + Subscription tiers
+• Hosting: Web Hosting Canada (WHC) with Passenger/WSGI
+
+CORE REQUIREMENTS ANALYSIS
+---------------------------
+1. SERVICE TIERS:
+   - AI-only: Automated transcription with locked PDF output
+   - Human-only: Manual transcription service
+   - Hybrid: AI + Human verification
+   - LegalScript Studio: Legal document creation with editable DOCX output
+
+2. WORKFLOW:
+   Upload → Auto-transcribe (Speechmatics) → Client editing → Download
+   
+3. DOWNLOAD RULES (CRITICAL):
+   - AI/Standard services: LOCKED PDF (non-editable)
+   - LegalScript Studio: EDITABLE .docx files
+
+4. TRIAL SYSTEM:
+   - 3 uploads OR 3 hours maximum via coupon system
+   - Located in InitialTrial/ module
+
+5. PAYMENT INTEGRATION:
+   - Stripe subscriptions with webhook-driven access control
+   - Automated billing status updates
+
+DEVELOPMENT STAGES
+==================
+
+STAGE 1: FOUNDATION & CORE INFRASTRUCTURE (Weeks 1-3)
+------------------------------------------------------
+Priority: CRITICAL - Must be completed first
+
+Tasks:
+1.1 Environment Setup & Configuration
+    - Set up Python 3.11+ development environment
+    - Configure .env file with all required secrets
+    - Validate Speechmatics API integration
+    - Set up Stripe test environment
+
+1.2 Project Structure Finalization
+    - Complete webhook_app.py merge (remove duplicates)
+    - Validate all imports and paths
+    - Unify environment loading
+    - Establish proper MVC structure
+
+1.3 Database/File System Design
+    - Implement client file structure:
+      client_files/<client_id>/projects/<project_id>_<project_name>/
+      ├── uploaded_content/
+      ├── transcripts/
+      ├── previews/
+      ├── final/
+      ├── intake/
+      └── legal_templates/
+    - Ensure writable permissions for WHC deployment
+    - Implement file naming conventions
+
+1.4 Core Authentication & Authorization
+    - Client ID system implementation
+    - Route protection for member-only content
+    - Admin access controls
+
+DELIVERABLES:
+- Functional Flask application
+- Proper project structure
+- Working file system
+- Basic authentication
+
+STAGE 2: TRANSCRIPTION ENGINE & CORE WORKFLOW (Weeks 4-6)
+----------------------------------------------------------
+Priority: HIGH - Core business functionality
+
+Tasks:
+2.1 Speechmatics Integration
+    - Complete speechmatics_handler.py implementation
+    - Upload endpoint: GET|POST /upload
+    - Audio file processing and validation
+    - Transcription job management
+    - Error handling and retry logic
+
+2.2 File Upload System
+    - Multi-format audio file support
+    - File size validation and limits
+    - Upload progress tracking
+    - Temporary file management
+
+2.3 Transcript Processing
+    - Raw transcript storage and retrieval
+    - Transcript formatting and cleaning
+    - Version control for edits
+    - Auto-save functionality
+
+2.4 Download System Implementation
+    - PDF generation from DOCX (with locking)
+    - Route: GET /download/pdf/<client_id>/<project_id>
+    - Route: GET /download/docx/<client_id>/<project_id>
+    - Canonical file naming (FinalDocument.pdf/docx)
+
+DELIVERABLES:
+- Working upload → transcribe → download workflow
+- PDF locking utility
+- File management system
+
+STAGE 3: USER INTERFACE & EDITING CAPABILITIES (Weeks 7-9)
+-----------------------------------------------------------
+Priority: HIGH - User experience critical
+
+Tasks:
+3.1 Dashboard Development
+    - Main client dashboard
+    - Project overview and management
+    - Subscription status display
+    - Usage statistics
+
+3.2 Transcript Editor
+    - AI client editor (transcript_editor.html)
+    - Real-time editing capabilities
+    - Formatting tools and options
+    - Auto-save with version history
+    - Preview functionality
+
+3.3 LegalScript Studio Interface
+    - Template upload system
+    - Ontario Court Forms library integration
+    - Document merge functionality
+    - Preview before download
+    - "Finished Work" listing
+
+3.4 Project Management
+    - Project switcher implementation
+    - Project creation and naming
+    - Project status tracking
+    - Safe access control per client
+
+DELIVERABLES:
+- Complete dashboard interface
+- Functional transcript editor
+- LegalScript Studio workflow
+- Project management system
+
+STAGE 4: INTAKE SYSTEM & DOCUMENT MERGING (Weeks 10-11)
+--------------------------------------------------------
+Priority: MEDIUM-HIGH - Required for legal workflows
+
+Tasks:
+4.1 Intake CRUD System
+    - JSON-based intake data management
+    - Server-side intake endpoints
+    - UI for intake data entry/editing
+    - Validation and schema enforcement
+
+4.2 Document Merge Pipeline
+    - Template + intake data merging
+    - DOCX generation with dynamic content
+    - Legal template processing
+    - Merge validation and error handling
+
+4.3 Template Management
+    - Client-provided template uploads
+    - Template validation and storage
+    - Template library management
+    - Version control for templates
+
+DELIVERABLES:
+- Intake CRUD functionality
+- Document merge pipeline
+- Template management system
+
+STAGE 5: TRIAL SYSTEM & PAYMENT INTEGRATION (Weeks 12-13)
+----------------------------------------------------------
+Priority: HIGH - Revenue critical
+
+Tasks:
+5.1 Trial System Enhancement
+    - Coupon handler validation (InitialTrial/Modules/)
+    - 3 uploads / 3 hours enforcement
+    - Trial usage tracking
+    - Trial expiration handling
+
+5.2 Stripe Integration Completion
+    - Automated checkout link creation
+    - Webhook endpoint validation
+    - Subscription status management
+    - Payment failure handling
+    - Metadata updates (update_client_meta_payment)
+
+5.3 Subscription Management
+    - Plan selection interface
+    - Billing status dashboard
+    - Payment history tracking
+    - Upgrade/downgrade workflows
+
+DELIVERABLES:
+- Complete trial system
+- Full Stripe integration
+- Subscription management
+
+STAGE 6: BRANDING & UI POLISH (Weeks 14-15)
+--------------------------------------------
+Priority: MEDIUM - Professional appearance
+
+Tasks:
+6.1 SCSS/CSS Overhaul
+    - Migrate from @import to @use
+    - Define global design tokens
+    - Implement navy #003366 primary color
+    - Add lavender accent colors
+    - Fix undefined variables
+
+6.2 Branding Consistency
+    - Logo placement on all pages
+    - Consistent color scheme application
+    - Typography standardization
+    - Professional page layouts
+
+6.3 Page Polish
+    - about.html enhancement
+    - pricing.html completion
+    - index.html optimization
+    - thank_you.html styling
+    - Policy pages (Privacy, Terms, NDA)
+
+DELIVERABLES:
+- Consistent branding across platform
+- Clean, compiled SCSS
+- Professional UI/UX
+
+STAGE 7: DEPLOYMENT & PRODUCTION READINESS (Weeks 16-17)
+---------------------------------------------------------
+Priority: CRITICAL - Go-live requirement
+
+Tasks:
+7.1 WHC Deployment Preparation
+    - Production requirements.txt
+    - Passenger/WSGI configuration
+    - Environment variable setup
+    - Static file mapping
+
+7.2 Production Configuration
+    - HTTPS SSL setup
+    - Stripe webhook URL configuration
+    - File permissions verification
+    - Performance optimization
+
+7.3 Testing & Validation
+    - End-to-end workflow testing
+    - Payment integration testing
+    - File upload/download validation
+    - Security audit
+
+7.4 Deployment & Monitoring
+    - Production deployment
+    - Monitoring setup
+    - Backup procedures
+    - Rollback plan
+
+DELIVERABLES:
+- Production-ready application
+- Deployed platform on WHC
+- Monitoring and backup systems
+
+STAGE 8: QUALITY ASSURANCE & OPTIMIZATION (Weeks 18-19)
+--------------------------------------------------------
+Priority: MEDIUM - Post-launch optimization
+
+Tasks:
+8.1 Performance Optimization
+    - File processing optimization
+    - Database query optimization
+    - Caching implementation
+    - Load testing
+
+8.2 Security Hardening
+    - Authentication strengthening
+    - File access validation
+    - API security review
+    - Data protection compliance
+
+8.3 User Experience Improvements
+    - Error handling enhancement
+    - Loading states and feedback
+    - Mobile responsiveness
+    - Accessibility compliance
+
+DELIVERABLES:
+- Optimized performance
+- Enhanced security
+- Improved user experience
+
+TECHNICAL COMPONENTS BREAKDOWN
+==============================
+
+BACKEND COMPONENTS:
+-------------------
+1. Flask Application (app/webhook_app.py)
+   - Main application entry point
+   - Route definitions and handlers
+   - Middleware and error handling
+
+2. Speechmatics Handler (app/speechmatics_handler.py)
+   - ASR API integration
+   - Job management and status tracking
+   - Error handling and retries
+
+3. Client Configuration (app/client_config.py)
+   - Client data management
+   - Subscription status tracking
+   - Access control logic
+
+4. Payment Integration
+   - Stripe checkout and webhooks
+   - Subscription lifecycle management
+   - Payment status updates
+
+5. Document Processing
+   - DOCX generation and merging
+   - PDF creation and locking
+   - Template management
+
+6. Trial System (InitialTrial/)
+   - Coupon validation
+   - Usage tracking
+   - Access limitation
+
+FRONTEND COMPONENTS:
+--------------------
+1. Templates (app/templates/)
+   - Main dashboard pages
+   - Transcript editor interface
+   - Upload and download pages
+   - Admin interfaces
+
+2. Static Assets (app/static/)
+   - SCSS stylesheets
+   - JavaScript functionality
+   - Images and branding assets
+
+3. Trial Interface (InitialTrial/templates/)
+   - Trial-specific pages
+   - Limited functionality views
+
+FILE SYSTEM COMPONENTS:
+-----------------------
+1. Client Data Structure
+   - Organized project folders
+   - Segregated file types
+   - Canonical naming conventions
+
+2. Security & Access Control
+   - Per-client isolation
+   - Write permission management
+   - Download access validation
+
+INTEGRATION COMPONENTS:
+-----------------------
+1. Speechmatics API
+   - Real-time transcription
+   - Job status monitoring
+   - Quality assurance
+
+2. Stripe Payment Gateway
+   - Secure payment processing
+   - Webhook event handling
+   - Subscription management
+
+3. WHC Hosting Platform
+   - Passenger/WSGI deployment
+   - File system management
+   - SSL and security
+
+CRITICAL BUSINESS RULES (DO NOT BREAK)
+======================================
+1. Download Format Rules:
+   - AI/Standard services: ALWAYS locked PDF
+   - LegalScript Studio: ALWAYS editable DOCX
+   - No exceptions to these rules
+
+2. Trial Limitations:
+   - Maximum 3 uploads OR 3 hours
+   - Strict enforcement via coupon system
+   - No bypassing trial limits
+
+3. File Security:
+   - No email transmission of transcripts
+   - Direct download to client device only
+   - Per-client access isolation
+
+4. Data Integrity:
+   - All finals saved to final/ directory
+   - Canonical file naming (FinalDocument.pdf/docx)
+   - Maintain client file structure
+
+5. Payment Integration:
+   - Webhook-driven access control only
+   - No hardcoded Stripe keys in templates
+   - Automatic subscription status updates
+
+RISK MITIGATION
+================
+1. Technical Risks:
+   - Speechmatics API downtime: Implement retry logic and status monitoring
+   - File corruption: Regular backups and validation
+   - Payment failures: Comprehensive error handling and notifications
+
+2. Security Risks:
+   - Unauthorized access: Strong authentication and per-client isolation
+   - Data breaches: Encrypted storage and transmission
+   - File exposure: Proper permission management
+
+3. Business Risks:
+   - Trial abuse: Strict coupon validation and tracking
+   - Payment disputes: Clear terms and audit trails
+   - Service disruption: Monitoring and rapid response procedures
+
+SUCCESS METRICS
+===============
+1. Technical Metrics:
+   - Upload success rate > 99%
+   - Transcription accuracy (Speechmatics dependent)
+   - Download completion rate > 99%
+   - Page load times < 3 seconds
+
+2. Business Metrics:
+   - Trial to paid conversion rate
+   - Customer retention rate
+   - Average revenue per user
+   - Support ticket volume
+
+3. Quality Metrics:
+   - User satisfaction scores
+   - Error rates and resolution times
+   - System uptime > 99.5%
+   - Security incident count (target: 0)
+
+MAINTENANCE & SUPPORT
+====================
+1. Regular Maintenance:
+   - Security updates and patches
+   - Performance monitoring and optimization
+   - Backup verification and testing
+   - User feedback incorporation
+
+2. Support Structure:
+   - Technical documentation maintenance
+   - User guide and FAQ updates
+   - Customer support procedures
+   - Developer onboarding materials
+
+3. Future Enhancements:
+   - Canadian data residency implementation
+   - On-premise Speechmatics deployment
+   - Additional transcription providers
+   - Advanced editing features
+
+CONCLUSION
+==========
+This comprehensive plan provides a structured approach to developing Talk to Text Canada from foundation to production deployment. The 19-week timeline allows for thorough development, testing, and optimization while maintaining focus on critical business requirements and security considerations.
+
+Key success factors:
+- Strict adherence to download format rules
+- Robust trial system implementation
+- Seamless payment integration
+- Professional branding and user experience
+- Reliable deployment and monitoring
+
+The modular approach allows for parallel development where possible and ensures that critical components are prioritized appropriately.
