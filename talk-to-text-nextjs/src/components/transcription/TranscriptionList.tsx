@@ -94,9 +94,92 @@ export default function TranscriptionList({
 
     try {
       await transcriptionService.retryTranscription(user.uid, jobId);
+      setError(null);
     } catch (error) {
       console.error('Error retrying transcription:', error);
-      setError(error instanceof Error ? error.message : 'Failed to retry transcription');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to retry transcription';
+      
+      // Check if it's a resubmission error
+      if (errorMessage.includes('re-uploaded') || errorMessage.includes('re-upload')) {
+        setError(`${errorMessage} You can delete this failed transcription and upload the file again.`);
+      } else if (errorMessage.includes('Maximum retry attempts exceeded')) {
+        // Try to reset and retry again
+        try {
+          await transcriptionService.resetTranscriptionRetries(user.uid, jobId);
+          await transcriptionService.retryTranscription(user.uid, jobId);
+          setError(null);
+        } catch (resetError) {
+          const resetErrorMessage = resetError instanceof Error ? resetError.message : 'Failed to retry transcription';
+          if (resetErrorMessage.includes('re-uploaded') || resetErrorMessage.includes('re-upload')) {
+            setError(`${resetErrorMessage} You can delete this failed transcription and upload the file again.`);
+          } else {
+            setError(resetErrorMessage);
+          }
+        }
+      } else {
+        setError(errorMessage);
+      }
+    }
+  };
+
+  const handleRefreshStatus = async (jobId: string) => {
+    if (!user) return;
+
+    try {
+      await transcriptionService.refreshTranscriptionStatus(user.uid, jobId);
+      setError(null);
+    } catch (error) {
+      console.error('Error refreshing transcription status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh transcription status';
+      
+      // Provide helpful guidance for different error types
+      if (errorMessage.includes('never submitted to Speechmatics')) {
+        setError(`${errorMessage} This transcription needs to be re-uploaded.`);
+      } else {
+        setError(errorMessage);
+      }
+    }
+  };
+
+  const handleForceRetrieve = async (jobId: string) => {
+    if (!user) return;
+
+    try {
+      const transcript = await transcriptionService.forceRetrieveTranscript(user.uid, jobId);
+      if (transcript) {
+        setError(null);
+        // Optionally show a success message
+      } else {
+        setError('No transcript could be retrieved for this job');
+      }
+    } catch (error) {
+      console.error('Error force retrieving transcript:', error);
+      setError(error instanceof Error ? error.message : 'Failed to retrieve transcript');
+    }
+  };
+
+  const handleDiagnose = async (jobId: string) => {
+    if (!user) return;
+
+    try {
+      const diagnosis = await transcriptionService.diagnoseStuckJob(user.uid, jobId);
+      
+      // Show diagnosis in a more user-friendly way
+      let message = `Job Status: ${diagnosis.jobStatus}`;
+      if (diagnosis.speechmaticsStatus) {
+        message += `\nSpeechmatics Status: ${diagnosis.speechmaticsStatus}`;
+      }
+      if (diagnosis.lastChecked) {
+        message += `\nLast Checked: ${diagnosis.lastChecked.toLocaleString()}`;
+      }
+      message += `\n\nRecommendation: ${diagnosis.recommendation}`;
+      
+      // For now, show in error field (you could create a dedicated diagnosis modal)
+      setError(message);
+    } catch (error) {
+      console.error('Error diagnosing job:', error);
+      setError(error instanceof Error ? error.message : 'Failed to diagnose job');
     }
   };
 
@@ -319,6 +402,9 @@ export default function TranscriptionList({
               onRetry={handleRetry}
               onCancel={handleCancel}
               onDownload={handleDownload}
+              onRefreshStatus={handleRefreshStatus}
+              onForceRetrieve={handleForceRetrieve}
+              onDiagnose={handleDiagnose}
               compact={compact}
             />
           ))}

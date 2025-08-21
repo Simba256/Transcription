@@ -52,7 +52,24 @@ export interface QueueStats {
 
 class TranscriptionQueue {
   private activePollers = new Set<string>();
-  
+
+  /**
+   * Safely update Firestore document with validated fields
+   */
+  private async safeUpdateDoc(docRef: any, updates: Record<string, any>): Promise<void> {
+    // Remove undefined values to prevent Firestore errors
+    const cleanUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
+      if (value !== undefined && value !== null) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+    
+    if (Object.keys(cleanUpdates).length > 0) {
+      await updateDoc(docRef, cleanUpdates);
+    }
+  }
+
   /**
    * Add a new transcription job to the queue
    */
@@ -218,12 +235,215 @@ class TranscriptionQueue {
         errorAt: null
       });
 
-      // Process the job again
-      await this.processJob(jobId);
+      // If job has a speechmatics job ID, check its current status first
+      if (jobData.speechmaticsJobId) {
+        try {
+          await this.checkAndUpdateJobStatus(jobId, jobData.speechmaticsJobId);
+          // If job is actually complete, no need to retry
+          const updatedJob = await getDocs(query(
+            collection(db, 'transcriptions'),
+            where('__name__', '==', jobId)
+          ));
+          const updatedJobData = updatedJob.docs[0].data() as TranscriptionJobData;
+          if (updatedJobData.status === 'completed') {
+            return;
+          }
+        } catch (error) {
+          console.warn(`Failed to check job status before retry: ${error}`);
+        }
+        
+        // Start polling the existing job
+        await this.processJob(jobId);
+      } else {
+        // Job was never submitted to Speechmatics, need file re-upload
+        // Mark it as pending and let the user know they need to re-upload
+        await updateDoc(jobDoc, {
+          status: 'error',
+          error: 'This transcription needs to be re-submitted with the original file. Please upload the file again.',
+          errorAt: serverTimestamp()
+        });
+        throw new Error('This transcription was never properly submitted. Please re-upload the file to retry.');
+      }
       
     } catch (error) {
       console.error(`Error retrying job ${jobId}:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Check and update job status from Speechmatics
+   */
+  private async checkAndUpdateJobStatus(jobId: string, speechmaticsJobId: string): Promise<void> {
+    try {
+      const job = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
+      
+      // Validate job status before updating Firestore
+      if (!job || !job.status) {
+        console.warn(`Invalid job status received for ${speechmaticsJobId}:`, job);
+        throw new Error('Invalid job status received from Speechmatics');
+      }
+      
+      // Update Firestore with current status using safe update
+      await this.safeUpdateDoc(doc(db, 'transcriptions', jobId), {
+        speechmaticsStatus: job.status,
+        lastCheckedAt: serverTimestamp()
+      });
+
+      if (job.status === 'done') {
+        // Get the transcript
+        const transcript = await speechmaticsService.getTranscriptDirect(speechmaticsJobId, 'json-v2');
+        const transcriptText = speechmaticsService.extractTextFromTranscript(transcript);
+        
+        // Update Firestore with completed transcript
+        await updateDoc(doc(db, 'transcriptions', jobId), {
+          status: 'completed',
+          transcript: transcriptText,
+          fullTranscript: transcript,
+          completedAt: serverTimestamp(),
+          duration: job.duration
+        });
+      } else if (job.status === 'rejected') {
+        await updateDoc(doc(db, 'transcriptions', jobId), {
+          status: 'error',
+          error: 'Job rejected by Speechmatics',
+          errorAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to check job status for ${speechmaticsJobId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset retry count for a job (allows retrying jobs that exceeded max retries)
+   */
+  async resetRetryCount(jobId: string): Promise<void> {
+    try {
+      const jobDoc = doc(db, 'transcriptions', jobId);
+      await updateDoc(jobDoc, {
+        retryCount: 0,
+        error: null,
+        errorAt: null
+      });
+    } catch (error) {
+      console.error(`Error resetting retry count for job ${jobId}:`, error);
+      throw new Error('Failed to reset retry count');
+    }
+  }
+
+  /**
+   * Refresh job status from Speechmatics (useful for stuck jobs)
+   */
+  async refreshJobStatus(jobId: string): Promise<void> {
+    try {
+      const jobSnapshot = await getDocs(query(
+        collection(db, 'transcriptions'),
+        where('__name__', '==', jobId)
+      ));
+
+      if (jobSnapshot.empty) {
+        throw new Error('Job not found');
+      }
+
+      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
+
+      if (jobData.speechmaticsJobId) {
+        await this.checkAndUpdateJobStatus(jobId, jobData.speechmaticsJobId);
+      } else {
+        // Job never made it to Speechmatics, mark it as needing re-submission
+        await updateDoc(doc(db, 'transcriptions', jobId), {
+          status: 'pending',
+          error: 'Job needs to be re-submitted to Speechmatics',
+          lastCheckedAt: serverTimestamp()
+        });
+        throw new Error('Job was never submitted to Speechmatics. Please retry the transcription.');
+      }
+    } catch (error) {
+      console.error(`Error refreshing job status for ${jobId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force complete a job with manual transcript (emergency method)
+   */
+  async forceCompleteJob(jobId: string, transcript: string): Promise<void> {
+    try {
+      const jobDoc = doc(db, 'transcriptions', jobId);
+      await updateDoc(jobDoc, {
+        status: 'completed',
+        transcript: transcript,
+        completedAt: serverTimestamp(),
+        error: null,
+        errorAt: null
+      });
+    } catch (error) {
+      console.error(`Error force completing job ${jobId}:`, error);
+      throw new Error('Failed to force complete job');
+    }
+  }
+
+  /**
+   * Check if a job can be retried or needs re-submission
+   */
+  async getJobRetryInfo(jobId: string): Promise<{
+    canRetry: boolean;
+    needsResubmission: boolean;
+    reason: string;
+  }> {
+    try {
+      const jobSnapshot = await getDocs(query(
+        collection(db, 'transcriptions'),
+        where('__name__', '==', jobId)
+      ));
+
+      if (jobSnapshot.empty) {
+        return {
+          canRetry: false,
+          needsResubmission: false,
+          reason: 'Job not found'
+        };
+      }
+
+      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
+
+      if (jobData.status === 'completed') {
+        return {
+          canRetry: false,
+          needsResubmission: false,
+          reason: 'Job already completed'
+        };
+      }
+
+      if (jobData.retryCount >= jobData.maxRetries && !jobData.speechmaticsJobId) {
+        return {
+          canRetry: false,
+          needsResubmission: true,
+          reason: 'Job never submitted to Speechmatics and exceeded retries'
+        };
+      }
+
+      if (!jobData.speechmaticsJobId) {
+        return {
+          canRetry: false,
+          needsResubmission: true,
+          reason: 'Job was never submitted to Speechmatics'
+        };
+      }
+
+      return {
+        canRetry: true,
+        needsResubmission: false,
+        reason: 'Job can be retried'
+      };
+    } catch (error) {
+      return {
+        canRetry: false,
+        needsResubmission: false,
+        reason: 'Error checking job status'
+      };
     }
   }
 

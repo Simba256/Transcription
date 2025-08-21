@@ -53,6 +53,35 @@ class SpeechmaticsService {
     this.apiKey = process.env.SPEECHMATICS_API_KEY || '';
     if (!this.apiKey) {
       console.warn('SPEECHMATICS_API_KEY not found in environment variables');
+    } else {
+      console.log('Speechmatics service initialized with API key');
+    }
+  }
+
+  /**
+   * Test if the Speechmatics API is properly configured and accessible
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      if (!this.apiKey) {
+        throw new Error('API key not configured');
+      }
+      
+      // Make a simple request to test the connection
+      const response = await axios.get(`${this.baseUrl}/jobs`, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000,
+        params: { limit: 1 } // Just get 1 job to test
+      });
+      
+      console.log('Speechmatics API connection test successful');
+      return true;
+    } catch (error: any) {
+      console.error('Speechmatics API connection test failed:', error.message);
+      return false;
     }
   }
 
@@ -119,6 +148,58 @@ class SpeechmaticsService {
   }
 
   /**
+   * Check the status of a transcription job (server-side - direct API call)
+   */
+  async getJobStatusDirect(jobId: string): Promise<TranscriptionJob> {
+    if (!this.apiKey) {
+      throw new Error('Speechmatics API key not configured');
+    }
+
+    if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+      throw new Error('Invalid job ID provided');
+    }
+
+    try {
+      const response: AxiosResponse<TranscriptionJob> = await axios.get(
+        `${this.baseUrl}/jobs/${jobId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+      
+      const job = response.data;
+      
+      // Validate the response has required fields
+      if (!job || !job.status) {
+        throw new Error('Invalid response from Speechmatics API: missing status');
+      }
+      
+      // Ensure status is a valid string
+      if (typeof job.status !== 'string' || job.status.trim() === '') {
+        throw new Error(`Invalid job status from Speechmatics: ${job.status}`);
+      }
+      
+      return job;
+    } catch (error: any) {
+      console.error('Direct status check error:', error.response?.data || error.message);
+      
+      if (error.response?.status === 404) {
+        throw new Error('Job not found in Speechmatics');
+      } else if (error.response?.status === 401) {
+        throw new Error('Invalid Speechmatics API key');
+      } else if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      
+      throw new Error(`Status check failed: ${error.response?.data?.detail || error.message}`);
+    }
+  }
+
+  /**
    * Get the transcript result from a completed job (client-side)
    */
   async getTranscript(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
@@ -128,6 +209,49 @@ class SpeechmaticsService {
     } catch (error: any) {
       console.error('Transcript retrieval error:', error.response?.data || error.message);
       throw new Error(`Transcript retrieval failed: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Get the transcript result from a completed job (server-side - direct API call)
+   */
+  async getTranscriptDirect(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
+    if (!this.apiKey) {
+      throw new Error('Speechmatics API key not configured');
+    }
+
+    if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+      throw new Error('Invalid job ID provided');
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/jobs/${jobId}/transcript`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Accept': format === 'json-v2' ? 'application/json' : 'text/plain'
+          },
+          params: {
+            format: format
+          },
+          timeout: 30000 // 30 second timeout for transcript download
+        }
+      );
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('Direct transcript retrieval error:', error.response?.data || error.message);
+      
+      if (error.response?.status === 404) {
+        throw new Error('Job or transcript not found in Speechmatics');
+      } else if (error.response?.status === 401) {
+        throw new Error('Invalid Speechmatics API key');
+      } else if (error.response?.status === 423) {
+        throw new Error('Job not yet completed or failed');
+      }
+      
+      throw new Error(`Transcript retrieval failed: ${error.response?.data?.detail || error.message}`);
     }
   }
 
@@ -200,6 +324,23 @@ class SpeechmaticsService {
   }
 
   /**
+   * Safely update Firestore document with validated fields
+   */
+  private async safeUpdateDoc(docRef: any, updates: Record<string, any>): Promise<void> {
+    // Remove undefined values to prevent Firestore errors
+    const cleanUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
+      if (value !== undefined && value !== null) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+    
+    if (Object.keys(cleanUpdates).length > 0) {
+      await updateDoc(docRef, cleanUpdates);
+    }
+  }
+
+  /**
    * Poll job status and update Firestore when complete
    */
   async pollJobStatus(jobId: string, firestoreDocId: string, maxAttempts: number = 60): Promise<boolean> {
@@ -207,21 +348,28 @@ class SpeechmaticsService {
     
     while (attempts < maxAttempts) {
       try {
-        const job = await this.getJobStatus(jobId);
+        const job = await this.getJobStatusDirect(jobId);
         
-        // Update Firestore with current status
-        await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+        // Validate job status before updating Firestore
+        if (!job || !job.status) {
+          console.warn(`Invalid job status received for ${jobId}:`, job);
+          attempts++;
+          continue;
+        }
+        
+        // Update Firestore with current status using safe update
+        await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
           speechmaticsStatus: job.status,
           lastCheckedAt: serverTimestamp()
         });
 
         if (job.status === 'done') {
           // Get the transcript
-          const transcript = await this.getTranscript(jobId, 'json-v2');
+          const transcript = await this.getTranscriptDirect(jobId, 'json-v2');
           const transcriptText = this.extractTextFromTranscript(transcript);
           
-          // Update Firestore with completed transcript
-          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+          // Update Firestore with completed transcript using safe update
+          await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
             status: 'completed',
             transcript: transcriptText,
             fullTranscript: transcript,
@@ -231,7 +379,7 @@ class SpeechmaticsService {
           
           return true;
         } else if (job.status === 'rejected') {
-          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+          await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
             status: 'error',
             error: 'Job rejected by Speechmatics',
             errorAt: serverTimestamp()
@@ -266,9 +414,41 @@ class SpeechmaticsService {
   }
 
   /**
+   * Force check a job status and update if needed (useful for stuck jobs)
+   */
+  async forceCheckJobStatus(speechmaticsJobId: string): Promise<{
+    status: string;
+    duration?: number;
+    transcriptAvailable: boolean;
+  }> {
+    try {
+      const job = await this.getJobStatusDirect(speechmaticsJobId);
+      
+      let transcriptAvailable = false;
+      if (job.status === 'done') {
+        try {
+          await this.getTranscriptDirect(speechmaticsJobId, 'json-v2');
+          transcriptAvailable = true;
+        } catch (error) {
+          console.warn('Job marked as done but transcript not available:', error);
+        }
+      }
+      
+      return {
+        status: job.status,
+        duration: job.duration,
+        transcriptAvailable
+      };
+    } catch (error) {
+      console.error('Error force checking job status:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Extract plain text from Speechmatics JSON transcript
    */
-  private extractTextFromTranscript(transcript: TranscriptionResult): string {
+  extractTextFromTranscript(transcript: TranscriptionResult): string {
     if (!transcript.results) {
       return '';
     }

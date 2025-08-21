@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const status = await speechmaticsService.getJobStatus(jobId);
+    const status = await speechmaticsService.getJobStatusDirect(jobId);
     return NextResponse.json(status);
   } catch (error) {
     console.error('Status check error:', error);

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const transcript = await speechmaticsService.getTranscript(jobId, format);
+    const transcript = await speechmaticsService.getTranscriptDirect(jobId, format);
     return NextResponse.json(transcript);
   } catch (error) {
     console.error('Transcript retrieval error:', error);

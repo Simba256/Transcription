@@ -1,6 +1,9 @@
 import { transcriptionQueue, TranscriptionJobData } from './transcription-queue';
+import { speechmaticsService } from './speechmatics';
 import { updateUserUsage } from './firestore';
 import { estimateAudioDuration } from './storage';
+import { db } from './firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export interface CreateTranscriptionOptions {
   language?: string;
@@ -126,10 +129,182 @@ class TranscriptionService {
         throw new Error('Can only retry failed transcriptions');
       }
 
+      // Check retry capability first
+      const retryInfo = await transcriptionQueue.getJobRetryInfo(jobId);
+      
+      if (retryInfo.needsResubmission) {
+        throw new Error('This transcription needs to be re-uploaded. The original file was never properly submitted to the transcription service. Please upload the audio file again.');
+      }
+
+      if (!retryInfo.canRetry) {
+        throw new Error(`Cannot retry: ${retryInfo.reason}`);
+      }
+
+      // Check if retry count exceeded - if so, reset it
+      if (job.retryCount >= job.maxRetries) {
+        await transcriptionQueue.resetRetryCount(jobId);
+      }
+
       await transcriptionQueue.retryJob(jobId);
     } catch (error) {
       console.error('Error retrying transcription:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Refresh transcription status from Speechmatics
+   */
+  async refreshTranscriptionStatus(userId: string, jobId: string): Promise<void> {
+    try {
+      // Verify the job belongs to the user
+      const job = await this.getTranscription(userId, jobId);
+      if (!job) {
+        throw new Error('Transcription not found or access denied');
+      }
+
+      await transcriptionQueue.refreshJobStatus(jobId);
+    } catch (error) {
+      console.error('Error refreshing transcription status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset retry count for a transcription (allows retrying jobs that exceeded max retries)
+   */
+  async resetTranscriptionRetries(userId: string, jobId: string): Promise<void> {
+    try {
+      // Verify the job belongs to the user
+      const job = await this.getTranscription(userId, jobId);
+      if (!job) {
+        throw new Error('Transcription not found or access denied');
+      }
+
+      await transcriptionQueue.resetRetryCount(jobId);
+    } catch (error) {
+      console.error('Error resetting transcription retries:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force check and retrieve transcript for a job (even if marked as failed)
+   */
+  async forceRetrieveTranscript(userId: string, jobId: string): Promise<string | null> {
+    try {
+      // Verify the job belongs to the user
+      const job = await this.getTranscription(userId, jobId);
+      if (!job) {
+        throw new Error('Transcription not found or access denied');
+      }
+
+      // If we already have a transcript, return it
+      if (job.transcript) {
+        return job.transcript;
+      }
+
+      // If we have a speechmatics job ID, try to get the transcript directly
+      if (job.speechmaticsJobId) {
+        try {
+          const transcript = await speechmaticsService.getTranscriptDirect(job.speechmaticsJobId, 'json-v2');
+          const transcriptText = speechmaticsService.extractTextFromTranscript(transcript);
+          
+          if (transcriptText) {
+            // Update the job with the retrieved transcript
+            await transcriptionQueue.forceCompleteJob(jobId, transcriptText);
+            return transcriptText;
+          }
+        } catch (error) {
+          console.warn('Failed to retrieve transcript from Speechmatics:', error);
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error force retrieving transcript:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Diagnose a stuck transcription job
+   */
+  async diagnoseStuckJob(userId: string, jobId: string): Promise<{
+    jobStatus: string;
+    speechmaticsStatus?: string;
+    lastChecked?: Date;
+    recommendation: string;
+    canForceCheck: boolean;
+  }> {
+    try {
+      // Verify the job belongs to the user
+      const job = await this.getTranscription(userId, jobId);
+      if (!job) {
+        throw new Error('Transcription not found or access denied');
+      }
+
+      const result = {
+        jobStatus: job.status,
+        speechmaticsStatus: job.speechmaticsStatus,
+        lastChecked: job.lastCheckedAt ? new Date(job.lastCheckedAt.seconds * 1000) : undefined,
+        recommendation: '',
+        canForceCheck: !!job.speechmaticsJobId
+      };
+
+      // Provide recommendations based on job state
+      if (job.status === 'processing') {
+        const timeSinceCreated = Date.now() - (job.createdAt.seconds * 1000);
+        const hoursSinceCreated = timeSinceCreated / (1000 * 60 * 60);
+
+        if (hoursSinceCreated > 2) {
+          result.recommendation = 'Job has been processing for over 2 hours. Try "Force Check Status" to update from Speechmatics.';
+        } else if (hoursSinceCreated > 0.5) {
+          result.recommendation = 'Job has been processing for a while. You can try "Force Check Status" or wait a bit longer.';
+        } else {
+          result.recommendation = 'Job is recently created. Processing typically takes a few minutes.';
+        }
+
+        if (!job.speechmaticsJobId) {
+          result.recommendation = 'Job was never submitted to Speechmatics. Try retrying the transcription.';
+          result.canForceCheck = false;
+        }
+      } else if (job.status === 'error') {
+        result.recommendation = 'Job failed. Check error details and try retrying or force retrieving transcript.';
+      } else if (job.status === 'completed') {
+        result.recommendation = 'Job is completed successfully.';
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error diagnosing stuck job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get retry information for a transcription
+   */
+  async getTranscriptionRetryInfo(userId: string, jobId: string): Promise<{
+    canRetry: boolean;
+    needsResubmission: boolean;
+    reason: string;
+  }> {
+    try {
+      // Verify the job belongs to the user
+      const job = await this.getTranscription(userId, jobId);
+      if (!job) {
+        throw new Error('Transcription not found or access denied');
+      }
+
+      return await transcriptionQueue.getJobRetryInfo(jobId);
+    } catch (error) {
+      console.error('Error getting transcription retry info:', error);
+      return {
+        canRetry: false,
+        needsResubmission: false,
+        reason: 'Error checking retry status'
+      };
     }
   }
 

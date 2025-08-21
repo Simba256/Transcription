@@ -23,6 +23,9 @@ interface TranscriptionStatusProps {
   onRetry?: (jobId: string) => void;
   onCancel?: (jobId: string) => void;
   onDownload?: (jobId: string, format: 'txt' | 'json' | 'srt') => void;
+  onRefreshStatus?: (jobId: string) => void;
+  onForceRetrieve?: (jobId: string) => void;
+  onDiagnose?: (jobId: string) => void;
   compact?: boolean;
 }
 
@@ -31,6 +34,9 @@ export default function TranscriptionStatus({
   onRetry, 
   onCancel, 
   onDownload,
+  onRefreshStatus,
+  onForceRetrieve,
+  onDiagnose,
   compact = false 
 }: TranscriptionStatusProps) {
   const getStatusIcon = (status: string) => {
@@ -94,6 +100,28 @@ export default function TranscriptionStatus({
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  const getErrorGuidance = (error?: string) => {
+    if (!error) return null;
+    
+    if (error.includes('never submitted to Speechmatics') || error.includes('re-upload')) {
+      return (
+        <div className="text-xs text-orange-600 mt-1">
+          💡 This file was never properly uploaded. Please upload the audio file again.
+        </div>
+      );
+    }
+    
+    if (error.includes('retry')) {
+      return (
+        <div className="text-xs text-blue-600 mt-1">
+          💡 Try using the Refresh Status button first, then Retry if needed.
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'Unknown';
     const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
@@ -141,6 +169,24 @@ export default function TranscriptionStatus({
           {job.status === 'error' && onRetry && (
             <Button size="sm" variant="outline" onClick={() => onRetry(job.id!)}>
               <RefreshCw className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {(job.status === 'error' || job.status === 'processing') && onRefreshStatus && (
+            <Button size="sm" variant="outline" onClick={() => onRefreshStatus(job.id!)} title="Refresh status from Speechmatics">
+              <Zap className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {job.status === 'error' && onForceRetrieve && (
+            <Button size="sm" variant="outline" onClick={() => onForceRetrieve(job.id!)} title="Force retrieve transcript">
+              <Download className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {job.status === 'processing' && onDiagnose && (
+            <Button size="sm" variant="outline" onClick={() => onDiagnose(job.id!)} title="Diagnose stuck job">
+              <AlertTriangle className="h-3 w-3" />
             </Button>
           )}
         </div>
@@ -251,6 +297,7 @@ export default function TranscriptionStatus({
                 Retry attempts: {job.retryCount}/{job.maxRetries}
               </p>
             )}
+            {getErrorGuidance(job.error)}
           </div>
         )}
 
@@ -321,6 +368,42 @@ export default function TranscriptionStatus({
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry Transcription
+            </Button>
+          )}
+
+          {(job.status === 'error' || job.status === 'processing') && onRefreshStatus && (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => onRefreshStatus(job.id!)}
+              className="flex-1"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Refresh Status
+            </Button>
+          )}
+
+          {job.status === 'error' && onForceRetrieve && (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => onForceRetrieve(job.id!)}
+              className="flex-1"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Force Retrieve
+            </Button>
+          )}
+
+          {job.status === 'processing' && onDiagnose && (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => onDiagnose(job.id!)}
+              className="flex-1"
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Diagnose
             </Button>
           )}
 
