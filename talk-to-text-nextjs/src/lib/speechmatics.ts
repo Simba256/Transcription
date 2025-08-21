@@ -8,13 +8,7 @@ export interface SpeechmaticsConfig {
   type: 'transcription';
   transcription_config: {
     language: string;
-    output_locale?: string;
     diarization?: 'speaker' | 'channel';
-    speaker_diarization_config?: {
-      max_speakers?: number;
-    };
-    punctuation_permitted?: boolean;
-    format?: 'txt' | 'json-v2' | 'srt';
   };
 }
 
@@ -71,12 +65,7 @@ class SpeechmaticsService {
     config: SpeechmaticsConfig = {
       type: 'transcription',
       transcription_config: {
-        language: 'en',
-        punctuation_permitted: true,
-        diarization: 'speaker',
-        speaker_diarization_config: {
-          max_speakers: 8
-        }
+        language: 'en'
       }
     }
   ): Promise<{ job_id: string }> {
@@ -117,66 +106,28 @@ class SpeechmaticsService {
   }
 
   /**
-   * Check the status of a transcription job
+   * Check the status of a transcription job (client-side)
    */
   async getJobStatus(jobId: string): Promise<TranscriptionJob> {
-    if (!this.apiKey) {
-      throw new Error('Speechmatics API key not configured');
-    }
-
     try {
-      const response: AxiosResponse<TranscriptionJob> = await axios.get(
-        `${this.baseUrl}/jobs/${jobId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`
-          }
-        }
-      );
-
+      const response = await axios.get(`/api/transcription/status?jobId=${jobId}`);
       return response.data;
     } catch (error: any) {
-      console.error('Speechmatics status check error:', error.response?.data || error.message);
-      
-      if (error.response?.status === 404) {
-        throw new Error('Transcription job not found');
-      }
-      
-      throw new Error(`Status check failed: ${error.response?.data?.detail || error.message}`);
+      console.error('Status check error:', error.response?.data || error.message);
+      throw new Error(`Status check failed: ${error.response?.data?.error || error.message}`);
     }
   }
 
   /**
-   * Get the transcript result from a completed job
+   * Get the transcript result from a completed job (client-side)
    */
   async getTranscript(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error('Speechmatics API key not configured');
-    }
-
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/jobs/${jobId}/transcript`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Accept': format === 'json-v2' ? 'application/json' : 'text/plain'
-          },
-          params: {
-            format: format
-          }
-        }
-      );
-
+      const response = await axios.get(`/api/transcription/result?jobId=${jobId}&format=${format}`);
       return response.data;
     } catch (error: any) {
-      console.error('Speechmatics transcript retrieval error:', error.response?.data || error.message);
-      
-      if (error.response?.status === 404) {
-        throw new Error('Transcript not found or job not completed');
-      }
-      
-      throw new Error(`Transcript retrieval failed: ${error.response?.data?.detail || error.message}`);
+      console.error('Transcript retrieval error:', error.response?.data || error.message);
+      throw new Error(`Transcript retrieval failed: ${error.response?.data?.error || error.message}`);
     }
   }
 
@@ -204,46 +155,38 @@ class SpeechmaticsService {
   }
 
   /**
-   * Process a complete transcription workflow
+   * Process a complete transcription workflow (client-side)
    */
   async processTranscription(
-    audioUrl: string,
+    audioFile: File,
     fileName: string,
     firestoreDocId: string,
     config?: Partial<SpeechmaticsConfig>
   ): Promise<string> {
     try {
-      // Download the audio file
-      const audioResponse = await axios.get(audioUrl, { responseType: 'stream' });
-      
-      // Submit for transcription
-      const fullConfig: SpeechmaticsConfig = {
-        type: 'transcription',
-        transcription_config: {
-          language: 'en',
-          punctuation_permitted: true,
-          diarization: 'speaker',
-          speaker_diarization_config: {
-            max_speakers: 8
-          },
-          ...config?.transcription_config
-        }
-      };
+      const formData = new FormData();
+      formData.append('audioFile', audioFile);
+      formData.append('fileName', fileName);
+      formData.append('firestoreDocId', firestoreDocId);
+      formData.append('language', config?.transcription_config?.language || 'en');
+      formData.append('diarization', (config?.transcription_config?.diarization === 'speaker').toString());
 
-      const { job_id } = await this.submitTranscriptionJob(
-        audioResponse.data,
-        fileName,
-        fullConfig
-      );
+      const response = await axios.post('/api/transcription/submit', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const { jobId } = response.data;
 
       // Update Firestore with job ID
       await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-        speechmaticsJobId: job_id,
+        speechmaticsJobId: jobId,
         status: 'processing',
         submittedAt: serverTimestamp()
       });
 
-      return job_id;
+      return jobId;
     } catch (error) {
       // Update Firestore with error
       await updateDoc(doc(db, 'transcriptions', firestoreDocId), {

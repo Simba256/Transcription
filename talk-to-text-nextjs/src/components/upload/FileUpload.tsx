@@ -21,6 +21,7 @@ import {
 import { uploadAudioFile, UploadProgress, formatFileSize, estimateAudioDuration } from '@/lib/storage';
 import { createTranscription } from '@/lib/firestore';
 import { transcriptionService } from '@/lib/transcription';
+import { transcriptionQueue } from '@/lib/transcription-queue';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface FileUploadProps {
@@ -170,6 +171,9 @@ export default function FileUpload({
             tags: ['upload', variant]
           }
         );
+
+        // Process the transcription with the actual file object
+        await transcriptionQueue.processJobWithFile(transcriptionId, file);
 
         // Update file status
         setUploadingFiles(prev =>

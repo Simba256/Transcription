@@ -67,10 +67,7 @@ class TranscriptionQueue {
 
       const docRef = await addDoc(collection(db, 'transcriptions'), job);
       
-      // Start processing if status is pending
-      if (job.status === 'pending') {
-        this.processJob(docRef.id);
-      }
+      // Don't auto-start processing - caller should use processJobWithFile with the actual file
       
       return docRef.id;
     } catch (error) {
@@ -80,9 +77,9 @@ class TranscriptionQueue {
   }
 
   /**
-   * Process a transcription job
+   * Process a transcription job with file object
    */
-  async processJob(jobId: string): Promise<void> {
+  async processJobWithFile(jobId: string, audioFile: File): Promise<void> {
     try {
       // Prevent duplicate processing
       if (this.activePollers.has(jobId)) {
@@ -109,9 +106,9 @@ class TranscriptionQueue {
 
       const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
 
-      // Submit to Speechmatics
+      // Submit to Speechmatics using the new client-side method
       const speechmaticsJobId = await speechmaticsService.processTranscription(
-        jobData.fileUrl,
+        audioFile,
         jobData.fileName,
         jobId,
         {
@@ -124,6 +121,46 @@ class TranscriptionQueue {
 
       // Start polling for completion
       this.startPolling(jobId, speechmaticsJobId);
+      
+    } catch (error) {
+      console.error(`Error processing job ${jobId}:`, error);
+      
+      // Update job with error status
+      await updateDoc(doc(db, 'transcriptions', jobId), {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown processing error',
+        errorAt: serverTimestamp()
+      });
+    }
+  }
+
+  /**
+   * Process a transcription job (legacy method for backward compatibility)
+   */
+  async processJob(jobId: string): Promise<void> {
+    try {
+      // This method is now used for polling existing jobs
+      // For new jobs, use processJobWithFile instead
+      const jobDoc = doc(db, 'transcriptions', jobId);
+      
+      // Get job data
+      const jobSnapshot = await getDocs(query(
+        collection(db, 'transcriptions'),
+        where('__name__', '==', jobId)
+      ));
+
+      if (jobSnapshot.empty) {
+        throw new Error('Job not found');
+      }
+
+      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
+
+      // If job has a speechmatics job ID, start polling
+      if (jobData.speechmaticsJobId) {
+        this.startPolling(jobId, jobData.speechmaticsJobId);
+      } else {
+        throw new Error('Job cannot be processed without file object. Use processJobWithFile instead.');
+      }
       
     } catch (error) {
       console.error(`Error processing job ${jobId}:`, error);
