@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Upload, FileText, Clock, CreditCard, User, TrendingUp, Shield, Download, CheckCircle } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
-import FileUpload from '@/components/upload/FileUpload';
+import EnhancedFileUpload from '@/components/upload/EnhancedFileUpload';
 import FileManager from '@/components/upload/FileManager';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
@@ -160,11 +160,11 @@ export default function DashboardPage() {
                     Upload New Audio
                   </CardTitle>
                   <CardDescription>
-                    Upload your audio files for transcription processing
+                    Upload your audio files and choose between AI, Human, or Hybrid transcription modes
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <FileUpload
+                  <EnhancedFileUpload
                     variant="default"
                     maxFiles={isTrialUser ? trialUploadsRemaining : 10}
                     disabled={isTrialUser && trialUploadsRemaining <= 0}
@@ -175,7 +175,6 @@ export default function DashboardPage() {
                     onUploadError={(error) => {
                       console.error('Upload error:', error);
                     }}
-                    showPreview={true}
                   />
                 </CardContent>
               </Card>
@@ -228,6 +227,14 @@ export default function DashboardPage() {
                       Contact Support
                     </a>
                   </Button>
+                  {!(userProfile?.role === 'transcriber' || userProfile?.roles?.includes('transcriber')) && (
+                    <Button className="w-full justify-start gap-2" variant="outline" asChild>
+                      <a href="/transcriber/apply">
+                        <User className="h-4 w-4" />
+                        Become a Transcriber
+                      </a>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 

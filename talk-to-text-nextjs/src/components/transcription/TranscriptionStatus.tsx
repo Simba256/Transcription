@@ -14,12 +14,16 @@ import {
   AlertTriangle,
   PlayCircle,
   PauseCircle,
-  Zap
+  Zap,
+  User,
+  Users,
+  Bot
 } from 'lucide-react';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
+import { ExtendedTranscriptionJobData } from '@/types/transcription-modes';
 
 interface TranscriptionStatusProps {
-  job: TranscriptionJobData;
+  job: TranscriptionJobData | ExtendedTranscriptionJobData;
   onRetry?: (jobId: string) => void;
   onCancel?: (jobId: string) => void;
   onDownload?: (jobId: string, format: 'txt' | 'json' | 'srt' | 'pdf') => void;
@@ -45,6 +49,9 @@ export default function TranscriptionStatus({
         return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'processing':
         return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />;
+      case 'assigned':
+      case 'human_review':
+        return <User className="h-4 w-4 text-purple-500" />;
       case 'completed':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'error':
@@ -54,10 +61,25 @@ export default function TranscriptionStatus({
     }
   };
 
+  const getModeIcon = (mode?: string) => {
+    switch (mode) {
+      case 'ai':
+        return <Bot className="h-4 w-4 text-blue-500" />;
+      case 'human':
+        return <User className="h-4 w-4 text-green-500" />;
+      case 'hybrid':
+        return <Users className="h-4 w-4 text-purple-500" />;
+      default:
+        return <Zap className="h-4 w-4 text-gray-500" />; // Default to AI icon for backwards compatibility
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants = {
       pending: 'secondary' as const,
       processing: 'default' as const,
+      assigned: 'default' as const,
+      human_review: 'default' as const,
       completed: 'default' as const,
       error: 'destructive' as const
     };
@@ -65,6 +87,8 @@ export default function TranscriptionStatus({
     const colors = {
       pending: 'bg-yellow-100 text-yellow-800',
       processing: 'bg-blue-100 text-blue-800',
+      assigned: 'bg-purple-100 text-purple-800',
+      human_review: 'bg-purple-100 text-purple-800',
       completed: 'bg-green-100 text-green-800',
       error: 'bg-red-100 text-red-800'
     };
@@ -250,6 +274,25 @@ export default function TranscriptionStatus({
             <p className="font-medium text-gray-700">Language</p>
             <p className="text-gray-600">{job.language?.toUpperCase() || 'EN'}</p>
           </div>
+          
+          <div>
+            <p className="font-medium text-gray-700">Mode</p>
+            <div className="flex items-center gap-2">
+              {getModeIcon((job as ExtendedTranscriptionJobData)?.mode)}
+              <p className="text-gray-600 capitalize">
+                {(job as ExtendedTranscriptionJobData)?.mode || 'AI'}
+              </p>
+            </div>
+          </div>
+          
+          {(job as ExtendedTranscriptionJobData)?.priority && (
+            <div>
+              <p className="font-medium text-gray-700">Priority</p>
+              <p className="text-gray-600 capitalize">
+                {(job as ExtendedTranscriptionJobData).priority}
+              </p>
+            </div>
+          )}
           
           {job.submittedAt && (
             <div>

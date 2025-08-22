@@ -20,7 +20,7 @@ import {
   CreditCard,
   ArrowRight
 } from 'lucide-react';
-import FileUpload from '@/components/upload/FileUpload';
+import EnhancedFileUpload from '@/components/upload/EnhancedFileUpload';
 import FileManager from '@/components/upload/FileManager';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
@@ -189,18 +189,17 @@ export default function TrialPage() {
                   <CardDescription>
                     {isTrialExhausted 
                       ? 'Trial limits reached. Please upgrade to continue.'
-                      : `Upload up to ${trialUploadsRemaining} more files for AI transcription.`
+                      : `Upload up to ${trialUploadsRemaining} more files and choose your transcription mode (trial includes AI transcription).`
                     }
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <FileUpload
+                  <EnhancedFileUpload
                     variant="trial"
                     maxFiles={trialUploadsRemaining}
                     disabled={isTrialExhausted}
                     onUploadComplete={handleUploadComplete}
                     onUploadError={handleUploadError}
-                    showPreview={true}
                   />
                 </CardContent>
               </Card>

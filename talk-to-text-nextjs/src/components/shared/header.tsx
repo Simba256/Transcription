@@ -108,6 +108,16 @@ const Header = () => {
                   >
                     Dashboard
                   </Link>
+                  {(userProfile?.role === 'transcriber' || userProfile?.roles?.includes('transcriber')) && (
+                    <Link
+                      href="/transcriber"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <User className="inline h-4 w-4 mr-2" />
+                      Transcriber Dashboard
+                    </Link>
+                  )}
                   <Link
                     href="/settings"
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"

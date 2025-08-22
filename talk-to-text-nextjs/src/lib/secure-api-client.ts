@@ -104,6 +104,41 @@ class SecureApiClient {
 
     return await response.json();
   }
+
+  // Generic GET method
+  async get(url: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `GET ${url} failed`);
+    }
+
+    return await response.json();
+  }
+
+  // Generic POST method
+  async post(url: string, data: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `POST ${url} failed`);
+    }
+
+    return await response.json();
+  }
 }
 
 export const secureApiClient = new SecureApiClient();
