@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signUpWithEmail, signInWithGoogle } from '@/lib/auth';
+import { validateEmail, EMAIL_VALIDATION_PRESETS } from '@/lib/email-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { UserPlus, Mail, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { UserPlus, Mail, Eye, EyeOff, CheckCircle, AlertCircle, Check, X } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
 
@@ -24,7 +25,22 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailValidation, setEmailValidation] = useState<{
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  } | null>(null);
   const router = useRouter();
+
+  // Real-time email validation
+  useEffect(() => {
+    if (formData.email.trim()) {
+      const validation = validateEmail(formData.email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+      setEmailValidation(validation);
+    } else {
+      setEmailValidation(null);
+    }
+  }, [formData.email]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -34,6 +50,12 @@ export default function RegisterPage() {
   };
 
   const validateForm = () => {
+    // Check email validation
+    if (emailValidation && !emailValidation.isValid) {
+      setError(emailValidation.errors[0] || 'Please enter a valid email address');
+      return false;
+    }
+    
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return false;
@@ -143,15 +165,57 @@ export default function RegisterPage() {
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email address
                   </label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="john.doe@example.com"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="john.doe@example.com"
+                      className={`pr-10 ${
+                        emailValidation?.isValid === true 
+                          ? 'border-green-500 focus:ring-green-500' 
+                          : emailValidation?.isValid === false 
+                          ? 'border-red-500 focus:ring-red-500' 
+                          : ''
+                      }`}
+                      required
+                    />
+                    {formData.email.trim() && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        {emailValidation?.isValid ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Email validation feedback */}
+                  {emailValidation && formData.email.trim() && (
+                    <div className="mt-2 space-y-1">
+                      {emailValidation.errors.map((error, index) => (
+                        <div key={index} className="flex items-center gap-2 text-sm text-red-600">
+                          <AlertCircle className="h-3 w-3" />
+                          <span>{error}</span>
+                        </div>
+                      ))}
+                      {emailValidation.warnings.map((warning, index) => (
+                        <div key={index} className="flex items-center gap-2 text-sm text-amber-600">
+                          <AlertCircle className="h-3 w-3" />
+                          <span>{warning}</span>
+                        </div>
+                      ))}
+                      {emailValidation.isValid && (
+                        <div className="flex items-center gap-2 text-sm text-green-600">
+                          <Check className="h-3 w-3" />
+                          <span>Valid email address</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

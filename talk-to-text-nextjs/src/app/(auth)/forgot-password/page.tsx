@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { resetPassword } from '@/lib/auth';
+import { validateEmail, EMAIL_VALIDATION_PRESETS } from '@/lib/email-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle, Check, X } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
 
@@ -16,6 +17,20 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [emailValidation, setEmailValidation] = useState<{
+    isValid: boolean;
+    errors: string[];
+  } | null>(null);
+
+  // Real-time email validation
+  useEffect(() => {
+    if (email.trim()) {
+      const validation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+      setEmailValidation(validation);
+    } else {
+      setEmailValidation(null);
+    }
+  }, [email]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();

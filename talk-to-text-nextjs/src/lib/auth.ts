@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { validateEmail, EMAIL_VALIDATION_PRESETS } from './email-validation';
 
 export interface UserProfile {
   uid: string;
@@ -43,6 +44,13 @@ export const signUpWithEmail = async (
   lastName: string
 ): Promise<User> => {
   try {
+    // Validate email before attempting to create account
+    const emailValidation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+    
+    if (!emailValidation.isValid) {
+      throw new Error(emailValidation.errors[0] || 'Invalid email address');
+    }
+
     const { user } = await createUserWithEmailAndPassword(auth, email, password);
     
     // Update the user's display name
@@ -82,6 +90,13 @@ export const signUpWithEmail = async (
 // Sign in with email and password
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
   try {
+    // Validate email format before attempting to sign in
+    const emailValidation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+    
+    if (!emailValidation.isValid) {
+      throw new Error('Please enter a valid email address');
+    }
+
     const { user } = await signInWithEmailAndPassword(auth, email, password);
     return user;
   } catch (error) {
@@ -143,6 +158,13 @@ export const signOutUser = async (): Promise<void> => {
 // Send password reset email
 export const resetPassword = async (email: string): Promise<void> => {
   try {
+    // Validate email format before sending reset email
+    const emailValidation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+    
+    if (!emailValidation.isValid) {
+      throw new Error('Please enter a valid email address');
+    }
+
     await sendPasswordResetEmail(auth, email);
   } catch (error) {
     throw error;

@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signInWithEmail, signInWithGoogle } from '@/lib/auth';
+import { validateEmail, EMAIL_VALIDATION_PRESETS } from '@/lib/email-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { LogIn, Mail, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Mail, Eye, EyeOff, Check, X } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
 
@@ -18,7 +19,21 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailValidation, setEmailValidation] = useState<{
+    isValid: boolean;
+    errors: string[];
+  } | null>(null);
   const router = useRouter();
+
+  // Real-time email validation for login
+  useEffect(() => {
+    if (email.trim()) {
+      const validation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
+      setEmailValidation(validation);
+    } else {
+      setEmailValidation(null);
+    }
+  }, [email]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,14 +94,32 @@ export default function LoginPage() {
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email address
                   </label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      className={`pr-10 ${
+                        emailValidation?.isValid === true 
+                          ? 'border-green-500 focus:ring-green-500' 
+                          : emailValidation?.isValid === false 
+                          ? 'border-red-500 focus:ring-red-500' 
+                          : ''
+                      }`}
+                      required
+                    />
+                    {email.trim() && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        {emailValidation?.isValid ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
