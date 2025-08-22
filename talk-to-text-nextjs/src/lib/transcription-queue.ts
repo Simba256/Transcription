@@ -207,9 +207,9 @@ class TranscriptionQueue {
   }
 
   /**
-   * Retry a failed job
+   * Retry a failed job with file
    */
-  async retryJob(jobId: string): Promise<void> {
+  async retryJob(jobId: string, audioFile?: File): Promise<void> {
     try {
       const jobDoc = doc(db, 'transcriptions', jobId);
       const jobSnapshot = await getDocs(query(
@@ -232,9 +232,11 @@ class TranscriptionQueue {
         status: 'pending',
         retryCount: (jobData.retryCount || 0) + 1,
         error: null,
-        errorAt: null
+        errorAt: null,
+        speechmaticsJobId: null // Reset the Speechmatics job ID
       });
 
+<<<<<<< Updated upstream
       // If job has a speechmatics job ID, check its current status first
       if (jobData.speechmaticsJobId) {
         try {
@@ -263,6 +265,15 @@ class TranscriptionQueue {
           errorAt: serverTimestamp()
         });
         throw new Error('This transcription was never properly submitted. Please re-upload the file to retry.');
+=======
+      // If we have a file, process with file, otherwise try to use existing Speechmatics job
+      if (audioFile) {
+        await this.processJobWithFile(jobId, audioFile);
+      } else if (jobData.speechmaticsJobId) {
+        await this.processJob(jobId);
+      } else {
+        throw new Error('Job cannot be processed without file object. Use processJobWithFile instead.');
+>>>>>>> Stashed changes
       }
       
     } catch (error) {

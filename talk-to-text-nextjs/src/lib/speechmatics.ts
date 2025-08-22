@@ -139,6 +139,7 @@ class SpeechmaticsService {
    * Check the status of a transcription job (client-side)
    */
   async getJobStatus(jobId: string): Promise<TranscriptionJob> {
+<<<<<<< Updated upstream
     try {
       return await secureApiClient.getJobStatus(jobId);
     } catch (error: any) {
@@ -198,6 +199,14 @@ class SpeechmaticsService {
       }
       
       throw new Error(`Status check failed: ${error.response?.data?.detail || error.message}`);
+=======
+    try {
+      const response = await axios.get(`/api/transcription/status?jobId=${jobId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Status check error:', error.response?.data || error.message);
+      throw new Error(`Status check failed: ${error.response?.data?.error || error.message}`);
+>>>>>>> Stashed changes
     }
   }
 
@@ -205,6 +214,7 @@ class SpeechmaticsService {
    * Get the transcript result from a completed job (client-side)
    */
   async getTranscript(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
+<<<<<<< Updated upstream
     try {
       return await secureApiClient.getTranscript(jobId, format);
     } catch (error: any) {
@@ -253,6 +263,14 @@ class SpeechmaticsService {
       }
       
       throw new Error(`Transcript retrieval failed: ${error.response?.data?.detail || error.message}`);
+=======
+    try {
+      const response = await axios.get(`/api/transcription/result?jobId=${jobId}&format=${format}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Transcript retrieval error:', error.response?.data || error.message);
+      throw new Error(`Transcript retrieval failed: ${error.response?.data?.error || error.message}`);
+>>>>>>> Stashed changes
     }
   }
 
@@ -289,6 +307,7 @@ class SpeechmaticsService {
     config?: Partial<SpeechmaticsConfig>
   ): Promise<string> {
     try {
+<<<<<<< Updated upstream
       const result = await secureApiClient.processTranscription(
         audioFile,
         fileName,
@@ -298,6 +317,31 @@ class SpeechmaticsService {
       );
 
       return result.jobId;
+=======
+      const formData = new FormData();
+      formData.append('audioFile', audioFile);
+      formData.append('fileName', fileName);
+      formData.append('firestoreDocId', firestoreDocId);
+      formData.append('language', config?.transcription_config?.language || 'en');
+      formData.append('diarization', (config?.transcription_config?.diarization === 'speaker').toString());
+
+      const response = await axios.post('/api/transcription/submit', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const { jobId } = response.data;
+
+      // Update Firestore with job ID
+      await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+        speechmaticsJobId: jobId,
+        status: 'processing',
+        submittedAt: serverTimestamp()
+      });
+
+      return jobId;
+>>>>>>> Stashed changes
     } catch (error) {
       // Update Firestore with error
       await updateDoc(doc(db, 'transcriptions', firestoreDocId), {

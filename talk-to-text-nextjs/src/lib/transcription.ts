@@ -117,7 +117,7 @@ class TranscriptionService {
   /**
    * Retry a failed transcription
    */
-  async retryTranscription(userId: string, jobId: string): Promise<void> {
+  async retryTranscription(userId: string, jobId: string, audioFile?: File): Promise<void> {
     try {
       // Verify the job belongs to the user
       const job = await this.getTranscription(userId, jobId);
@@ -129,6 +129,7 @@ class TranscriptionService {
         throw new Error('Can only retry failed transcriptions');
       }
 
+<<<<<<< Updated upstream
       // Check retry capability first
       const retryInfo = await transcriptionQueue.getJobRetryInfo(jobId);
       
@@ -146,6 +147,9 @@ class TranscriptionService {
       }
 
       await transcriptionQueue.retryJob(jobId);
+=======
+      await transcriptionQueue.retryJob(jobId, audioFile);
+>>>>>>> Stashed changes
     } catch (error) {
       console.error('Error retrying transcription:', error);
       throw error;
