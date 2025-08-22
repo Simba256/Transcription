@@ -200,6 +200,13 @@ export default function TranscriptionList({
     try {
       const content = await transcriptionService.downloadTranscription(user.uid, jobId, format);
       
+      // Find the job to get the original filename
+      const job = transcriptions.find(t => t.id === jobId);
+      const originalFileName = job?.fileName || 'transcription';
+      
+      // Remove file extension from original name
+      const nameWithoutExt = originalFileName.replace(/\.[^/.]+$/, '');
+      
       // Create download
       const blob = new Blob([content], { 
         type: format === 'json' ? 'application/json' : 'text/plain' 
@@ -207,7 +214,7 @@ export default function TranscriptionList({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `transcription-${jobId}.${format}`;
+      a.download = `transcription-${nameWithoutExt}.${format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

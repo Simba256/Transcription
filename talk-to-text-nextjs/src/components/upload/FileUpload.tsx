@@ -21,7 +21,7 @@ import {
 import { uploadAudioFile, UploadProgress, formatFileSize, estimateAudioDuration } from '@/lib/storage';
 import { createTranscription } from '@/lib/firestore';
 import { transcriptionService } from '@/lib/transcription';
-import { transcriptionQueue } from '@/lib/transcription-queue';
+import { secureApiClient } from '@/lib/secure-api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface FileUploadProps {
@@ -172,8 +172,15 @@ export default function FileUpload({
           }
         );
 
-        // Process the transcription with the actual file object
-        await transcriptionQueue.processJobWithFile(transcriptionId, file);
+        // Process the transcription using secure API client
+        const processResult = await secureApiClient.processTranscription(
+          file,
+          file.name,
+          transcriptionId,
+          'en',
+          true
+        );
+        console.log('Transcription processing started:', processResult);
 
         // Update file status
         setUploadingFiles(prev =>

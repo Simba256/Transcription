@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from 'axios';
 import FormData from 'form-data';
 import { db } from './firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { secureApiClient } from './secure-api-client';
 
 // Speechmatics API types
 export interface SpeechmaticsConfig {
@@ -139,11 +140,10 @@ class SpeechmaticsService {
    */
   async getJobStatus(jobId: string): Promise<TranscriptionJob> {
     try {
-      const response = await axios.get(`/api/transcription/status?jobId=${jobId}`);
-      return response.data;
+      return await secureApiClient.getJobStatus(jobId);
     } catch (error: any) {
-      console.error('Status check error:', error.response?.data || error.message);
-      throw new Error(`Status check failed: ${error.response?.data?.error || error.message}`);
+      console.error('Status check error:', error.message);
+      throw new Error(`Status check failed: ${error.message}`);
     }
   }
 
@@ -160,7 +160,7 @@ class SpeechmaticsService {
     }
 
     try {
-      const response: AxiosResponse<TranscriptionJob> = await axios.get(
+      const response: AxiosResponse<{job: TranscriptionJob}> = await axios.get(
         `${this.baseUrl}/jobs/${jobId}`,
         {
           headers: {
@@ -171,19 +171,21 @@ class SpeechmaticsService {
         }
       );
       
-      const job = response.data;
+      // Extract the job object from the response
+      const jobData = response.data?.job;
       
       // Validate the response has required fields
-      if (!job || !job.status) {
+      if (!jobData || !jobData.status) {
+        console.error('Invalid API response:', response.data);
         throw new Error('Invalid response from Speechmatics API: missing status');
       }
       
       // Ensure status is a valid string
-      if (typeof job.status !== 'string' || job.status.trim() === '') {
-        throw new Error(`Invalid job status from Speechmatics: ${job.status}`);
+      if (typeof jobData.status !== 'string' || jobData.status.trim() === '') {
+        throw new Error(`Invalid job status from Speechmatics: ${jobData.status}`);
       }
       
-      return job;
+      return jobData;
     } catch (error: any) {
       console.error('Direct status check error:', error.response?.data || error.message);
       
@@ -204,11 +206,10 @@ class SpeechmaticsService {
    */
   async getTranscript(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
     try {
-      const response = await axios.get(`/api/transcription/result?jobId=${jobId}&format=${format}`);
-      return response.data;
+      return await secureApiClient.getTranscript(jobId, format);
     } catch (error: any) {
-      console.error('Transcript retrieval error:', error.response?.data || error.message);
-      throw new Error(`Transcript retrieval failed: ${error.response?.data?.error || error.message}`);
+      console.error('Transcript retrieval error:', error.message);
+      throw new Error(`Transcript retrieval failed: ${error.message}`);
     }
   }
 
@@ -288,29 +289,15 @@ class SpeechmaticsService {
     config?: Partial<SpeechmaticsConfig>
   ): Promise<string> {
     try {
-      const formData = new FormData();
-      formData.append('audioFile', audioFile);
-      formData.append('fileName', fileName);
-      formData.append('firestoreDocId', firestoreDocId);
-      formData.append('language', config?.transcription_config?.language || 'en');
-      formData.append('diarization', (config?.transcription_config?.diarization === 'speaker').toString());
+      const result = await secureApiClient.processTranscription(
+        audioFile,
+        fileName,
+        firestoreDocId,
+        config?.transcription_config?.language || 'en',
+        config?.transcription_config?.diarization === 'speaker'
+      );
 
-      const response = await axios.post('/api/transcription/submit', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      const { jobId } = response.data;
-
-      // Update Firestore with job ID
-      await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-        speechmaticsJobId: jobId,
-        status: 'processing',
-        submittedAt: serverTimestamp()
-      });
-
-      return jobId;
+      return result.jobId;
     } catch (error) {
       // Update Firestore with error
       await updateDoc(doc(db, 'transcriptions', firestoreDocId), {

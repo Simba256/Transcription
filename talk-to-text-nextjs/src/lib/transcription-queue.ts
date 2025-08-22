@@ -198,7 +198,7 @@ class TranscriptionQueue {
     this.activePollers.add(jobId);
     
     try {
-      await speechmaticsService.pollJobStatus(jobId, jobId);
+      await speechmaticsService.pollJobStatus(speechmaticsJobId, jobId);
     } catch (error) {
       console.error(`Polling failed for job ${jobId}:`, error);
     } finally {
