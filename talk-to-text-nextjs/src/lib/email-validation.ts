@@ -12,39 +12,10 @@ export interface EmailValidationConfig {
 
 // Default configuration - you can modify these domains as needed
 const DEFAULT_CONFIG: EmailValidationConfig = {
-  // Common business/professional email domains
-  allowedDomains: [
-    // Major email providers
-    'gmail.com',
-    'outlook.com',
-    'hotmail.com',
-    'yahoo.com',
-    'icloud.com',
-    'protonmail.com',
-    
-    // Business email providers
-    'office365.com',
-    'googlebusiness.com',
-    
-    // Canadian government and institutions
-    'gc.ca',
-    'canada.ca',
-    'gov.ca',
-    
-    // Common business domains (you can add more)
-    'company.com',
-    'corp.com',
-    'business.com',
-    'inc.com',
-    'ltd.com',
-    
-    // Add your specific company domains here:
-    // 'yourcompany.com',
-    // 'anotherclient.com',
-    // 'partnercompany.ca',
-  ],
+  // Allow all domains by default - empty array means no restrictions
+  allowedDomains: [],
   
-  // Domains to block (temporary email services, etc.)
+  // Only block obvious temporary/disposable email services
   blockedDomains: [
     '10minutemail.com',
     'tempmail.org',
@@ -54,6 +25,10 @@ const DEFAULT_CONFIG: EmailValidationConfig = {
     'temp-mail.org',
     'sharklasers.com',
     'yopmail.com',
+    'disposablemail.com',
+    'fakeinbox.com',
+    'trashmail.com',
+    'maildrop.cc',
   ],
   
   requireBusinessEmail: false,
@@ -231,13 +206,15 @@ export function getSuggestedDomains(): string[] {
  * Configuration presets for different use cases
  */
 export const EMAIL_VALIDATION_PRESETS = {
-  // Allow most common email providers
+  // Allow almost all email providers - very permissive
   PERMISSIVE: {
-    allowedDomains: [
-      'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com',
-      'protonmail.com', 'office365.com'
+    allowedDomains: [], // Empty means allow all domains
+    blockedDomains: [
+      // Only block known temporary/disposable email services
+      '10minutemail.com', 'tempmail.org', 'guerrillamail.com', 'mailinator.com',
+      'throwaway.email', 'temp-mail.org', 'sharklasers.com', 'yopmail.com',
+      'disposablemail.com', 'fakeinbox.com', 'trashmail.com', 'maildrop.cc'
     ],
-    blockedDomains: DEFAULT_CONFIG.blockedDomains,
     requireBusinessEmail: false,
     allowPersonalEmail: true,
   } as EmailValidationConfig,
@@ -255,11 +232,16 @@ export const EMAIL_VALIDATION_PRESETS = {
 
   // Canadian organizations focus
   CANADIAN_FOCUS: {
-    allowedDomains: [
-      'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com',
-      'gc.ca', 'canada.ca', 'gov.ca', '.ca'
-    ],
-    blockedDomains: DEFAULT_CONFIG.blockedDomains,
+    allowedDomains: [], // Allow all, no restrictions
+    blockedDomains: DEFAULT_CONFIG.blockedDomains, // Only block temp emails
+    requireBusinessEmail: false,
+    allowPersonalEmail: true,
+  } as EmailValidationConfig,
+
+  // Completely open - only validate format
+  WIDE_OPEN: {
+    allowedDomains: [],
+    blockedDomains: [],
     requireBusinessEmail: false,
     allowPersonalEmail: true,
   } as EmailValidationConfig,

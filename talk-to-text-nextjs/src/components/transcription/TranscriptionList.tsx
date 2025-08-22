@@ -94,30 +94,8 @@ export default function TranscriptionList({
     if (!user) return;
 
     try {
-<<<<<<< Updated upstream
       await transcriptionService.retryTranscription(user.uid, jobId);
       setError(null);
-=======
-      // Create a file input element
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'audio/*,video/*';
-      
-      input.onchange = async (e) => {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) {
-          try {
-            await transcriptionService.retryTranscription(user.uid, jobId, file);
-          } catch (error) {
-            console.error('Error retrying transcription:', error);
-            setError(error instanceof Error ? error.message : 'Failed to retry transcription');
-          }
-        }
-      };
-
-      // Trigger file selection
-      input.click();
->>>>>>> Stashed changes
     } catch (error) {
       console.error('Error retrying transcription:', error);
       
@@ -239,7 +217,7 @@ export default function TranscriptionList({
         );
         
         // Create download for PDF
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

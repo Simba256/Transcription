@@ -3,10 +3,12 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   User,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  reload
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -21,6 +23,8 @@ export interface UserProfile {
   lastName?: string;
   company?: string;
   phone?: string;
+  emailVerified: boolean;
+  emailVerificationSentAt?: Date;
   subscription?: {
     plan: 'trial' | 'ai' | 'human' | 'hybrid' | 'legal';
     status: 'active' | 'cancelled' | 'expired';
@@ -44,7 +48,7 @@ export const signUpWithEmail = async (
   lastName: string
 ): Promise<User> => {
   try {
-    // Validate email before attempting to create account
+    // Validate email before attempting to create account - only check format and block temp emails
     const emailValidation = validateEmail(email, EMAIL_VALIDATION_PRESETS.PERMISSIVE);
     
     if (!emailValidation.isValid) {
@@ -65,6 +69,8 @@ export const signUpWithEmail = async (
       displayName: `${firstName} ${lastName}`,
       firstName,
       lastName,
+      emailVerified: user.emailVerified,
+      emailVerificationSentAt: new Date(),
       subscription: {
         plan: 'trial',
         status: 'active',
@@ -80,6 +86,15 @@ export const signUpWithEmail = async (
     };
 
     await setDoc(doc(db, 'users', user.uid), userProfile);
+    
+    // Send email verification
+    try {
+      await sendEmailVerification(user);
+      console.log('Email verification sent successfully');
+    } catch (verificationError) {
+      console.warn('Failed to send email verification:', verificationError);
+      // Don't throw here - user creation should still succeed
+    }
     
     return user;
   } catch (error) {
@@ -123,6 +138,7 @@ export const signInWithGoogle = async (): Promise<User> => {
         photoURL: user.photoURL || undefined,
         firstName,
         lastName,
+        emailVerified: user.emailVerified,
         subscription: {
           plan: 'trial',
           status: 'active',
@@ -194,5 +210,102 @@ export const updateUserProfile = async (uid: string, updates: Partial<UserProfil
     await setDoc(doc(db, 'users', uid), updateData, { merge: true });
   } catch (error) {
     throw error;
+  }
+};
+
+// Send email verification
+export const sendVerificationEmail = async (user?: User): Promise<void> => {
+  try {
+    const currentUser = user || auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    await sendEmailVerification(currentUser);
+    
+    // Update user profile with verification sent timestamp
+    await updateUserProfile(currentUser.uid, {
+      emailVerificationSentAt: new Date(),
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Check if email is verified and update profile
+export const checkEmailVerification = async (): Promise<boolean> => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    // Reload user to get latest verification status
+    await reload(currentUser);
+    
+    // Update user profile with current verification status
+    if (currentUser.emailVerified) {
+      await updateUserProfile(currentUser.uid, {
+        emailVerified: true,
+      });
+    }
+
+    return currentUser.emailVerified;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Resend verification email with rate limiting
+export const resendVerificationEmail = async (): Promise<void> => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    if (currentUser.emailVerified) {
+      throw new Error('Email is already verified');
+    }
+
+    // Check if we recently sent a verification email (rate limiting)
+    const userProfile = await getUserProfile(currentUser.uid);
+    if (userProfile?.emailVerificationSentAt) {
+      const timeSinceLastSent = Date.now() - userProfile.emailVerificationSentAt.getTime();
+      const oneMinute = 60 * 1000;
+      
+      if (timeSinceLastSent < oneMinute) {
+        throw new Error('Please wait before requesting another verification email');
+      }
+    }
+
+    await sendVerificationEmail(currentUser);
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Check if user must verify email before accessing features
+export const requireEmailVerification = async (): Promise<boolean> => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      return false;
+    }
+
+    // Always check the latest verification status
+    await reload(currentUser);
+    
+    // Update Firestore if verification status has changed
+    if (currentUser.emailVerified) {
+      await updateUserProfile(currentUser.uid, {
+        emailVerified: true,
+      });
+    }
+
+    return !currentUser.emailVerified;
+  } catch (error) {
+    console.error('Error checking email verification:', error);
+    return false;
   }
 };

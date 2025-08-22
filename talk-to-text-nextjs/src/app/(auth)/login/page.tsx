@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signInWithEmail, signInWithGoogle } from '@/lib/auth';
+import { signInWithEmail, signInWithGoogle, requireEmailVerification } from '@/lib/auth';
 import { validateEmail, EMAIL_VALIDATION_PRESETS } from '@/lib/email-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +42,14 @@ export default function LoginPage() {
 
     try {
       await signInWithEmail(email, password);
-      router.push('/dashboard');
+      
+      // Check if email verification is required
+      const needsVerification = await requireEmailVerification();
+      if (needsVerification) {
+        router.push('/verify-email');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to sign in. Please check your credentials.');
     } finally {
@@ -56,7 +63,14 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle();
-      router.push('/dashboard');
+      
+      // Check if email verification is required (Google emails are usually pre-verified)
+      const needsVerification = await requireEmailVerification();
+      if (needsVerification) {
+        router.push('/verify-email');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google.');
     } finally {

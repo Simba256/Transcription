@@ -9,6 +9,7 @@ import Footer from '@/components/shared/footer';
 import FileUpload from '@/components/upload/FileUpload';
 import FileManager from '@/components/upload/FileManager';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import EmailVerificationGuard from '@/components/auth/EmailVerificationGuard';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -47,7 +48,7 @@ export default function DashboardPage() {
   const trialTimeRemaining = 180 - (userProfile?.usage?.trialTimeUsed || 0); // 3 hours = 180 minutes
 
   return (
-    <>
+    <EmailVerificationGuard>
       <Header />
       
       <main className="flex-1 py-8">
@@ -245,7 +246,10 @@ export default function DashboardPage() {
                     <p className="font-medium text-gray-900">Member since</p>
                     <p className="text-gray-600">
                       {userProfile?.createdAt ? 
-                        new Date(userProfile.createdAt.seconds * 1000).toLocaleDateString() : 
+                        (userProfile.createdAt instanceof Date ? 
+                          userProfile.createdAt.toLocaleDateString() :
+                          new Date(userProfile.createdAt).toLocaleDateString()
+                        ) : 
                         'Recently'
                       }
                     </p>
@@ -289,6 +293,6 @@ export default function DashboardPage() {
       </main>
 
       <Footer />
-    </>
+    </EmailVerificationGuard>
   );
 }

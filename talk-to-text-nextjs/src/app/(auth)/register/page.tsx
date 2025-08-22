@@ -82,7 +82,8 @@ export default function RegisterPage() {
         formData.firstName,
         formData.lastName
       );
-      router.push('/dashboard');
+      // Redirect to email verification page instead of dashboard
+      router.push('/verify-email');
     } catch (error: any) {
       setError(error.message || 'Failed to create account');
     } finally {
@@ -211,7 +212,7 @@ export default function RegisterPage() {
                       {emailValidation.isValid && (
                         <div className="flex items-center gap-2 text-sm text-green-600">
                           <Check className="h-3 w-3" />
-                          <span>Valid email address</span>
+                          <span>Valid email address - verification email will be sent</span>
                         </div>
                       )}
                     </div>
@@ -277,6 +278,13 @@ export default function RegisterPage() {
                     <li>• AI transcription service</li>
                     <li>• PDF download format</li>
                   </ul>
+                  
+                  <div className="mt-3 pt-3 border-t border-ttt-lavender">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <Mail className="h-3 w-3 text-blue-600" />
+                      <span>Email verification required for account security</span>
+                    </div>
+                  </div>
                 </div>
 
                 <Button
