@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { transcriptionService } from '@/lib/transcription';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
 import TranscriptionStatus from './TranscriptionStatus';
+import { PDFGenerator } from '@/lib/pdf-generator';
 
 interface TranscriptionListProps {
   status?: TranscriptionJobData['status'];
@@ -194,11 +195,11 @@ export default function TranscriptionList({
     }
   };
 
-  const handleDownload = async (jobId: string, format: 'txt' | 'json' | 'srt') => {
+  const handleDownload = async (jobId: string, format: 'txt' | 'json' | 'srt' | 'pdf') => {
     if (!user) return;
 
     try {
-      const content = await transcriptionService.downloadTranscription(user.uid, jobId, format);
+      const content = await transcriptionService.downloadTranscription(user.uid, jobId, format === 'pdf' ? 'txt' : format);
       
       // Find the job to get the original filename
       const job = transcriptions.find(t => t.id === jobId);
@@ -207,18 +208,38 @@ export default function TranscriptionList({
       // Remove file extension from original name
       const nameWithoutExt = originalFileName.replace(/\.[^/.]+$/, '');
       
-      // Create download
-      const blob = new Blob([content], { 
-        type: format === 'json' ? 'application/json' : 'text/plain' 
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `transcription-${nameWithoutExt}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (format === 'pdf') {
+        // Generate PDF
+        const pdfBytes = await PDFGenerator.generateTranscriptionPDF(
+          content,
+          `transcription-${nameWithoutExt}.pdf`,
+          originalFileName
+        );
+        
+        // Create download for PDF
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `transcription-${nameWithoutExt}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // Create download for text formats
+        const blob = new Blob([content], { 
+          type: format === 'json' ? 'application/json' : 'text/plain' 
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `transcription-${nameWithoutExt}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('Error downloading transcription:', error);
       setError(error instanceof Error ? error.message : 'Failed to download transcription');

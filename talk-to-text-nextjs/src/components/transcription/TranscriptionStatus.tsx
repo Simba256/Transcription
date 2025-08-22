@@ -22,7 +22,7 @@ interface TranscriptionStatusProps {
   job: TranscriptionJobData;
   onRetry?: (jobId: string) => void;
   onCancel?: (jobId: string) => void;
-  onDownload?: (jobId: string, format: 'txt' | 'json' | 'srt') => void;
+  onDownload?: (jobId: string, format: 'txt' | 'json' | 'srt' | 'pdf') => void;
   onRefreshStatus?: (jobId: string) => void;
   onForceRetrieve?: (jobId: string) => void;
   onDiagnose?: (jobId: string) => void;
@@ -161,7 +161,7 @@ export default function TranscriptionStatus({
           {getStatusBadge(job.status)}
           
           {job.status === 'completed' && onDownload && (
-            <Button size="sm" variant="outline" onClick={() => onDownload(job.id!, 'txt')}>
+            <Button size="sm" variant="outline" onClick={() => onDownload(job.id!, 'pdf')}>
               <Download className="h-3 w-3" />
             </Button>
           )}
@@ -336,11 +336,18 @@ export default function TranscriptionStatus({
             <div className="flex gap-2">
               <Button 
                 size="sm" 
-                onClick={() => onDownload(job.id!, 'txt')}
+                onClick={() => onDownload(job.id!, 'pdf')}
                 className="flex-1"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download TXT
+                Download PDF
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => onDownload(job.id!, 'txt')}
+              >
+                TXT
               </Button>
               <Button 
                 size="sm" 
