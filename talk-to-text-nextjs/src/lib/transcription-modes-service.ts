@@ -171,18 +171,26 @@ export class TranscriptionModesService {
     jobId: string, 
     modeSelection: TranscriptionModeSelection
   ): Promise<void> {
+    console.log(`🎯 Starting human transcriber assignment for job ${jobId}`);
+    
     try {
       // Find available transcriber
       const availableTranscriber = await this.findAvailableTranscriber(modeSelection);
       
       if (!availableTranscriber) {
+        console.log('⚠️ No transcribers available, queueing job');
         // Add to queue if no transcriber available
         await updateDoc(doc(db, 'transcriptions', jobId), {
           status: 'pending',
-          error: 'No transcribers available - added to queue'
+          error: 'No human transcribers available - job queued for assignment',
+          queuedAt: serverTimestamp(),
+          // Mark as properly submitted even though waiting for transcriber
+          humanTranscriptionQueued: true
         });
         return;
       }
+
+      console.log(`✅ Assigning to transcriber: ${availableTranscriber.name} (${availableTranscriber.id})`);
 
       // Create assignment
       const assignmentData: Omit<HumanTranscriberAssignment, 'id'> = {
@@ -194,6 +202,7 @@ export class TranscriptionModesService {
       };
 
       const assignmentRef = await addDoc(collection(db, 'transcriber_assignments'), assignmentData);
+      console.log(`📝 Created assignment record: ${assignmentRef.id}`);
 
       // Update job status
       await updateDoc(doc(db, 'transcriptions', jobId), {
@@ -203,15 +212,19 @@ export class TranscriptionModesService {
         submittedAt: serverTimestamp()
       });
 
+      console.log(`✅ Job ${jobId} successfully assigned to ${availableTranscriber.name}`);
+
       // Notify transcriber (implement notification service)
       await this.notifyTranscriber(availableTranscriber.id!, jobId);
 
     } catch (error) {
+      console.error(`❌ Error assigning human transcriber for job ${jobId}:`, error);
       await updateDoc(doc(db, 'transcriptions', jobId), {
         status: 'error',
         error: error instanceof Error ? error.message : 'Assignment failed',
         errorAt: serverTimestamp()
       });
+      throw error; // Re-throw so the API route can handle it
     }
   }
 
@@ -281,25 +294,102 @@ export class TranscriptionModesService {
   }
 
   /**
-   * Find available transcriber based on requirements
+   * Find available transcriber based on workload (least total minutes remaining)
    */
   private async findAvailableTranscriber(
     modeSelection: TranscriptionModeSelection
   ): Promise<HumanTranscriber | null> {
     
+    console.log('🔍 Finding available transcriber for mode:', modeSelection);
+    
+    // Get all active transcribers
     const transcriberQuery = query(
       collection(db, 'human_transcribers'),
-      where('status', '==', 'active'),
-      orderBy('rating', 'desc')
+      where('status', '==', 'active')
     );
 
-    const transcribers = await getDocs(transcriberQuery);
+    const transcribersSnapshot = await getDocs(transcriberQuery);
     
-    // Simple assignment logic - can be enhanced with workload balancing
-    return transcribers.empty ? null : {
-      id: transcribers.docs[0].id,
-      ...transcribers.docs[0].data()
-    } as HumanTranscriber;
+    if (transcribersSnapshot.empty) {
+      console.log('❌ No active transcribers found');
+      return null;
+    }
+
+    console.log(`📋 Found ${transcribersSnapshot.size} active transcribers`);
+
+    // Calculate workload for each transcriber
+    const transcriberWorkloads: Array<{
+      transcriber: HumanTranscriber;
+      currentWorkloadMinutes: number;
+    }> = [];
+
+    for (const transcriberDoc of transcribersSnapshot.docs) {
+      const transcriber = {
+        id: transcriberDoc.id,
+        ...transcriberDoc.data()
+      } as HumanTranscriber;
+
+      // Calculate current workload (total minutes of pending/assigned jobs)
+      const workload = await this.calculateTranscriberWorkload(transcriber.id!);
+      
+      transcriberWorkloads.push({
+        transcriber,
+        currentWorkloadMinutes: workload
+      });
+
+      console.log(`👤 ${transcriber.name}: ${workload} minutes remaining`);
+    }
+
+    // Sort by workload (ascending - least busy first)
+    transcriberWorkloads.sort((a, b) => a.currentWorkloadMinutes - b.currentWorkloadMinutes);
+
+    const selectedTranscriber = transcriberWorkloads[0].transcriber;
+    console.log(`✅ Selected transcriber: ${selectedTranscriber.name} (${transcriberWorkloads[0].currentWorkloadMinutes} min remaining)`);
+    
+    return selectedTranscriber;
+  }
+
+  /**
+   * Calculate current workload for a transcriber (total minutes of active jobs)
+   */
+  private async calculateTranscriberWorkload(transcriberId: string): Promise<number> {
+    try {
+      // Get all active assignments for this transcriber
+      const assignmentsQuery = query(
+        collection(db, 'transcriber_assignments'),
+        where('transcriberId', '==', transcriberId),
+        where('status', 'in', ['assigned', 'in_progress'])
+      );
+
+      const assignmentsSnapshot = await getDocs(assignmentsQuery);
+      let totalMinutes = 0;
+
+      for (const assignmentDoc of assignmentsSnapshot.docs) {
+        const assignment = assignmentDoc.data() as HumanTranscriberAssignment;
+        
+        // Get the transcription job to find duration
+        const jobQuery = query(
+          collection(db, 'transcriptions'),
+          where('__name__', '==', assignment.transcriptionId)
+        );
+        
+        const jobSnapshot = await getDocs(jobQuery);
+        if (!jobSnapshot.empty) {
+          const jobData = jobSnapshot.docs[0].data() as ExtendedTranscriptionJobData;
+          
+          // Estimate transcription time (typically 3-4x the audio duration)
+          const audioDurationMinutes = (jobData.duration || 0) / 60;
+          const transcriptionTimeEstimate = audioDurationMinutes * 3.5; // 3.5x multiplier
+          
+          totalMinutes += transcriptionTimeEstimate;
+        }
+      }
+
+      return Math.round(totalMinutes);
+    } catch (error) {
+      console.error(`Error calculating workload for transcriber ${transcriberId}:`, error);
+      return 0; // If error, assume no workload
+    }
   }
 
   /**

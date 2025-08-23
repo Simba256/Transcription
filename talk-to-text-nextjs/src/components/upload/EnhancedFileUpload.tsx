@@ -20,7 +20,6 @@ import ModeSelector from '@/components/transcription/ModeSelector';
 import { TranscriptionModeSelection } from '@/types/transcription-modes';
 import { estimateAudioDuration } from '@/lib/storage';
 import { secureApiClient } from '@/lib/secure-api-client';
-import { useTranscriptionPolling } from '@/lib/hooks/useTranscriptionPolling';
 import { transcriptionService } from '@/lib/transcription';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,26 +64,31 @@ export default function EnhancedFileUpload({
   const [createdJobIds, setCreatedJobIds] = useState<string[]>([]);
   const [recentTranscriptions, setRecentTranscriptions] = useState<TranscriptionJobData[]>([]);
 
-  // Get processing job IDs for polling (same approach as Recent Transcriptions)
-  const processingJobIds = recentTranscriptions
-    .filter(job => 
-      // Include jobs created in this session AND are still processing
-      createdJobIds.includes(job.id) && 
-      (job.status === 'processing' || (job.status === 'pending' && job.speechmaticsJobId))
-    )
-    .map(job => job.id);
+  // Get jobs created in this session from the real-time Firestore data
+  const sessionJobs = recentTranscriptions.filter(job => 
+    createdJobIds.includes(job.id)
+  );
 
-  // Use polling hook for processing jobs (same as Recent Transcriptions)
-  const {
-    isPolling,
-    processingJobs: pollingJobs,
-    completedJobs: pollingCompleted,
-    failedJobs: pollingFailed,
-    triggerJobPolling
-  } = useTranscriptionPolling(processingJobIds, {
-    pollInterval: 15000, // 15 seconds
-    maxPolls: 80, // 20 minutes max
-    autoStart: true
+  // Derive job states directly from Firestore data (no separate polling needed)
+  const processingJobs = sessionJobs.filter(job => 
+    job.status === 'processing' || (job.status === 'pending' && job.speechmaticsJobId)
+  );
+  
+  const completedJobs = sessionJobs.filter(job => 
+    job.status === 'completed'
+  );
+  
+  const failedJobs = sessionJobs.filter(job => 
+    job.status === 'error' || job.status === 'failed'
+  );
+
+  console.log('🔍 EnhancedFileUpload real-time sync:', {
+    createdJobIds,
+    totalSessionJobs: sessionJobs.length,
+    processing: processingJobs.length,
+    completed: completedJobs.length,
+    failed: failedJobs.length,
+    jobStatuses: sessionJobs.map(job => ({ id: job.id, status: job.status }))
   });
 
   // Subscribe to transcriptions (same as Recent Transcriptions)
@@ -97,14 +101,13 @@ export default function EnhancedFileUpload({
         setRecentTranscriptions(jobs);
         console.log('📊 EnhancedFileUpload: transcriptions updated', {
           totalJobs: jobs.length,
-          createdJobIds,
-          matchingJobs: jobs.filter(job => createdJobIds.includes(job.id))
+          allJobIds: jobs.map(job => job.id)
         });
       }
     );
 
     return unsubscribe;
-  }, [user, createdJobIds]);
+  }, [user]);
 
   const handleFileUploaded = useCallback(async (fileId: string, downloadUrl: string) => {
     console.log('=== handleFileUploaded called ===');
@@ -268,7 +271,7 @@ export default function EnhancedFileUpload({
           fileName: uploadedFile.file.name,
           fileUrl: uploadedFile.fileUrl,
           fileSize: uploadedFile.file.size,
-          duration: isNaN(uploadedFile.duration) ? 0 : uploadedFile.duration,
+          duration: isNaN(uploadedFile.duration || 0) ? 0 : (uploadedFile.duration || 0),
           mode: modeSelection.mode,
           priority: modeSelection.priority,
           qualityLevel: modeSelection.qualityLevel,
@@ -288,11 +291,15 @@ export default function EnhancedFileUpload({
 
       console.log('All files processed, setting step to complete');
       
-      // Start polling for the created jobs
+      // Store created job IDs for polling
       if (createdJobIds.length > 0) {
-        console.log(`Starting polling for ${createdJobIds.length} jobs:`, createdJobIds);
-        console.log('Setting completedJobIds to trigger automatic polling:', createdJobIds);
-        setCompletedJobIds(createdJobIds);
+        console.log(`Setting created job IDs for polling: ${createdJobIds.length} jobs:`, createdJobIds);
+        setCreatedJobIds(createdJobIds);
+        
+        // Give jobs a moment to be set up in Firestore before polling starts
+        setTimeout(() => {
+          console.log('🚀 Jobs should be ready for polling now');
+        }, 2000);
       }
 
       setSession(prev => ({ ...prev, step: 'complete' }));
@@ -306,61 +313,46 @@ export default function EnhancedFileUpload({
     }
   };
 
-  // Monitor job status changes to update the UI step
+  // Monitor job status changes to update the UI step (using real-time data)
   useEffect(() => {
     console.log('🔍 Job monitoring effect triggered:', {
-      completedJobIds,
-      jobsKeys: Object.keys(jobs || {}),
-      jobs,
+      createdJobIds,
       completedJobsCount: completedJobs.length,
       processingJobsCount: processingJobs.length,
       failedJobsCount: failedJobs.length,
-      isPolling
+      sessionJobsCount: sessionJobs.length
     });
     
-    if (completedJobIds.length > 0) {
-      if (jobs && Object.keys(jobs).length > 0) {
-        const allJobsTracked = completedJobIds.every(jobId => jobs[jobId]);
-        
-        console.log('📋 Job tracking status:', {
-          allJobsTracked,
-          completedJobIds,
-          trackedJobs: completedJobIds.map(id => ({ id, status: jobs[id]?.status }))
-        });
-        
-        if (allJobsTracked) {
-          const hasCompletedJobs = completedJobs.length > 0;
-          const hasFailedJobs = failedJobs.length > 0;
-          const hasProcessingJobs = processingJobs.length > 0;
-          
-          console.log('📊 Job status summary:', {
-            completed: completedJobs.length,
-            failed: failedJobs.length,
-            processing: processingJobs.length,
-            total: completedJobIds.length
-          });
-          
-          // If all jobs are completed, update to success state
-          if (completedJobs.length === completedJobIds.length) {
-            console.log('🎉 All jobs completed! Moving to success state');
-            setSession(prev => ({ ...prev, step: 'processing_complete' }));
-          }
-          // If some jobs failed, show error
-          else if (hasFailedJobs && !hasProcessingJobs) {
-            console.log('❌ Some jobs failed and no jobs processing');
-            setError('Some transcriptions failed. Please check your dashboard for details.');
-          }
-          // Otherwise stay in processing mode
-          else if (hasProcessingJobs) {
-            console.log('⏳ Jobs still processing...');
-            // Keep in complete/processing step
-          }
-        }
-      } else {
-        console.log('⚠️ Job IDs set but no job data available yet. Polling may not have started.');
+    if (createdJobIds.length > 0) {
+      const hasCompletedJobs = completedJobs.length > 0;
+      const hasFailedJobs = failedJobs.length > 0;
+      const hasProcessingJobs = processingJobs.length > 0;
+      
+      console.log('📊 Job status summary:', {
+        completed: completedJobs.length,
+        failed: failedJobs.length,
+        processing: processingJobs.length,
+        total: createdJobIds.length,
+        sessionJobs: sessionJobs.length
+      });
+      
+      // If all jobs are completed, update to success state
+      if (completedJobs.length === createdJobIds.length && createdJobIds.length > 0) {
+        console.log('🎉 All jobs completed! Moving to success state');
+        setSession(prev => ({ ...prev, step: 'processing_complete' }));
+      }
+      // If some jobs failed, show error
+      else if (hasFailedJobs && !hasProcessingJobs) {
+        console.log('❌ Some jobs failed and no jobs processing');
+        setError('Some transcriptions failed. Please check your dashboard for details.');
+      }
+      // Otherwise stay in processing mode
+      else if (hasProcessingJobs) {
+        console.log('⏳ Jobs still processing...');
+        // Keep in complete/processing step
       }
     }
-  }, [jobs, completedJobs, failedJobs, processingJobs, completedJobIds, isPolling]);
+  }, [completedJobs, failedJobs, processingJobs, createdJobIds, sessionJobs]);
 
   const resetSession = () => {
     setSession({
@@ -368,7 +360,7 @@ export default function EnhancedFileUpload({
       step: 'upload',
       uploadedFiles: []
     });
-    setCompletedJobIds([]);
+    setCreatedJobIds([]);
     setError(null);
   };
 
@@ -473,7 +465,7 @@ export default function EnhancedFileUpload({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0 ? (
+              {completedJobs.length === createdJobIds.length && createdJobIds.length > 0 ? (
                 <>
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   Transcriptions Completed!
@@ -491,8 +483,8 @@ export default function EnhancedFileUpload({
               )}
             </CardTitle>
             <CardDescription>
-              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0
-                ? `All ${completedJobIds.length} file${completedJobIds.length > 1 ? 's' : ''} have been transcribed successfully`
+              {completedJobs.length === createdJobIds.length && createdJobIds.length > 0
+                ? `All ${createdJobIds.length} file${createdJobIds.length > 1 ? 's' : ''} have been transcribed successfully`
                 : `Your files are being processed with ${session.modeSelection?.mode} transcription`
               }
             </CardDescription>
@@ -515,38 +507,70 @@ export default function EnhancedFileUpload({
             <div className="space-y-2">
               <h4 className="font-medium">Transcription Status:</h4>
               
-              {/* Debug info */}
-              {completedJobIds.length === 0 && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                  No job IDs available yet. Make sure the transcription jobs were created successfully.
-                </div>
-              )}
-              
-              {completedJobIds.length > 0 && (!jobs || Object.keys(jobs).length === 0) && (
+              {/* Show appropriate message based on job creation status */}
+              {createdJobIds.length === 0 ? (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                  Job IDs: {completedJobIds.join(', ')} | Polling status: {isPolling ? 'Active' : 'Inactive'} | Jobs data: {JSON.stringify(jobs)}
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span>Initializing transcription jobs...</span>
+                  </div>
+                  <p className="mt-1 text-xs text-blue-600">
+                    Setting up your {session.uploadedFiles.length} file{session.uploadedFiles.length > 1 ? 's' : ''} for {session.modeSelection?.mode} transcription
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                  Job IDs: {createdJobIds.join(', ')} | Real-time sync: Active
                 </div>
               )}
               
-              {completedJobIds.map((jobId, index) => {
-                const job = jobs[jobId];
+              {createdJobIds.map((jobId, index) => {
                 const fileName = session.uploadedFiles[index]?.file.name || `File ${index + 1}`;
                 const duration = session.uploadedFiles[index]?.duration;
                 
+                // Find the actual job data from session jobs
+                const jobData = sessionJobs.find(job => job.id === jobId);
+                
                 let statusBadge;
                 let statusIcon;
+                let statusText = 'Starting...';
                 
-                if (job?.status === 'completed') {
-                  statusBadge = <Badge className="bg-green-100 text-green-800 border-green-200">Completed</Badge>;
-                  statusIcon = <CheckCircle className="h-5 w-5 text-green-500" />;
-                } else if (job?.status === 'error') {
-                  statusBadge = <Badge className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
-                  statusIcon = <AlertTriangle className="h-5 w-5 text-red-500" />;
-                } else if (job?.status === 'processing') {
-                  statusBadge = <Badge variant="secondary">Processing</Badge>;
-                  statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>;
+                if (jobData) {
+                  switch (jobData.status) {
+                    case 'completed':
+                      statusBadge = <Badge variant="default" style={{backgroundColor: '#f0fdf4', color: '#166534', borderColor: '#bbf7d0'}}>Completed</Badge>;
+                      statusIcon = <CheckCircle className="h-5 w-5 text-green-500" />;
+                      statusText = 'Completed';
+                      break;
+                    case 'error':
+                    case 'failed':
+                      statusBadge = <Badge variant="default" style={{backgroundColor: '#fef2f2', color: '#dc2626', borderColor: '#fecaca'}}>Failed</Badge>;
+                      statusIcon = <AlertTriangle className="h-5 w-5 text-red-500" />;
+                      statusText = 'Failed';
+                      break;
+                    case 'processing':
+                      statusBadge = <Badge variant="secondary">Processing</Badge>;
+                      statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>;
+                      statusText = 'Processing';
+                      break;
+                    case 'pending':
+                      if (jobData.speechmaticsJobId) {
+                        statusBadge = <Badge variant="secondary">Processing</Badge>;
+                        statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>;
+                        statusText = 'Processing';
+                      } else {
+                        statusBadge = <Badge variant="secondary">Starting...</Badge>;
+                        statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>;
+                        statusText = 'Starting...';
+                      }
+                      break;
+                    default:
+                      statusBadge = <Badge variant="secondary">Starting...</Badge>;
+                      statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>;
+                  }
                 } else {
-                  statusBadge = <Badge variant="secondary">Starting...</Badge>;
+                  // Job not found in session jobs yet
+                  statusBadge = <Badge variant="secondary">Initializing...</Badge>;
                   statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>;
                 }
                 
@@ -558,7 +582,7 @@ export default function EnhancedFileUpload({
                         <span className="font-medium">{fileName}</span>
                         <div className="text-sm text-gray-500">
                           {duration && `~${Math.round(duration / 60)} min`} • {session.modeSelection?.mode} transcription
-                          {job?.error && <span className="text-red-600 ml-2">• {job.error}</span>}
+                          {jobData?.error && <span className="text-red-600 ml-2">• {jobData.error}</span>}
                         </div>
                       </div>
                     </div>
@@ -577,18 +601,19 @@ export default function EnhancedFileUpload({
                     </span>
                   </div>
                   <p className="text-xs text-blue-600 mt-1">
-                    You can safely close this page - processing will continue in the background.
+                    You can safely close this page - processing will continue in the background. 
+                    Check the "Recent Transcriptions" section below for live updates and download options.
                   </p>
                 </div>
               )}
               
               {/* Show completion message when all jobs are done */}
-              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0 && (
+              {completedJobs.length === createdJobIds.length && createdJobIds.length > 0 && (
                 <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600" />
                     <span className="text-sm text-green-800">
-                      All transcriptions completed successfully! Check your dashboard to view and download your transcripts.
+                      All transcriptions completed successfully! Your transcripts are available in the "Recent Transcriptions" section below with download options.
                     </span>
                   </div>
                 </div>
@@ -622,10 +647,10 @@ export default function EnhancedFileUpload({
   );
 }
 
-const Badge = ({ children, variant = 'default' }: { children: React.ReactNode; variant?: 'default' | 'secondary' }) => (
+const Badge = ({ children, variant = 'default', style }: { children: React.ReactNode; variant?: 'default' | 'secondary'; style?: React.CSSProperties }) => (
   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
     variant === 'secondary' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
-  }`}>
+  }`} style={style}>
     {children}
   </span>
 );

@@ -438,19 +438,22 @@ class TranscriptionQueue {
         };
       }
 
-      if (jobData.retryCount >= jobData.maxRetries && !jobData.speechmaticsJobId) {
+      // Check if job was properly submitted based on mode
+      const wasProperlySubmitted = this.checkJobSubmissionStatus(jobData);
+      
+      if (jobData.retryCount >= jobData.maxRetries && !wasProperlySubmitted) {
         return {
           canRetry: false,
           needsResubmission: true,
-          reason: 'Job never submitted to Speechmatics and exceeded retries'
+          reason: 'Job never submitted to transcription service and exceeded retries'
         };
       }
 
-      if (!jobData.speechmaticsJobId) {
+      if (!wasProperlySubmitted) {
         return {
           canRetry: false,
           needsResubmission: true,
-          reason: 'Job was never submitted to Speechmatics'
+          reason: 'Job was never submitted to transcription service'
         };
       }
 
@@ -465,6 +468,34 @@ class TranscriptionQueue {
         needsResubmission: false,
         reason: 'Error checking job status'
       };
+    }
+  }
+
+  /**
+   * Check if a job was properly submitted based on its transcription mode
+   */
+  private checkJobSubmissionStatus(jobData: TranscriptionJobData): boolean {
+    // Access the mode from jobData (it should be there if using ExtendedTranscriptionJobData)
+    const mode = (jobData as any).mode || 'ai'; // Default to 'ai' for backward compatibility
+    
+    switch (mode) {
+      case 'ai':
+        // AI transcription should have a Speechmatics job ID
+        return !!jobData.speechmaticsJobId;
+      
+      case 'human':
+        // Human transcription should have a human assignment ID, assigned transcriber, or be queued
+        return !!(jobData as any).humanAssignmentId || 
+               !!(jobData as any).assignedTranscriber || 
+               !!(jobData as any).humanTranscriptionQueued;
+      
+      case 'hybrid':
+        // Hybrid should have either Speechmatics job ID (initial AI phase) or human assignment
+        return !!jobData.speechmaticsJobId || !!(jobData as any).humanAssignmentId;
+      
+      default:
+        // For unknown modes, fall back to checking Speechmatics job ID
+        return !!jobData.speechmaticsJobId;
     }
   }
 
