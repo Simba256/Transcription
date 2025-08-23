@@ -226,7 +226,7 @@
 - ✅ **@radix-ui/react-dropdown-menu**: File action menus
 - ✅ **Firebase Storage**: File upload and management
 
-### Stage 4: Speechmatics Integration ✅ COMPLETE
+### Stage 4: Speechmatics Integration ✅ COMPLETE (WITH FIXES)
 
 #### 4.1 API Client Development (✅ Complete)
 - ✅ **Speechmatics Service**: Complete API client with error handling
@@ -260,6 +260,15 @@
 - ✅ **axios**: 1.6.0 - HTTP client for Speechmatics API
 - ✅ **form-data**: 4.0.0 - Multipart form data for file uploads
 - ✅ **Enhanced UI Components**: Textarea, improved dropdown menus
+
+#### 4.6 Critical Bug Fixes (✅ Complete - August 23, 2025)
+- ✅ **Fixed Variable Scope Error**: Fixed undefined `userId` and `duration` variables in `transcription-modes-service.ts:150-152`
+- ✅ **Improved Error Handling**: Enhanced polling logic to distinguish between temporary and permanent errors
+- ✅ **Better Status Display**: Improved job status determination to show "processing" instead of premature errors
+- ✅ **Enhanced User Feedback**: Added informative messages about background processing and wait times
+- ✅ **Fixed Firebase Import Issues**: Resolved dynamic import issues in speechmatics service polling
+- ✅ **Polling Logic Improvements**: Better handling of job completion detection and reduced false error states
+- ✅ **Upload UI Sync Fix**: Connected EnhancedFileUpload component to real-time job status updates, ensuring UI stays in sync with transcription progress and completion
 
 ### Stage 3: Authentication & User Management (Planned)
 - 🔄 **Login/Register Pages**
@@ -374,6 +383,40 @@
    - Solution: Updated configuration for new Tailwind version
 4. **Build Errors** (Fixed): Import path resolution
    - Solution: Proper TypeScript path mapping configuration
+
+### Critical Production Issues (August 23, 2025)
+5. **Premature Error Display During Upload Processing** (Fixed):
+   - **Problem**: Files would show error status after a few seconds of processing, even though they were successfully processing in the background
+   - **Root Cause**: 
+     - Variable scope errors in `transcription-modes-service.ts` (undefined `userId` and `duration`)
+     - Overly aggressive error handling in client-side polling logic
+     - Poor status display logic that marked temporary network issues as permanent errors
+   - **Solution**: 
+     - Fixed variable scope issues by using `jobData.userId` and `jobData.duration`
+     - Improved polling logic to distinguish between temporary and permanent errors
+     - Enhanced status display to show "processing" for jobs with valid Speechmatics IDs
+     - Added better user feedback with loading indicators and background processing messages
+     - Implemented more robust error handling with retry logic for temporary failures
+   - **Files Modified**:
+     - `src/lib/transcription-modes-service.ts` (lines 150-152)
+     - `src/lib/hooks/useTranscriptionPolling.ts` (improved error handling)
+     - `src/components/upload/EnhancedFileUpload.tsx` (better UI feedback)
+     - `src/lib/speechmatics.ts` (dynamic imports fix)
+
+6. **Upload UI Not Syncing with Job Completion** (Fixed):
+   - **Problem**: After clicking "Confirm Selection", the upload component would stay on "Files Processing" screen even after transcriptions completed, while Recent Transcriptions showed correct status with download buttons
+   - **Root Cause**: 
+     - EnhancedFileUpload component wasn't listening to real-time job status updates
+     - No connection between polling results and UI state updates
+     - Missing status synchronization between job completion and upload interface
+   - **Solution**: 
+     - Connected EnhancedFileUpload to useTranscriptionPolling hook results
+     - Added useEffect to monitor job status changes and update UI accordingly
+     - Implemented dynamic status badges and icons that update in real-time
+     - Added completion detection to automatically transition to success state
+     - Enhanced UI with contextual messages based on actual job statuses
+   - **Files Modified**:
+     - `src/components/upload/EnhancedFileUpload.tsx` (added real-time status sync)
 
 ### Design Issues
 1. **Color Inconsistency** (Fixed): Original vs new design mismatch

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -20,6 +20,10 @@ import ModeSelector from '@/components/transcription/ModeSelector';
 import { TranscriptionModeSelection } from '@/types/transcription-modes';
 import { estimateAudioDuration } from '@/lib/storage';
 import { secureApiClient } from '@/lib/secure-api-client';
+import { useTranscriptionPolling } from '@/lib/hooks/useTranscriptionPolling';
+import { transcriptionService } from '@/lib/transcription';
+import { TranscriptionJobData } from '@/lib/transcription-queue';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface EnhancedFileUploadProps {
   onUploadComplete?: (fileId: string, downloadUrl: string) => void;
@@ -33,7 +37,7 @@ interface EnhancedFileUploadProps {
 interface UploadSession {
   files: File[];
   modeSelection?: TranscriptionModeSelection;
-  step: 'upload' | 'mode' | 'processing' | 'complete';
+  step: 'upload' | 'mode' | 'processing' | 'complete' | 'processing_complete';
   uploadedFiles: Array<{
     file: File;
     fileUrl: string;
@@ -50,6 +54,7 @@ export default function EnhancedFileUpload({
   disabled = false,
   variant = 'default'
 }: EnhancedFileUploadProps) {
+  const { user } = useAuth();
   const [session, setSession] = useState<UploadSession>({
     files: [],
     step: 'upload',
@@ -57,73 +62,242 @@ export default function EnhancedFileUpload({
   });
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdJobIds, setCreatedJobIds] = useState<string[]>([]);
+  const [recentTranscriptions, setRecentTranscriptions] = useState<TranscriptionJobData[]>([]);
+
+  // Get processing job IDs for polling (same approach as Recent Transcriptions)
+  const processingJobIds = recentTranscriptions
+    .filter(job => 
+      // Include jobs created in this session AND are still processing
+      createdJobIds.includes(job.id) && 
+      (job.status === 'processing' || (job.status === 'pending' && job.speechmaticsJobId))
+    )
+    .map(job => job.id);
+
+  // Use polling hook for processing jobs (same as Recent Transcriptions)
+  const {
+    isPolling,
+    processingJobs: pollingJobs,
+    completedJobs: pollingCompleted,
+    failedJobs: pollingFailed,
+    triggerJobPolling
+  } = useTranscriptionPolling(processingJobIds, {
+    pollInterval: 15000, // 15 seconds
+    maxPolls: 80, // 20 minutes max
+    autoStart: true
+  });
+
+  // Subscribe to transcriptions (same as Recent Transcriptions)
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = transcriptionService.subscribeToTranscriptions(
+      user.uid,
+      (jobs) => {
+        setRecentTranscriptions(jobs);
+        console.log('📊 EnhancedFileUpload: transcriptions updated', {
+          totalJobs: jobs.length,
+          createdJobIds,
+          matchingJobs: jobs.filter(job => createdJobIds.includes(job.id))
+        });
+      }
+    );
+
+    return unsubscribe;
+  }, [user, createdJobIds]);
 
   const handleFileUploaded = useCallback(async (fileId: string, downloadUrl: string) => {
-    // Get file duration estimate
-    const uploadedFile = session.uploadedFiles.find(f => !f.transcriptionId);
-    if (uploadedFile) {
-      try {
-        const duration = await estimateAudioDuration(uploadedFile.file);
-        setSession(prev => ({
-          ...prev,
-          uploadedFiles: prev.uploadedFiles.map(f => 
-            f === uploadedFile ? { ...f, fileUrl: downloadUrl, duration, transcriptionId: fileId } : f
-          )
-        }));
-      } catch (err) {
-        console.warn('Could not estimate duration:', err);
-        setSession(prev => ({
-          ...prev,
-          uploadedFiles: prev.uploadedFiles.map(f => 
-            f === uploadedFile ? { ...f, fileUrl: downloadUrl, transcriptionId: fileId } : f
-          )
-        }));
+    console.log('=== handleFileUploaded called ===');
+    console.log('fileId:', fileId, 'downloadUrl:', downloadUrl);
+    
+    // First, find the file and estimate duration outside of setState
+    let uploadedFile: any = null;
+    let uploadedFileIndex = -1;
+    let duration = 0;
+    
+    setSession(prev => {
+      uploadedFileIndex = prev.uploadedFiles.findIndex(f => !f.transcriptionId);
+      if (uploadedFileIndex !== -1) {
+        uploadedFile = prev.uploadedFiles[uploadedFileIndex];
       }
+      return prev; // Don't update yet
+    });
+    
+    if (!uploadedFile) {
+      console.warn('No uploadedFile found without transcriptionId!');
+      onUploadComplete?.(fileId, downloadUrl);
+      return;
     }
+    
+    // Estimate duration asynchronously
+    try {
+      duration = estimateAudioDuration(uploadedFile.file.size);
+      console.log('Estimated duration:', duration);
+    } catch (err) {
+      console.warn('Could not estimate duration:', err);
+    }
+    
+    // Now update the session with all the data
+    setSession(prev => {
+      console.log('Current uploadedFiles in prev:', prev.uploadedFiles);
+      
+      // Re-find the file index (in case state changed)
+      const currentIndex = prev.uploadedFiles.findIndex(f => !f.transcriptionId);
+      if (currentIndex === -1) {
+        console.warn('File disappeared from uploadedFiles!');
+        return prev;
+      }
 
-    // Move to mode selection if all files are uploaded
-    const allUploaded = session.uploadedFiles.every(f => f.transcriptionId);
-    if (allUploaded && session.step === 'upload') {
-      setSession(prev => ({ ...prev, step: 'mode' }));
-    }
+      // Update the file with upload details
+      const updatedFiles = [...prev.uploadedFiles];
+      updatedFiles[currentIndex] = {
+        ...prev.uploadedFiles[currentIndex],
+        fileUrl: downloadUrl,
+        duration,
+        transcriptionId: fileId
+      };
+
+      const updated = {
+        ...prev,
+        uploadedFiles: updatedFiles
+      };
+      
+      console.log('Updated session after file upload:', updated);
+
+      // Check if we should move to mode selection
+      const hasFiles = updated.uploadedFiles.length > 0;
+      const allUploaded = hasFiles && updated.uploadedFiles.every(f => f.transcriptionId);
+      console.log('Has files:', hasFiles, 'All uploaded check:', allUploaded, 'current step:', prev.step);
+      
+      if (allUploaded && prev.step === 'upload') {
+        console.log('Moving to mode selection step');
+        return { ...updated, step: 'mode' };
+      }
+
+      return updated;
+    });
 
     onUploadComplete?.(fileId, downloadUrl);
-  }, [session.uploadedFiles, onUploadComplete]);
+  }, [onUploadComplete]);
+
+  const handleFilesSelected = useCallback((files: File[]) => {
+    console.log('=== handleFilesSelected called ===');
+    console.log('Selected files:', files);
+    
+    setSession(prev => {
+      const updated = {
+        ...prev,
+        files: files
+      };
+      console.log('Updated session with selected files:', updated);
+      return updated;
+    });
+  }, []);
 
   const handleUploadStart = useCallback(() => {
-    setSession(prev => ({ 
-      ...prev, 
-      uploadedFiles: [...prev.uploadedFiles, ...prev.files.map(file => ({ file, fileUrl: '', duration: 0 }))]
-    }));
+    const callId = `${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    console.log('=== handleUploadStart called === with callId:', callId);
+    
+    setSession(prev => {
+      console.log('Current session files in prev:', prev.files);
+      
+      // Only add files that aren't already in uploadedFiles
+      const existingFiles = new Set(prev.uploadedFiles.map(f => f.file.name + f.file.size));
+      const newFiles = prev.files.filter(file => 
+        !existingFiles.has(file.name + file.size)
+      );
+      
+      if (newFiles.length === 0) {
+        console.log('No new files to add, skipping update');
+        return prev;
+      }
+      
+      const newUploadedFiles = [...prev.uploadedFiles, ...newFiles.map(file => ({ file, fileUrl: '', duration: 0 }))];
+      console.log('Adding files to uploadedFiles:', newUploadedFiles);
+      
+      const updated = { 
+        ...prev, 
+        uploadedFiles: newUploadedFiles
+      };
+      console.log('Updated session in handleUploadStart:', updated);
+      return updated;
+    });
     onUploadStart?.();
   }, [onUploadStart]);
 
   const handleModeSelection = async (modeSelection: TranscriptionModeSelection) => {
+    console.log('=== handleModeSelection called ===');
+    console.log('Mode selection:', modeSelection);
+    console.log('Current session state:', session);
+    console.log('Uploaded files:', session.uploadedFiles);
+    
     setSession(prev => ({ ...prev, modeSelection }));
     setProcessing(true);
     setError(null);
 
     try {
+      console.log('Starting to process', session.uploadedFiles.length, 'files');
+      
+      if (session.uploadedFiles.length === 0) {
+        console.error('No uploaded files found in session!');
+        setError('No files to process');
+        return;
+      }
+
+      const createdJobIds: string[] = [];
+
       // Process each uploaded file with the selected mode
       for (const uploadedFile of session.uploadedFiles) {
-        if (!uploadedFile.transcriptionId) continue;
+        console.log('Checking file:', uploadedFile);
+        
+        if (!uploadedFile.transcriptionId) {
+          console.warn('Skipping file with no transcriptionId:', uploadedFile);
+          continue;
+        }
 
-        await secureApiClient.post('/api/transcription/modes/process', {
+        console.log('Processing file:', uploadedFile.file.name, 'with mode:', modeSelection.mode);
+        console.log('File details:', {
           fileName: uploadedFile.file.name,
           fileUrl: uploadedFile.fileUrl,
           fileSize: uploadedFile.file.size,
           duration: uploadedFile.duration,
+          transcriptionId: uploadedFile.transcriptionId
+        });
+        
+        const response = await secureApiClient.post('/api/transcription/modes/process', {
+          fileName: uploadedFile.file.name,
+          fileUrl: uploadedFile.fileUrl,
+          fileSize: uploadedFile.file.size,
+          duration: isNaN(uploadedFile.duration) ? 0 : uploadedFile.duration,
           mode: modeSelection.mode,
           priority: modeSelection.priority,
           qualityLevel: modeSelection.qualityLevel,
-          specialRequirements: modeSelection.specialRequirements,
+          ...(modeSelection.specialRequirements && { specialRequirements: modeSelection.specialRequirements }),
           language: 'en', // Could be made configurable
           diarization: true // Could be made configurable
         });
+        
+        console.log('Processing response:', response);
+
+        // Collect job ID for polling
+        if (response.data?.success && response.data?.jobId) {
+          createdJobIds.push(response.data.jobId);
+          console.log('Added job ID for polling:', response.data.jobId);
+        }
+      }
+
+      console.log('All files processed, setting step to complete');
+      
+      // Start polling for the created jobs
+      if (createdJobIds.length > 0) {
+        console.log(`Starting polling for ${createdJobIds.length} jobs:`, createdJobIds);
+        console.log('Setting completedJobIds to trigger automatic polling:', createdJobIds);
+        setCompletedJobIds(createdJobIds);
       }
 
       setSession(prev => ({ ...prev, step: 'complete' }));
     } catch (err) {
+      console.error('Error in handleModeSelection:', err);
       const errorMessage = err instanceof Error ? err.message : 'Processing failed';
       setError(errorMessage);
       onUploadError?.(errorMessage);
@@ -132,12 +306,69 @@ export default function EnhancedFileUpload({
     }
   };
 
+  // Monitor job status changes to update the UI step
+  useEffect(() => {
+    console.log('🔍 Job monitoring effect triggered:', {
+      completedJobIds,
+      jobsKeys: Object.keys(jobs || {}),
+      jobs,
+      completedJobsCount: completedJobs.length,
+      processingJobsCount: processingJobs.length,
+      failedJobsCount: failedJobs.length,
+      isPolling
+    });
+    
+    if (completedJobIds.length > 0) {
+      if (jobs && Object.keys(jobs).length > 0) {
+        const allJobsTracked = completedJobIds.every(jobId => jobs[jobId]);
+        
+        console.log('📋 Job tracking status:', {
+          allJobsTracked,
+          completedJobIds,
+          trackedJobs: completedJobIds.map(id => ({ id, status: jobs[id]?.status }))
+        });
+        
+        if (allJobsTracked) {
+          const hasCompletedJobs = completedJobs.length > 0;
+          const hasFailedJobs = failedJobs.length > 0;
+          const hasProcessingJobs = processingJobs.length > 0;
+          
+          console.log('📊 Job status summary:', {
+            completed: completedJobs.length,
+            failed: failedJobs.length,
+            processing: processingJobs.length,
+            total: completedJobIds.length
+          });
+          
+          // If all jobs are completed, update to success state
+          if (completedJobs.length === completedJobIds.length) {
+            console.log('🎉 All jobs completed! Moving to success state');
+            setSession(prev => ({ ...prev, step: 'processing_complete' }));
+          }
+          // If some jobs failed, show error
+          else if (hasFailedJobs && !hasProcessingJobs) {
+            console.log('❌ Some jobs failed and no jobs processing');
+            setError('Some transcriptions failed. Please check your dashboard for details.');
+          }
+          // Otherwise stay in processing mode
+          else if (hasProcessingJobs) {
+            console.log('⏳ Jobs still processing...');
+            // Keep in complete/processing step
+          }
+        }
+      } else {
+        console.log('⚠️ Job IDs set but no job data available yet. Polling may not have started.');
+      }
+    }
+  }, [jobs, completedJobs, failedJobs, processingJobs, completedJobIds, isPolling]);
+
   const resetSession = () => {
     setSession({
       files: [],
       step: 'upload',
       uploadedFiles: []
     });
+    setCompletedJobIds([]);
     setError(null);
   };
 
@@ -174,8 +405,8 @@ export default function EnhancedFileUpload({
         
         <div className={`h-0.5 w-16 ${session.modeSelection ? 'bg-green-500' : 'bg-gray-300'}`} />
         
-        <div className={`flex items-center space-x-2 ${session.step === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${session.step === 'complete' ? 'bg-green-100' : 'bg-gray-100'}`}>
+        <div className={`flex items-center space-x-2 ${(session.step === 'complete' || session.step === 'processing_complete') ? 'text-green-600' : 'text-gray-400'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${(session.step === 'complete' || session.step === 'processing_complete') ? 'bg-green-100' : 'bg-gray-100'}`}>
             <CheckCircle className="h-5 w-5" />
           </div>
           <span className="font-medium">Complete</span>
@@ -207,6 +438,7 @@ export default function EnhancedFileUpload({
               onUploadComplete={handleFileUploaded}
               onUploadStart={handleUploadStart}
               onUploadError={onUploadError}
+              onFilesSelected={handleFilesSelected}
               maxFiles={maxFiles}
               disabled={disabled}
               variant={variant}
@@ -237,15 +469,32 @@ export default function EnhancedFileUpload({
         </Card>
       )}
 
-      {session.step === 'complete' && (
+      {(session.step === 'complete' || session.step === 'processing_complete') && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              Transcription Started!
+              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0 ? (
+                <>
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  Transcriptions Completed!
+                </>
+              ) : processingJobs.length > 0 ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
+                  Transcriptions Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  Transcription Started!
+                </>
+              )}
             </CardTitle>
             <CardDescription>
-              Your files are being processed with {session.modeSelection?.mode} transcription
+              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0
+                ? `All ${completedJobIds.length} file${completedJobIds.length > 1 ? 's' : ''} have been transcribed successfully`
+                : `Your files are being processed with ${session.modeSelection?.mode} transcription`
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -264,13 +513,98 @@ export default function EnhancedFileUpload({
             </div>
 
             <div className="space-y-2">
-              <h4 className="font-medium">Files Processing:</h4>
-              {session.uploadedFiles.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                  <span className="font-medium">{file.file.name}</span>
-                  <Badge variant="secondary">Processing</Badge>
+              <h4 className="font-medium">Transcription Status:</h4>
+              
+              {/* Debug info */}
+              {completedJobIds.length === 0 && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                  No job IDs available yet. Make sure the transcription jobs were created successfully.
                 </div>
-              ))}
+              )}
+              
+              {completedJobIds.length > 0 && (!jobs || Object.keys(jobs).length === 0) && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                  Job IDs: {completedJobIds.join(', ')} | Polling status: {isPolling ? 'Active' : 'Inactive'} | Jobs data: {JSON.stringify(jobs)}
+                </div>
+              )}
+              
+              {completedJobIds.map((jobId, index) => {
+                const job = jobs[jobId];
+                const fileName = session.uploadedFiles[index]?.file.name || `File ${index + 1}`;
+                const duration = session.uploadedFiles[index]?.duration;
+                
+                let statusBadge;
+                let statusIcon;
+                
+                if (job?.status === 'completed') {
+                  statusBadge = <Badge className="bg-green-100 text-green-800 border-green-200">Completed</Badge>;
+                  statusIcon = <CheckCircle className="h-5 w-5 text-green-500" />;
+                } else if (job?.status === 'error') {
+                  statusBadge = <Badge className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
+                  statusIcon = <AlertTriangle className="h-5 w-5 text-red-500" />;
+                } else if (job?.status === 'processing') {
+                  statusBadge = <Badge variant="secondary">Processing</Badge>;
+                  statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>;
+                } else {
+                  statusBadge = <Badge variant="secondary">Starting...</Badge>;
+                  statusIcon = <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>;
+                }
+                
+                return (
+                  <div key={jobId} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <div className="flex items-center gap-3 flex-1">
+                      {statusIcon}
+                      <div>
+                        <span className="font-medium">{fileName}</span>
+                        <div className="text-sm text-gray-500">
+                          {duration && `~${Math.round(duration / 60)} min`} • {session.modeSelection?.mode} transcription
+                          {job?.error && <span className="text-red-600 ml-2">• {job.error}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {statusBadge}
+                  </div>
+                );
+              })}
+              
+              {/* Show processing message only if there are still processing jobs */}
+              {processingJobs.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span className="text-sm text-blue-800">
+                      {processingJobs.length} transcription{processingJobs.length > 1 ? 's' : ''} still processing...
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">
+                    You can safely close this page - processing will continue in the background.
+                  </p>
+                </div>
+              )}
+              
+              {/* Show completion message when all jobs are done */}
+              {completedJobs.length === completedJobIds.length && completedJobIds.length > 0 && (
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="text-sm text-green-800">
+                      All transcriptions completed successfully! Check your dashboard to view and download your transcripts.
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Show error message if some jobs failed and none are processing */}
+              {failedJobs.length > 0 && processingJobs.length === 0 && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <span className="text-sm text-red-800">
+                      {failedJobs.length} transcription{failedJobs.length > 1 ? 's' : ''} failed. Please check the error messages above or try again.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">

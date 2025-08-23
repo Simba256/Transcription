@@ -43,7 +43,7 @@ export default function DashboardPage() {
   }
 
   const isTrialUser = userProfile?.subscription?.plan === 'trial';
-  const trialUploadsRemaining = 3 - (userProfile?.usage?.trialUploads || 0);
+  const trialUploadsRemaining = 100 - (userProfile?.usage?.trialUploads || 0);
   const trialTimeRemaining = 180 - (userProfile?.usage?.trialTimeUsed || 0); // 3 hours = 180 minutes
 
   return (

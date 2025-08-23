@@ -19,15 +19,13 @@ import {
   HardDrive
 } from 'lucide-react';
 import { uploadAudioFile, UploadProgress, formatFileSize, estimateAudioDuration } from '@/lib/storage';
-import { createTranscription } from '@/lib/firestore';
-import { transcriptionService } from '@/lib/transcription';
-import { secureApiClient } from '@/lib/secure-api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface FileUploadProps {
   onUploadComplete?: (fileId: string, downloadUrl: string) => void;
   onUploadStart?: () => void;
   onUploadError?: (error: string) => void;
+  onFilesSelected?: (files: File[]) => void;
   maxFiles?: number;
   disabled?: boolean;
   acceptedFileTypes?: string[];
@@ -51,6 +49,7 @@ export default function FileUpload({
   onUploadComplete,
   onUploadStart,
   onUploadError,
+  onFilesSelected,
   maxFiles = 5,
   disabled = false,
   acceptedFileTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/m4a'],
@@ -116,6 +115,13 @@ export default function FileUpload({
       }
     }
 
+    // Notify parent about files being selected FIRST
+    console.log('About to call onFilesSelected with files:', acceptedFiles);
+    onFilesSelected?.(acceptedFiles);
+    
+    // Then notify that upload is starting (so session.files is populated first)
+    const callId = `${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    console.log('About to call onUploadStart with callId:', callId);
     onUploadStart?.();
 
     // Process each file
@@ -158,29 +164,8 @@ export default function FileUpload({
           }
         );
 
-        // Create transcription job using the new transcription service
-        const transcriptionId = await transcriptionService.createTranscription(
-          user.uid,
-          file.name,
-          downloadUrl,
-          file.size,
-          {
-            language: 'en',
-            diarization: true,
-            priority: userProfile?.subscription?.plan === 'trial' ? 'normal' : 'high',
-            tags: ['upload', variant]
-          }
-        );
-
-        // Process the transcription using secure API client
-        const processResult = await secureApiClient.processTranscription(
-          file,
-          file.name,
-          transcriptionId,
-          'en',
-          true
-        );
-        console.log('Transcription processing started:', processResult);
+        // Create a simple unique ID for tracking the upload (no actual transcription created yet)
+        const tempTranscriptionId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Update file status
         setUploadingFiles(prev =>
@@ -190,7 +175,7 @@ export default function FileUpload({
                   ...f,
                   status: 'completed',
                   downloadUrl,
-                  transcriptionId,
+                  transcriptionId: tempTranscriptionId,
                   progress: { ...f.progress, percentage: 100, state: 'success' }
                 }
               : f
@@ -200,8 +185,8 @@ export default function FileUpload({
         // Clean up abort controller
         abortControllers.current.delete(fileId);
 
-        // Notify parent component
-        onUploadComplete?.(transcriptionId, downloadUrl);
+        // Notify parent component with temp ID (just for file tracking)
+        onUploadComplete?.(tempTranscriptionId, downloadUrl);
 
       } catch (error: any) {
         console.error('Upload error:', error);
@@ -228,7 +213,10 @@ export default function FileUpload({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'audio/*': acceptedFileTypes.map(type => type.split('/')[1])
+      'audio/mpeg': ['.mp3'],
+      'audio/wav': ['.wav'],
+      'audio/mp4': ['.mp4'],
+      'audio/m4a': ['.m4a']
     },
     maxFiles,
     disabled: disabled || !user,

@@ -117,23 +117,56 @@ export async function GET(request: NextRequest) {
     const jobData = jobDoc.data();
     
     if (!jobData.speechmaticsJobId) {
-      return NextResponse.json(
-        { error: 'Job has no Speechmatics job ID' },
-        { status: 400 }
-      );
+      // Job hasn't been submitted to Speechmatics yet
+      return NextResponse.json({
+        firestoreStatus: jobData.status || 'pending',
+        speechmaticsStatus: null,
+        speechmaticsJobId: null,
+        transcript: jobData.transcript,
+        duration: null,
+        lastCheckedAt: jobData.lastCheckedAt,
+        completedAt: jobData.completedAt,
+        message: 'Job not yet submitted to Speechmatics'
+      });
     }
 
-    // Check status from Speechmatics
-    const speechmaticsJob = await speechmaticsService.getJobStatusDirect(jobData.speechmaticsJobId);
-    
-    return NextResponse.json({
-      firestoreStatus: jobData.status,
-      speechmaticsStatus: speechmaticsJob.status,
-      transcript: jobData.transcript,
-      duration: speechmaticsJob.duration,
-      lastCheckedAt: jobData.lastCheckedAt,
-      completedAt: jobData.completedAt
-    });
+    try {
+      // Extract speechmatics job ID (handle both string and object format)
+      const speechmaticsJobId = typeof jobData.speechmaticsJobId === 'string' 
+        ? jobData.speechmaticsJobId 
+        : jobData.speechmaticsJobId?.job_id;
+
+      if (!speechmaticsJobId) {
+        throw new Error('Invalid speechmatics job ID format');
+      }
+
+      // Check status from Speechmatics
+      const speechmaticsJob = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
+      
+      return NextResponse.json({
+        firestoreStatus: jobData.status,
+        speechmaticsStatus: speechmaticsJob.status,
+        speechmaticsJobId: jobData.speechmaticsJobId,
+        transcript: jobData.transcript,
+        duration: speechmaticsJob.duration,
+        lastCheckedAt: jobData.lastCheckedAt,
+        completedAt: jobData.completedAt
+      });
+    } catch (speechmaticsError) {
+      console.error('Speechmatics API error:', speechmaticsError);
+      
+      // Return Firestore status if Speechmatics call fails
+      return NextResponse.json({
+        firestoreStatus: jobData.status,
+        speechmaticsStatus: 'unknown',
+        speechmaticsJobId: jobData.speechmaticsJobId,
+        transcript: jobData.transcript,
+        duration: null,
+        lastCheckedAt: jobData.lastCheckedAt,
+        completedAt: jobData.completedAt,
+        error: speechmaticsError instanceof Error ? speechmaticsError.message : 'Speechmatics API error'
+      });
+    }
 
   } catch (error) {
     console.error('Status check error:', error);

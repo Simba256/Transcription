@@ -33,7 +33,7 @@ export default function TrialPage() {
   // Calculate trial usage
   const trialUploadsUsed = userProfile?.usage?.trialUploads || 0;
   const trialTimeUsed = userProfile?.usage?.trialTimeUsed || 0;
-  const trialUploadsRemaining = Math.max(0, 3 - trialUploadsUsed);
+  const trialUploadsRemaining = Math.max(0, 100 - trialUploadsUsed);
   const trialTimeRemaining = Math.max(0, 180 - trialTimeUsed); // 3 hours = 180 minutes
 
   const isTrialExhausted = trialUploadsRemaining === 0 || trialTimeRemaining === 0;
@@ -90,7 +90,7 @@ export default function TrialPage() {
               Free Trial - AI Transcription
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Experience our AI-powered transcription service with 3 free uploads and up to 3 hours of processing time.
+              Experience our AI-powered transcription service with 100 free uploads and up to 3 hours of processing time.
             </p>
           </div>
 
@@ -105,9 +105,9 @@ export default function TrialPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-gray-900 mb-2">
-                  {trialUploadsUsed} / 3
+                  {trialUploadsUsed} / 100
                 </div>
-                <Progress value={(trialUploadsUsed / 3) * 100} className="h-2" />
+                <Progress value={(trialUploadsUsed / 100) * 100} className="h-2" />
                 <p className="text-xs text-gray-500 mt-2">
                   {trialUploadsRemaining} uploads remaining
                 </p>

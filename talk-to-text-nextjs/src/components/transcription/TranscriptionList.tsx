@@ -22,6 +22,7 @@ import { transcriptionService } from '@/lib/transcription';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
 import TranscriptionStatus from './TranscriptionStatus';
 import { PDFGenerator } from '@/lib/pdf-generator';
+import { useTranscriptionPolling } from '@/lib/hooks/useTranscriptionPolling';
 
 interface TranscriptionListProps {
   status?: TranscriptionJobData['status'];
@@ -46,6 +47,34 @@ export default function TranscriptionList({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<TranscriptionJobData['status'] | 'all'>(status || 'all');
   const [refreshing, setRefreshing] = useState(false);
+
+  // Get processing job IDs for polling
+  const processingJobIds = transcriptions
+    .filter(job => job.status === 'processing' || (job.status === 'pending' && job.speechmaticsJobId))
+    .map(job => job.id);
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('📊 TranscriptionList: transcriptions updated', {
+      totalJobs: transcriptions.length,
+      jobStatuses: transcriptions.map(job => ({ id: job.id, status: job.status })),
+      processingJobIds,
+      processingCount: processingJobIds.length
+    });
+  }, [transcriptions, processingJobIds]);
+
+  // Use polling hook for processing jobs
+  const {
+    isPolling,
+    processingJobs: pollingJobs,
+    completedJobs: pollingCompleted,
+    failedJobs: pollingFailed,
+    triggerJobPolling
+  } = useTranscriptionPolling(processingJobIds, {
+    pollInterval: 15000, // 15 seconds
+    maxPolls: 80, // 20 minutes max
+    autoStart: true
+  });
 
   // Load transcriptions
   useEffect(() => {
@@ -319,10 +348,10 @@ export default function TranscriptionList({
                 variant="outline"
                 size="sm"
                 onClick={handleRefresh}
-                disabled={refreshing}
+                disabled={refreshing || isPolling}
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing || isPolling ? 'animate-spin' : ''}`} />
+                {isPolling ? `Auto-checking (${processingJobIds.length})` : 'Refresh'}
               </Button>
             </div>
           </CardHeader>

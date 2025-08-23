@@ -14,7 +14,21 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
-import { speechmaticsService } from './speechmatics';
+// Conditional import for server-side only
+let speechmaticsService: any = null;
+if (typeof window === 'undefined') {
+  speechmaticsService = require('./speechmatics').speechmaticsService;
+}
+
+// Helper to ensure server-side only operations
+function ensureServerSide(operation: string): void {
+  if (typeof window !== 'undefined') {
+    throw new Error(`${operation} can only be performed on the server-side`);
+  }
+  if (!speechmaticsService) {
+    throw new Error(`Speechmatics service not available for ${operation}`);
+  }
+}
 
 export interface TranscriptionJobData {
   id?: string;
@@ -198,6 +212,7 @@ class TranscriptionQueue {
     this.activePollers.add(jobId);
     
     try {
+      ensureServerSide('pollJobStatus');
       await speechmaticsService.pollJobStatus(speechmaticsJobId, jobId);
     } catch (error) {
       console.error(`Polling failed for job ${jobId}:`, error);
@@ -210,6 +225,11 @@ class TranscriptionQueue {
    * Retry a failed job
    */
   async retryJob(jobId: string): Promise<void> {
+    // Client-side operations not supported - should use API endpoints
+    if (typeof window !== 'undefined') {
+      throw new Error('retryJob can only be called from server-side code. Use API endpoints for client-side operations.');
+    }
+    
     try {
       const jobDoc = doc(db, 'transcriptions', jobId);
       const jobSnapshot = await getDocs(query(
@@ -276,6 +296,7 @@ class TranscriptionQueue {
    */
   private async checkAndUpdateJobStatus(jobId: string, speechmaticsJobId: string): Promise<void> {
     try {
+      ensureServerSide('checkAndUpdateJobStatus');
       const job = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
       
       // Validate job status before updating Firestore

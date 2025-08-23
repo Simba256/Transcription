@@ -1,8 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
 import FormData from 'form-data';
-import { db } from './firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { secureApiClient } from './secure-api-client';
+
+// Prevent this module from being used on the client-side
+if (typeof window !== 'undefined') {
+  throw new Error('Speechmatics service should only be used on the server-side');
+}
 
 // Speechmatics API types
 export interface SpeechmaticsConfig {
@@ -135,17 +137,6 @@ class SpeechmaticsService {
     }
   }
 
-  /**
-   * Check the status of a transcription job (client-side)
-   */
-  async getJobStatus(jobId: string): Promise<TranscriptionJob> {
-    try {
-      return await secureApiClient.getJobStatus(jobId);
-    } catch (error: any) {
-      console.error('Status check error:', error.message);
-      throw new Error(`Status check failed: ${error.message}`);
-    }
-  }
 
   /**
    * Check the status of a transcription job (server-side - direct API call)
@@ -201,17 +192,6 @@ class SpeechmaticsService {
     }
   }
 
-  /**
-   * Get the transcript result from a completed job (client-side)
-   */
-  async getTranscript(jobId: string, format: 'json-v2' | 'txt' | 'srt' = 'json-v2'): Promise<any> {
-    try {
-      return await secureApiClient.getTranscript(jobId, format);
-    } catch (error: any) {
-      console.error('Transcript retrieval error:', error.message);
-      throw new Error(`Transcript retrieval failed: ${error.message}`);
-    }
-  }
 
   /**
    * Get the transcript result from a completed job (server-side - direct API call)
@@ -279,59 +259,20 @@ class SpeechmaticsService {
     }
   }
 
-  /**
-   * Process a complete transcription workflow (client-side)
-   */
-  async processTranscription(
-    audioFile: File,
-    fileName: string,
-    firestoreDocId: string,
-    config?: Partial<SpeechmaticsConfig>
-  ): Promise<string> {
-    try {
-      const result = await secureApiClient.processTranscription(
-        audioFile,
-        fileName,
-        firestoreDocId,
-        config?.transcription_config?.language || 'en',
-        config?.transcription_config?.diarization === 'speaker'
-      );
 
-      return result.jobId;
-    } catch (error) {
-      // Update Firestore with error
-      await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorAt: serverTimestamp()
-      });
-      
-      throw error;
-    }
-  }
-
-  /**
-   * Safely update Firestore document with validated fields
-   */
-  private async safeUpdateDoc(docRef: any, updates: Record<string, any>): Promise<void> {
-    // Remove undefined values to prevent Firestore errors
-    const cleanUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
-      if (value !== undefined && value !== null) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, any>);
-    
-    if (Object.keys(cleanUpdates).length > 0) {
-      await updateDoc(docRef, cleanUpdates);
-    }
-  }
 
   /**
    * Poll job status and update Firestore when complete
+   * Note: This method is deprecated - use the API endpoints instead
    */
   async pollJobStatus(jobId: string, firestoreDocId: string, maxAttempts: number = 60): Promise<boolean> {
+    console.warn('pollJobStatus is deprecated. Use API endpoints for polling instead.');
+    
     let attempts = 0;
+    
+    // Dynamic imports to avoid issues with client-side imports
+    const { db } = await import('./firebase');
+    const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
     
     while (attempts < maxAttempts) {
       try {
@@ -344,8 +285,8 @@ class SpeechmaticsService {
           continue;
         }
         
-        // Update Firestore with current status using safe update
-        await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
+        // Update Firestore with current status
+        await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
           speechmaticsStatus: job.status,
           lastCheckedAt: serverTimestamp()
         });
@@ -355,8 +296,8 @@ class SpeechmaticsService {
           const transcript = await this.getTranscriptDirect(jobId, 'json-v2');
           const transcriptText = this.extractTextFromTranscript(transcript);
           
-          // Update Firestore with completed transcript using safe update
-          await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
+          // Update Firestore with completed transcript
+          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
             status: 'completed',
             transcript: transcriptText,
             fullTranscript: transcript,
@@ -366,7 +307,7 @@ class SpeechmaticsService {
           
           return true;
         } else if (job.status === 'rejected') {
-          await this.safeUpdateDoc(doc(db, 'transcriptions', firestoreDocId), {
+          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
             status: 'error',
             error: 'Job rejected by Speechmatics',
             errorAt: serverTimestamp()
@@ -383,6 +324,9 @@ class SpeechmaticsService {
         attempts++;
         
         if (attempts >= maxAttempts) {
+          const { db } = await import('./firebase');
+          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+          
           await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
             status: 'error',
             error: 'Polling timeout exceeded',

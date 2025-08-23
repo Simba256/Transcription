@@ -11,6 +11,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { speechmaticsService } from './speechmatics';
+import { updateUserUsage } from './firestore';
 import { 
   TranscriptionMode, 
   ExtendedTranscriptionJobData, 
@@ -52,7 +53,7 @@ export class TranscriptionModesService {
       retryCount: 0,
       maxRetries: 3,
       createdAt: serverTimestamp() as any,
-      tags: modeSelection.specialRequirements ? ['special_requirements'] : undefined
+      ...(modeSelection.specialRequirements && { tags: ['special_requirements'] })
     };
 
     const docRef = await addDoc(collection(db, 'transcriptions'), jobData);
@@ -106,18 +107,53 @@ export class TranscriptionModesService {
       
       const jobData = jobDoc.docs[0].data() as ExtendedTranscriptionJobData;
       
-      // Submit to Speechmatics
-      const speechmaticsJobId = await speechmaticsService.submitTranscriptionJob(
-        jobData.fileUrl,
-        jobData.language,
-        jobData.diarization
+      // Download file from URL and submit to Speechmatics
+      const response = await fetch(jobData.fileUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.statusText}`);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      const config = {
+        type: 'transcription' as const,
+        transcription_config: {
+          language: jobData.language,
+          ...(jobData.diarization && { diarization: 'speaker' as const })
+        }
+      };
+      
+      const speechmaticsResponse = await speechmaticsService.submitTranscriptionJob(
+        buffer,
+        jobData.fileName,
+        config
       );
+
+      // Extract job ID from response
+      const speechmaticsJobId = typeof speechmaticsResponse === 'string' 
+        ? speechmaticsResponse 
+        : speechmaticsResponse.job_id;
+
+      console.log('Speechmatics job submitted:', speechmaticsJobId);
 
       // Update with Speechmatics job ID
       await updateDoc(doc(db, 'transcriptions', jobId), {
         speechmaticsJobId,
         speechmaticsStatus: 'running'
       });
+
+      // Start automatic server-side background polling
+      this.startBackgroundPolling(speechmaticsJobId, jobId);
+
+      // Update user usage statistics
+      console.log(`🎯 About to update usage stats for user ${jobData.userId}, duration: ${jobData.duration || 0} minutes`);
+      try {
+        await this.updateUserTranscriptionUsage(jobData.userId, jobData.duration || 0);
+      } catch (usageError) {
+        console.error('Error updating usage stats:', usageError);
+        // Continue processing even if usage update fails
+      }
 
     } catch (error) {
       await updateDoc(doc(db, 'transcriptions', jobId), {
@@ -461,6 +497,119 @@ export class TranscriptionModesService {
       id: doc.id,
       ...doc.data()
     })) as ExtendedTranscriptionJobData[];
+  }
+
+  /**
+   * Update user transcription usage statistics
+   */
+  private async updateUserTranscriptionUsage(userId: string, estimatedDuration: number): Promise<void> {
+    try {
+      await updateUserUsage(userId, {
+        trialUploads: 1,
+        totalTranscribed: Math.round(estimatedDuration), // Duration is already in minutes
+        trialTimeUsed: Math.round(estimatedDuration)
+      });
+      console.log(`📊 Updated usage stats for user ${userId}: +1 upload, +${Math.round(estimatedDuration)} minutes`);
+    } catch (error) {
+      console.error('Failed to update user usage statistics:', error);
+      // Don't fail the transcription if usage stats update fails
+    }
+  }
+
+  /**
+   * Start background polling for automatic completion (server-side)
+   */
+  private async startBackgroundPolling(speechmaticsJobId: string, firestoreDocId: string) {
+    const maxAttempts = 60; // 30 minutes max (30 seconds * 60)
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        if (attempts >= maxAttempts) {
+          console.log(`Polling timeout for job ${speechmaticsJobId}`);
+          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+            status: 'error',
+            error: 'Polling timeout exceeded',
+            errorAt: serverTimestamp()
+          });
+          return;
+        }
+
+        const job = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
+        
+        if (!job || !job.status) {
+          console.warn(`Invalid job status for ${speechmaticsJobId}:`, job);
+          attempts++;
+          setTimeout(poll, 30000); // Retry in 30 seconds
+          return;
+        }
+
+        // Update Firestore with current status
+        await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+          speechmaticsStatus: job.status,
+          lastCheckedAt: serverTimestamp()
+        });
+
+        console.log(`🔄 Background polling job ${speechmaticsJobId}: ${job.status} (attempt ${attempts + 1}/${maxAttempts})`);
+
+        if (job.status === 'done') {
+          try {
+            // Get transcript
+            const transcript = await speechmaticsService.getTranscriptDirect(speechmaticsJobId, 'json-v2');
+            const transcriptText = speechmaticsService.extractTextFromTranscript(transcript);
+            
+            // Update Firestore with completed transcript
+            await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+              status: 'completed',
+              transcript: transcriptText,
+              fullTranscript: transcript,
+              completedAt: serverTimestamp(),
+              duration: job.duration
+            });
+
+            console.log(`✅ Background polling completed job ${speechmaticsJobId} successfully`);
+          } catch (transcriptError) {
+            console.error('Error retrieving transcript in background polling:', transcriptError);
+            await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+              status: 'error',
+              error: 'Failed to retrieve transcript',
+              errorAt: serverTimestamp()
+            });
+          }
+          return; // Stop polling
+        } else if (job.status === 'rejected') {
+          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+            status: 'error',
+            error: 'Job rejected by Speechmatics',
+            errorAt: serverTimestamp()
+          });
+          console.log(`❌ Background polling: job ${speechmaticsJobId} rejected`);
+          return; // Stop polling
+        }
+
+        // Continue polling if still running
+        attempts++;
+        setTimeout(poll, 30000); // Poll every 30 seconds
+
+      } catch (error) {
+        console.error(`Background polling error for job ${speechmaticsJobId}:`, error);
+        attempts++;
+        
+        if (attempts >= maxAttempts) {
+          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
+            status: 'error',
+            error: 'Background polling failed repeatedly',
+            errorAt: serverTimestamp()
+          });
+        } else {
+          setTimeout(poll, 30000); // Retry in 30 seconds
+        }
+      }
+    };
+
+    // Start polling after a short delay
+    setTimeout(poll, 5000); // Wait 5 seconds before first poll
+    console.log(`🚀 Started background polling for job ${speechmaticsJobId} (Firestore ID: ${firestoreDocId})`);
   }
 }
 

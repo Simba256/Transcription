@@ -1,5 +1,10 @@
 import { transcriptionQueue, TranscriptionJobData } from './transcription-queue';
-import { speechmaticsService } from './speechmatics';
+
+// Conditional import for server-side only
+let speechmaticsService: any = null;
+if (typeof window === 'undefined') {
+  speechmaticsService = require('./speechmatics').speechmaticsService;
+}
 import { updateUserUsage } from './firestore';
 import { estimateAudioDuration } from './storage';
 import { db } from './firebase';
@@ -145,6 +150,11 @@ class TranscriptionService {
         await transcriptionQueue.resetRetryCount(jobId);
       }
 
+      // Check if running on client-side
+      if (typeof window !== 'undefined') {
+        throw new Error('Retry functionality requires server-side processing. Please refresh the page and try again, or contact support if the issue persists.');
+      }
+      
       await transcriptionQueue.retryJob(jobId);
     } catch (error) {
       console.error('Error retrying transcription:', error);

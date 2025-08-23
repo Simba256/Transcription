@@ -194,13 +194,18 @@ export const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Helper function to validate audio duration (estimate from file size)
-export const estimateAudioDuration = (fileSize: number, bitrate = 128): number => {
-  // Rough estimation: bitrate in kbps, fileSize in bytes
+// Helper function to estimate audio duration from file size (returns minutes)
+export const estimateAudioDuration = (fileSize: number, bitrate = 32): number => {
+  // Conservative estimation using lower bitrate for more accurate duration
+  // Many audio files are compressed with variable bitrates, often much lower than 128kbps
   // Duration in seconds = (fileSize in bits) / (bitrate in bits per second)
   const fileSizeInBits = fileSize * 8;
   const bitrateInBitsPerSecond = bitrate * 1000;
-  return Math.round(fileSizeInBits / bitrateInBitsPerSecond);
+  const durationInSeconds = fileSizeInBits / bitrateInBitsPerSecond;
+  const durationInMinutes = durationInSeconds / 60;
+  
+  // Return duration in minutes (with minimum of 0.1 minutes for very short files)
+  return Math.max(0.1, Math.round(durationInMinutes * 10) / 10);
 };
 
 // Cleanup old files (for maintenance)

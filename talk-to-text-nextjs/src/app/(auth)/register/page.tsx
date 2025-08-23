@@ -119,7 +119,7 @@ export default function RegisterPage() {
             <CardHeader>
               <CardTitle className="text-center">Sign Up</CardTitle>
               <CardDescription className="text-center">
-                Get started with 3 free trial uploads
+                Get started with 100 free trial uploads
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
