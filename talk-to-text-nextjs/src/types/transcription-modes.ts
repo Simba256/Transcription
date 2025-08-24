@@ -17,68 +17,34 @@ export interface TranscriptionModeConfig {
   availability: 'available' | 'limited' | 'unavailable';
 }
 
-export interface HumanTranscriberAssignment {
-  id?: string;
-  transcriptionId: string;
-  transcriberId: string;
-  assignedAt: Timestamp;
-  status: 'assigned' | 'in_progress' | 'completed' | 'rejected';
-  estimatedCompletion?: Timestamp;
-  notes?: string;
-  completedAt?: Timestamp;
-}
-
-export interface HumanTranscriber {
-  id?: string;
-  userId: string;
-  email: string;
-  name: string;
-  status: 'active' | 'inactive' | 'busy';
-  specializations: string[]; // languages, domains, etc.
-  rating: number;
-  completedJobs: number;
-  averageCompletionTime: number; // in minutes
-  languages: string[];
-  certifications?: string[];
-  createdAt: Timestamp;
-  lastActiveAt: Timestamp;
-}
-
-export interface HybridTranscriptionData {
-  aiTranscript?: string;
-  aiConfidence?: number;
-  aiProcessingTime?: number;
-  humanTranscript?: string;
-  humanNotes?: string;
-  humanProcessingTime?: number;
-  qualityScore?: number;
+// Simplified for admin-only human transcription
+export interface AdminTranscriptionData {
+  adminTranscript?: string;
+  adminNotes?: string;
   reviewedBy?: string;
   reviewedAt?: Timestamp;
+  processingTime?: number;
 }
 
-export interface ExtendedTranscriptionJobData {
+export interface SimplifiedTranscriptionJobData {
   id?: string;
   userId: string;
   fileName: string;
   fileUrl: string;
   fileSize: number;
-  status: 'pending' | 'processing' | 'completed' | 'error' | 'assigned' | 'human_review';
+  status: 'pending' | 'processing' | 'completed' | 'error' | 'queued_for_admin' | 'admin_review';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   mode: TranscriptionMode;
   
-  // AI-specific fields
-  speechmaticsJobId?: string;
-  speechmaticsStatus?: string;
+  // AI-specific fields (OpenAI)
+  openaiJobId?: string;
   aiTranscript?: string;
+  processingTime?: number;
+  wordCount?: number;
+  confidence?: number;
   
-  // Human transcription fields
-  assignedTranscriber?: string;
-  humanAssignmentId?: string;
-  humanTranscript?: string;
-  humanNotes?: string;
-  
-  // Hybrid mode fields
-  hybridData?: HybridTranscriptionData;
+  // Admin transcription fields (simplified human process)
+  adminData?: AdminTranscriptionData;
   
   // Final output
   finalTranscript?: string;
@@ -107,29 +73,29 @@ export const TRANSCRIPTION_MODES: Record<TranscriptionMode, TranscriptionModeCon
   ai: {
     mode: 'ai',
     label: 'AI Transcription',
-    description: 'Fast, automated transcription using advanced AI (Speechmatics)',
+    description: 'Fast, automated transcription using OpenAI Whisper + GPT-4',
     icon: 'Zap',
-    estimatedTime: '5-15 minutes',
+    estimatedTime: '2-8 minutes',
     pricing: {
-      basePrice: 0.10,
+      basePrice: 0.06,
       currency: 'USD',
       unit: 'per minute'
     },
     features: [
       'Lightning fast processing',
-      'Speaker diarization',
+      'Superior accuracy with OpenAI',
+      'Speaker identification',
       'Multiple language support',
-      'Automatic punctuation',
-      'Confidence scoring'
+      'Professional formatting'
     ],
     availability: 'available'
   },
   human: {
     mode: 'human',
-    label: 'Human Transcription',
-    description: 'Professional human transcribers for highest accuracy',
+    label: 'Admin Manual Review',
+    description: 'Manual transcription review by admin for specialized content',
     icon: 'User',
-    estimatedTime: '2-24 hours',
+    estimatedTime: '4-48 hours',
     pricing: {
       basePrice: 1.50,
       currency: 'USD',
@@ -137,27 +103,27 @@ export const TRANSCRIPTION_MODES: Record<TranscriptionMode, TranscriptionModeCon
     },
     features: [
       'Highest accuracy (99%+)',
-      'Context understanding',
-      'Proper formatting',
+      'Specialized content handling',
+      'Custom formatting',
       'Quality assurance',
-      'Professional review'
+      'Admin oversight'
     ],
     availability: 'available'
   },
   hybrid: {
     mode: 'hybrid',
-    label: 'Hybrid (AI + Human)',
-    description: 'AI transcription reviewed and refined by human experts',
+    label: 'AI + Admin Review',
+    description: 'OpenAI transcription with admin review for premium quality',
     icon: 'Users',
-    estimatedTime: '1-12 hours',
+    estimatedTime: '2-24 hours',
     pricing: {
-      basePrice: 0.75,
+      basePrice: 0.85,
       currency: 'USD',
       unit: 'per minute'
     },
     features: [
       'Best of both worlds',
-      'AI speed + Human accuracy',
+      'AI speed + Admin precision',
       'Cost-effective premium option',
       'Quality validation',
       'Expert review and correction'

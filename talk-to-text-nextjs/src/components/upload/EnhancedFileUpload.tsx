@@ -19,6 +19,7 @@ import FileUpload from './FileUpload';
 import ModeSelector from '@/components/transcription/ModeSelector';
 import { TranscriptionModeSelection } from '@/types/transcription-modes';
 import { estimateAudioDuration } from '@/lib/storage';
+import { getCachedAudioDuration } from '@/lib/client-audio-utils';
 import { secureApiClient } from '@/lib/secure-api-client';
 import { transcriptionService } from '@/lib/transcription';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
@@ -132,12 +133,19 @@ export default function EnhancedFileUpload({
       return;
     }
     
-    // Estimate duration asynchronously
+    // Get actual duration from audio metadata (asynchronously)
     try {
-      duration = estimateAudioDuration(uploadedFile.file.size);
-      console.log('Estimated duration:', duration);
+      console.log('🎵 Getting actual duration from audio metadata...');
+      duration = await getCachedAudioDuration(uploadedFile.file);
+      console.log('✅ Actual duration detected:', duration, 'minutes');
     } catch (err) {
-      console.warn('Could not estimate duration:', err);
+      console.warn('⚠️ Could not get actual duration, falling back to estimation:', err);
+      try {
+        duration = estimateAudioDuration(uploadedFile.file.size);
+        console.log('📊 Fallback estimation:', duration, 'minutes');
+      } catch (estimationErr) {
+        console.warn('Could not estimate duration:', estimationErr);
+      }
     }
     
     // Now update the session with all the data

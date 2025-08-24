@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signInWithEmail, signInWithGoogle } from '@/lib/auth';
+import { signInWithEmail, signInWithGoogle, getUserProfile } from '@/lib/auth';
 import { validateEmail, EMAIL_VALIDATION_PRESETS } from '@/lib/email-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,8 +41,15 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await signInWithEmail(email, password);
-      router.push('/dashboard');
+      const user = await signInWithEmail(email, password);
+      
+      // Check user role and redirect appropriately
+      const userProfile = await getUserProfile(user.uid);
+      if (userProfile?.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to sign in. Please check your credentials.');
     } finally {
@@ -55,8 +62,15 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await signInWithGoogle();
-      router.push('/dashboard');
+      const user = await signInWithGoogle();
+      
+      // Check user role and redirect appropriately
+      const userProfile = await getUserProfile(user.uid);
+      if (userProfile?.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to sign in with Google.');
     } finally {

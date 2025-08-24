@@ -14,34 +14,28 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
-// Conditional import for server-side only
-let speechmaticsService: any = null;
-if (typeof window === 'undefined') {
-  speechmaticsService = require('./speechmatics').speechmaticsService;
-}
 
-// Helper to ensure server-side only operations
-function ensureServerSide(operation: string): void {
-  if (typeof window !== 'undefined') {
-    throw new Error(`${operation} can only be performed on the server-side`);
-  }
-  if (!speechmaticsService) {
-    throw new Error(`Speechmatics service not available for ${operation}`);
-  }
-}
-
-export interface TranscriptionJobData {
+export interface SimplifiedTranscriptionJobData {
   id?: string;
   userId: string;
   fileName: string;
   fileUrl: string;
   fileSize: number;
-  status: 'pending' | 'processing' | 'completed' | 'error';
+  status: 'pending' | 'processing' | 'completed' | 'error' | 'queued_for_admin' | 'admin_review';
   priority: 'low' | 'normal' | 'high';
-  speechmaticsJobId?: string;
-  speechmaticsStatus?: string;
-  transcript?: string;
-  fullTranscript?: any;
+  mode: 'ai' | 'human' | 'hybrid';
+  openaiJobId?: string;
+  aiTranscript?: string;
+  processingTime?: number;
+  wordCount?: number;
+  confidence?: number;
+  adminData?: {
+    adminTranscript?: string;
+    adminNotes?: string;
+    reviewedBy?: string;
+    reviewedAt?: Timestamp;
+  };
+  finalTranscript?: string;
   duration?: number;
   error?: string;
   createdAt: Timestamp;
@@ -61,12 +55,12 @@ export interface QueueStats {
   processing: number;
   completed: number;
   error: number;
+  queuedForAdmin: number;
   total: number;
 }
 
-class TranscriptionQueue {
-  private activePollers = new Set<string>();
-
+class SimplifiedTranscriptionQueue {
+  
   /**
    * Safely update Firestore document with validated fields
    */
@@ -87,9 +81,9 @@ class TranscriptionQueue {
   /**
    * Add a new transcription job to the queue
    */
-  async addJob(jobData: Omit<TranscriptionJobData, 'id' | 'createdAt' | 'retryCount'>): Promise<string> {
+  async addJob(jobData: Omit<SimplifiedTranscriptionJobData, 'id' | 'createdAt' | 'retryCount'>): Promise<string> {
     try {
-      const job: Omit<TranscriptionJobData, 'id'> = {
+      const job: Omit<SimplifiedTranscriptionJobData, 'id'> = {
         ...jobData,
         createdAt: serverTimestamp() as Timestamp,
         retryCount: 0,
@@ -98,7 +92,7 @@ class TranscriptionQueue {
 
       const docRef = await addDoc(collection(db, 'transcriptions'), job);
       
-      // Don't auto-start processing - caller should use processJobWithFile with the actual file
+      console.log(`📥 Added job ${docRef.id} to simplified queue (mode: ${job.mode})`);
       
       return docRef.id;
     } catch (error) {
@@ -108,470 +102,192 @@ class TranscriptionQueue {
   }
 
   /**
-   * Process a transcription job with file object
+   * Get jobs by status
    */
-  async processJobWithFile(jobId: string, audioFile: File): Promise<void> {
+  async getJobsByStatus(status: SimplifiedTranscriptionJobData['status']): Promise<SimplifiedTranscriptionJobData[]> {
     try {
-      // Prevent duplicate processing
-      if (this.activePollers.has(jobId)) {
-        return;
-      }
-
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      
-      // Update status to processing
-      await updateDoc(jobDoc, {
-        status: 'processing',
-        submittedAt: serverTimestamp()
-      });
-
-      // Get job data
-      const jobSnapshot = await getDocs(query(
+      const jobsQuery = query(
         collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        throw new Error('Job not found');
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      // Submit to Speechmatics using the new client-side method
-      const speechmaticsJobId = await speechmaticsService.processTranscription(
-        audioFile,
-        jobData.fileName,
-        jobId,
-        {
-          transcription_config: {
-            language: jobData.language || 'en',
-            diarization: jobData.diarization ? 'speaker' : undefined
-          }
-        }
+        where('status', '==', status),
+        orderBy('createdAt', 'desc')
       );
 
-      // Start polling for completion
-      this.startPolling(jobId, speechmaticsJobId);
-      
+      const snapshot = await getDocs(jobsQuery);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SimplifiedTranscriptionJobData[];
+
     } catch (error) {
-      console.error(`Error processing job ${jobId}:`, error);
-      
-      // Update job with error status
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown processing error',
-        errorAt: serverTimestamp()
-      });
-    }
-  }
-
-  /**
-   * Process a transcription job (legacy method for backward compatibility)
-   */
-  async processJob(jobId: string): Promise<void> {
-    try {
-      // This method is now used for polling existing jobs
-      // For new jobs, use processJobWithFile instead
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      
-      // Get job data
-      const jobSnapshot = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        throw new Error('Job not found');
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      // If job has a speechmatics job ID, start polling
-      if (jobData.speechmaticsJobId) {
-        this.startPolling(jobId, jobData.speechmaticsJobId);
-      } else {
-        throw new Error('Job cannot be processed without file object. Use processJobWithFile instead.');
-      }
-      
-    } catch (error) {
-      console.error(`Error processing job ${jobId}:`, error);
-      
-      // Update job with error status
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown processing error',
-        errorAt: serverTimestamp()
-      });
-    }
-  }
-
-  /**
-   * Start polling a Speechmatics job for completion
-   */
-  private async startPolling(jobId: string, speechmaticsJobId: string): Promise<void> {
-    this.activePollers.add(jobId);
-    
-    try {
-      ensureServerSide('pollJobStatus');
-      await speechmaticsService.pollJobStatus(speechmaticsJobId, jobId);
-    } catch (error) {
-      console.error(`Polling failed for job ${jobId}:`, error);
-    } finally {
-      this.activePollers.delete(jobId);
-    }
-  }
-
-  /**
-   * Retry a failed job
-   */
-  async retryJob(jobId: string): Promise<void> {
-    // Client-side operations not supported - should use API endpoints
-    if (typeof window !== 'undefined') {
-      throw new Error('retryJob can only be called from server-side code. Use API endpoints for client-side operations.');
-    }
-    
-    try {
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      const jobSnapshot = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        throw new Error('Job not found');
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      if (jobData.retryCount >= jobData.maxRetries) {
-        throw new Error('Maximum retry attempts exceeded');
-      }
-
-      // Update retry count and reset status
-      await updateDoc(jobDoc, {
-        status: 'pending',
-        retryCount: (jobData.retryCount || 0) + 1,
-        error: null,
-        errorAt: null
-      });
-
-      // If job has a speechmatics job ID, check its current status first
-      if (jobData.speechmaticsJobId) {
-        try {
-          await this.checkAndUpdateJobStatus(jobId, jobData.speechmaticsJobId);
-          // If job is actually complete, no need to retry
-          const updatedJob = await getDocs(query(
-            collection(db, 'transcriptions'),
-            where('__name__', '==', jobId)
-          ));
-          const updatedJobData = updatedJob.docs[0].data() as TranscriptionJobData;
-          if (updatedJobData.status === 'completed') {
-            return;
-          }
-        } catch (error) {
-          console.warn(`Failed to check job status before retry: ${error}`);
-        }
-        
-        // Start polling the existing job
-        await this.processJob(jobId);
-      } else {
-        // Job was never submitted to Speechmatics, need file re-upload
-        // Mark it as pending and let the user know they need to re-upload
-        await updateDoc(jobDoc, {
-          status: 'error',
-          error: 'This transcription needs to be re-submitted with the original file. Please upload the file again.',
-          errorAt: serverTimestamp()
-        });
-        throw new Error('This transcription was never properly submitted. Please re-upload the file to retry.');
-      }
-      
-    } catch (error) {
-      console.error(`Error retrying job ${jobId}:`, error);
+      console.error(`Error fetching jobs with status ${status}:`, error);
       throw error;
     }
   }
 
   /**
-   * Check and update job status from Speechmatics
+   * Get admin queue (jobs waiting for manual transcription)
    */
-  private async checkAndUpdateJobStatus(jobId: string, speechmaticsJobId: string): Promise<void> {
-    try {
-      ensureServerSide('checkAndUpdateJobStatus');
-      const job = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
-      
-      // Validate job status before updating Firestore
-      if (!job || !job.status) {
-        console.warn(`Invalid job status received for ${speechmaticsJobId}:`, job);
-        throw new Error('Invalid job status received from Speechmatics');
-      }
-      
-      // Update Firestore with current status using safe update
-      await this.safeUpdateDoc(doc(db, 'transcriptions', jobId), {
-        speechmaticsStatus: job.status,
-        lastCheckedAt: serverTimestamp()
-      });
-
-      if (job.status === 'done') {
-        // Get the transcript
-        const transcript = await speechmaticsService.getTranscriptDirect(speechmaticsJobId, 'json-v2');
-        const transcriptText = speechmaticsService.extractTextFromTranscript(transcript);
-        
-        // Update Firestore with completed transcript
-        await updateDoc(doc(db, 'transcriptions', jobId), {
-          status: 'completed',
-          transcript: transcriptText,
-          fullTranscript: transcript,
-          completedAt: serverTimestamp(),
-          duration: job.duration
-        });
-      } else if (job.status === 'rejected') {
-        await updateDoc(doc(db, 'transcriptions', jobId), {
-          status: 'error',
-          error: 'Job rejected by Speechmatics',
-          errorAt: serverTimestamp()
-        });
-      }
-    } catch (error) {
-      console.error(`Failed to check job status for ${speechmaticsJobId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Reset retry count for a job (allows retrying jobs that exceeded max retries)
-   */
-  async resetRetryCount(jobId: string): Promise<void> {
-    try {
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      await updateDoc(jobDoc, {
-        retryCount: 0,
-        error: null,
-        errorAt: null
-      });
-    } catch (error) {
-      console.error(`Error resetting retry count for job ${jobId}:`, error);
-      throw new Error('Failed to reset retry count');
-    }
-  }
-
-  /**
-   * Refresh job status from Speechmatics (useful for stuck jobs)
-   */
-  async refreshJobStatus(jobId: string): Promise<void> {
-    try {
-      const jobSnapshot = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        throw new Error('Job not found');
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      if (jobData.speechmaticsJobId) {
-        await this.checkAndUpdateJobStatus(jobId, jobData.speechmaticsJobId);
-      } else {
-        // Job never made it to Speechmatics, mark it as needing re-submission
-        await updateDoc(doc(db, 'transcriptions', jobId), {
-          status: 'pending',
-          error: 'Job needs to be re-submitted to Speechmatics',
-          lastCheckedAt: serverTimestamp()
-        });
-        throw new Error('Job was never submitted to Speechmatics. Please retry the transcription.');
-      }
-    } catch (error) {
-      console.error(`Error refreshing job status for ${jobId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Force complete a job with manual transcript (emergency method)
-   */
-  async forceCompleteJob(jobId: string, transcript: string): Promise<void> {
-    try {
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      await updateDoc(jobDoc, {
-        status: 'completed',
-        transcript: transcript,
-        completedAt: serverTimestamp(),
-        error: null,
-        errorAt: null
-      });
-    } catch (error) {
-      console.error(`Error force completing job ${jobId}:`, error);
-      throw new Error('Failed to force complete job');
-    }
-  }
-
-  /**
-   * Check if a job can be retried or needs re-submission
-   */
-  async getJobRetryInfo(jobId: string): Promise<{
-    canRetry: boolean;
-    needsResubmission: boolean;
-    reason: string;
-  }> {
-    try {
-      const jobSnapshot = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        return {
-          canRetry: false,
-          needsResubmission: false,
-          reason: 'Job not found'
-        };
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      if (jobData.status === 'completed') {
-        return {
-          canRetry: false,
-          needsResubmission: false,
-          reason: 'Job already completed'
-        };
-      }
-
-      // Check if job was properly submitted based on mode
-      const wasProperlySubmitted = this.checkJobSubmissionStatus(jobData);
-      
-      if (jobData.retryCount >= jobData.maxRetries && !wasProperlySubmitted) {
-        return {
-          canRetry: false,
-          needsResubmission: true,
-          reason: 'Job never submitted to transcription service and exceeded retries'
-        };
-      }
-
-      if (!wasProperlySubmitted) {
-        return {
-          canRetry: false,
-          needsResubmission: true,
-          reason: 'Job was never submitted to transcription service'
-        };
-      }
-
-      return {
-        canRetry: true,
-        needsResubmission: false,
-        reason: 'Job can be retried'
-      };
-    } catch (error) {
-      return {
-        canRetry: false,
-        needsResubmission: false,
-        reason: 'Error checking job status'
-      };
-    }
-  }
-
-  /**
-   * Check if a job was properly submitted based on its transcription mode
-   */
-  private checkJobSubmissionStatus(jobData: TranscriptionJobData): boolean {
-    // Access the mode from jobData (it should be there if using ExtendedTranscriptionJobData)
-    const mode = (jobData as any).mode || 'ai'; // Default to 'ai' for backward compatibility
-    
-    switch (mode) {
-      case 'ai':
-        // AI transcription should have a Speechmatics job ID
-        return !!jobData.speechmaticsJobId;
-      
-      case 'human':
-        // Human transcription should have a human assignment ID, assigned transcriber, or be queued
-        return !!(jobData as any).humanAssignmentId || 
-               !!(jobData as any).assignedTranscriber || 
-               !!(jobData as any).humanTranscriptionQueued;
-      
-      case 'hybrid':
-        // Hybrid should have either Speechmatics job ID (initial AI phase) or human assignment
-        return !!jobData.speechmaticsJobId || !!(jobData as any).humanAssignmentId;
-      
-      default:
-        // For unknown modes, fall back to checking Speechmatics job ID
-        return !!jobData.speechmaticsJobId;
-    }
-  }
-
-  /**
-   * Cancel a job
-   */
-  async cancelJob(jobId: string): Promise<void> {
-    try {
-      const jobDoc = doc(db, 'transcriptions', jobId);
-      const jobSnapshot = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('__name__', '==', jobId)
-      ));
-
-      if (jobSnapshot.empty) {
-        throw new Error('Job not found');
-      }
-
-      const jobData = jobSnapshot.docs[0].data() as TranscriptionJobData;
-
-      // Cancel Speechmatics job if it exists
-      if (jobData.speechmaticsJobId) {
-        try {
-          await speechmaticsService.deleteJob(jobData.speechmaticsJobId);
-        } catch (error) {
-          console.warn('Failed to cancel Speechmatics job:', error);
-        }
-      }
-
-      // Stop polling
-      this.activePollers.delete(jobId);
-
-      // Delete the job from Firestore
-      await deleteDoc(jobDoc);
-      
-    } catch (error) {
-      console.error(`Error canceling job ${jobId}:`, error);
-      throw error;
-    }
+  async getAdminQueue(): Promise<SimplifiedTranscriptionJobData[]> {
+    return this.getJobsByStatus('queued_for_admin');
   }
 
   /**
    * Get jobs for a specific user
    */
-  async getUserJobs(
-    userId: string, 
-    status?: TranscriptionJobData['status'],
-    limitCount: number = 50
-  ): Promise<TranscriptionJobData[]> {
+  async getUserJobs(userId: string, status?: SimplifiedTranscriptionJobData['status']): Promise<SimplifiedTranscriptionJobData[]> {
     try {
-      let q = query(
-        collection(db, 'transcriptions'),
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
-
+      let jobsQuery;
+      
       if (status) {
-        q = query(
+        jobsQuery = query(
           collection(db, 'transcriptions'),
           where('userId', '==', userId),
           where('status', '==', status),
-          orderBy('createdAt', 'desc'),
-          limit(limitCount)
+          orderBy('createdAt', 'desc')
+        );
+      } else {
+        jobsQuery = query(
+          collection(db, 'transcriptions'),
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc')
         );
       }
-
-      const snapshot = await getDocs(q);
+      
+      const snapshot = await getDocs(jobsQuery);
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      } as TranscriptionJobData));
-      
+      })) as SimplifiedTranscriptionJobData[];
+
     } catch (error) {
-      console.error('Error getting user jobs:', error);
-      throw new Error('Failed to retrieve transcription jobs');
+      console.error(`Error fetching jobs for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to real-time updates for user's jobs
+   */
+  subscribeToUserJobs(
+    userId: string,
+    callback: (jobs: SimplifiedTranscriptionJobData[]) => void,
+    status?: SimplifiedTranscriptionJobData['status']
+  ): () => void {
+    try {
+      let jobsQuery;
+      
+      if (status) {
+        jobsQuery = query(
+          collection(db, 'transcriptions'),
+          where('userId', '==', userId),
+          where('status', '==', status),
+          orderBy('createdAt', 'desc')
+        );
+      } else {
+        jobsQuery = query(
+          collection(db, 'transcriptions'),
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc')
+        );
+      }
+      
+      const unsubscribe = onSnapshot(jobsQuery, (snapshot) => {
+        const jobs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as SimplifiedTranscriptionJobData[];
+        callback(jobs);
+      });
+      
+      return unsubscribe;
+
+    } catch (error) {
+      console.error(`Error subscribing to jobs for user ${userId}:`, error);
+      // Return a no-op unsubscribe function
+      return () => {};
+    }
+  }
+
+  /**
+   * Update job status
+   */
+  async updateJobStatus(jobId: string, status: SimplifiedTranscriptionJobData['status'], additionalFields?: Record<string, any>): Promise<void> {
+    try {
+      const updates: Record<string, any> = {
+        status,
+        lastCheckedAt: serverTimestamp(),
+        ...additionalFields
+      };
+
+      if (status === 'completed') {
+        updates.completedAt = serverTimestamp();
+      } else if (status === 'error') {
+        updates.errorAt = serverTimestamp();
+      }
+
+      await this.safeUpdateDoc(doc(db, 'transcriptions', jobId), updates);
+      console.log(`📊 Updated job ${jobId} status to: ${status}`);
+
+    } catch (error) {
+      console.error(`Error updating job ${jobId} status:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete job with admin transcription
+   */
+  async completeAdminTranscription(
+    jobId: string, 
+    transcription: string, 
+    adminNotes?: string, 
+    reviewedBy?: string
+  ): Promise<void> {
+    try {
+      const adminData = {
+        adminTranscript: transcription,
+        adminNotes,
+        reviewedBy,
+        reviewedAt: serverTimestamp()
+      };
+
+      await this.updateJobStatus(jobId, 'completed', {
+        adminData,
+        finalTranscript: transcription
+      });
+
+      console.log(`✅ Admin completed transcription for job ${jobId}`);
+
+    } catch (error) {
+      console.error(`Error completing admin transcription for job ${jobId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get job by ID
+   */
+  async getJob(jobId: string): Promise<SimplifiedTranscriptionJobData | null> {
+    try {
+      const jobQuery = query(
+        collection(db, 'transcriptions'),
+        where('__name__', '==', jobId)
+      );
+
+      const snapshot = await getDocs(jobQuery);
+      
+      if (snapshot.empty) {
+        return null;
+      }
+
+      return {
+        id: snapshot.docs[0].id,
+        ...snapshot.docs[0].data()
+      } as SimplifiedTranscriptionJobData;
+
+    } catch (error) {
+      console.error(`Error fetching job ${jobId}:`, error);
+      throw error;
     }
   }
 
@@ -580,116 +296,152 @@ class TranscriptionQueue {
    */
   async getQueueStats(): Promise<QueueStats> {
     try {
-      const [pendingSnap, processingSnap, completedSnap, errorSnap] = await Promise.all([
-        getDocs(query(collection(db, 'transcriptions'), where('status', '==', 'pending'))),
-        getDocs(query(collection(db, 'transcriptions'), where('status', '==', 'processing'))),
-        getDocs(query(collection(db, 'transcriptions'), where('status', '==', 'completed'))),
-        getDocs(query(collection(db, 'transcriptions'), where('status', '==', 'error')))
-      ]);
-
-      const stats: QueueStats = {
-        pending: pendingSnap.size,
-        processing: processingSnap.size,
-        completed: completedSnap.size,
-        error: errorSnap.size,
-        total: 0
+      const allJobsQuery = query(collection(db, 'transcriptions'));
+      const snapshot = await getDocs(allJobsQuery);
+      
+      const stats = {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        error: 0,
+        queuedForAdmin: 0,
+        total: snapshot.docs.length
       };
 
-      stats.total = stats.pending + stats.processing + stats.completed + stats.error;
-      
+      snapshot.docs.forEach(doc => {
+        const job = doc.data() as SimplifiedTranscriptionJobData;
+        switch (job.status) {
+          case 'pending':
+            stats.pending++;
+            break;
+          case 'processing':
+            stats.processing++;
+            break;
+          case 'completed':
+            stats.completed++;
+            break;
+          case 'error':
+            stats.error++;
+            break;
+          case 'queued_for_admin':
+          case 'admin_review':
+            stats.queuedForAdmin++;
+            break;
+        }
+      });
+
       return stats;
+
     } catch (error) {
       console.error('Error getting queue stats:', error);
-      throw new Error('Failed to retrieve queue statistics');
+      throw error;
     }
   }
 
   /**
-   * Subscribe to real-time updates for a user's jobs
-   */
-  subscribeToUserJobs(
-    userId: string,
-    callback: (jobs: TranscriptionJobData[]) => void,
-    status?: TranscriptionJobData['status']
-  ): () => void {
-    let q = query(
-      collection(db, 'transcriptions'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
-
-    if (status) {
-      q = query(
-        collection(db, 'transcriptions'),
-        where('userId', '==', userId),
-        where('status', '==', status),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      );
-    }
-
-    return onSnapshot(q, (snapshot) => {
-      const jobs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as TranscriptionJobData));
-      
-      callback(jobs);
-    }, (error) => {
-      console.error('Error in job subscription:', error);
-    });
-  }
-
-  /**
-   * Process pending jobs (for background processing)
-   */
-  async processPendingJobs(batchSize: number = 5): Promise<void> {
-    try {
-      const pendingJobs = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('status', '==', 'pending'),
-        orderBy('priority', 'desc'),
-        orderBy('createdAt', 'asc'),
-        limit(batchSize)
-      ));
-
-      const processingPromises = pendingJobs.docs.map(doc => 
-        this.processJob(doc.id)
-      );
-
-      await Promise.allSettled(processingPromises);
-      
-    } catch (error) {
-      console.error('Error processing pending jobs:', error);
-    }
-  }
-
-  /**
-   * Clean up old completed jobs (for maintenance)
+   * Clean up old completed jobs (admin utility)
    */
   async cleanupOldJobs(daysOld: number = 30): Promise<number> {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-      
-      const oldJobs = await getDocs(query(
-        collection(db, 'transcriptions'),
-        where('status', 'in', ['completed', 'error']),
-        where('createdAt', '<', Timestamp.fromDate(cutoffDate))
-      ));
 
-      const deletePromises = oldJobs.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.allSettled(deletePromises);
-      
-      return oldJobs.size;
+      const oldJobsQuery = query(
+        collection(db, 'transcriptions'),
+        where('status', '==', 'completed'),
+        where('completedAt', '<', cutoffDate)
+      );
+
+      const snapshot = await getDocs(oldJobsQuery);
+      let deletedCount = 0;
+
+      for (const docSnapshot of snapshot.docs) {
+        await deleteDoc(doc(db, 'transcriptions', docSnapshot.id));
+        deletedCount++;
+      }
+
+      console.log(`🧹 Cleaned up ${deletedCount} old completed jobs`);
+      return deletedCount;
+
     } catch (error) {
       console.error('Error cleaning up old jobs:', error);
-      return 0;
+      throw error;
+    }
+  }
+
+  /**
+   * Real-time subscription to job updates
+   */
+  subscribeToJobUpdates(
+    userId: string, 
+    callback: (jobs: SimplifiedTranscriptionJobData[]) => void
+  ): () => void {
+    const jobsQuery = query(
+      collection(db, 'transcriptions'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+
+    return onSnapshot(jobsQuery, (snapshot) => {
+      const jobs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SimplifiedTranscriptionJobData[];
+
+      callback(jobs);
+    });
+  }
+
+  /**
+   * Get jobs with retry info for admin debugging
+   */
+  async getJobRetryInfo(jobId: string): Promise<{
+    canRetry: boolean;
+    retryCount: number;
+    maxRetries: number;
+    lastError?: string;
+  }> {
+    const job = await this.getJob(jobId);
+    
+    if (!job) {
+      throw new Error('Job not found');
+    }
+
+    const canRetry = job.status === 'error' && job.retryCount < job.maxRetries;
+
+    return {
+      canRetry,
+      retryCount: job.retryCount,
+      maxRetries: job.maxRetries,
+      lastError: job.error
+    };
+  }
+
+  /**
+   * Retry a failed job (admin function)
+   */
+  async retryJob(jobId: string): Promise<void> {
+    try {
+      const retryInfo = await this.getJobRetryInfo(jobId);
+      
+      if (!retryInfo.canRetry) {
+        throw new Error('Job cannot be retried - either not in error state or max retries exceeded');
+      }
+
+      await this.updateJobStatus(jobId, 'pending', {
+        retryCount: retryInfo.retryCount + 1,
+        error: null,
+        errorAt: null
+      });
+
+      console.log(`🔄 Retrying job ${jobId} (attempt ${retryInfo.retryCount + 1}/${retryInfo.maxRetries})`);
+
+    } catch (error) {
+      console.error(`Error retrying job ${jobId}:`, error);
+      throw error;
     }
   }
 }
 
-// Export singleton instance
-export const transcriptionQueue = new TranscriptionQueue();
-export default transcriptionQueue;
+export const simplifiedTranscriptionQueue = new SimplifiedTranscriptionQueue();
+export default simplifiedTranscriptionQueue;

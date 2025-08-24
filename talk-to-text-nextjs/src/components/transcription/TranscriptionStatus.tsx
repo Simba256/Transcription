@@ -20,10 +20,10 @@ import {
   Bot
 } from 'lucide-react';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
-import { ExtendedTranscriptionJobData } from '@/types/transcription-modes';
+import { SimplifiedTranscriptionJobData } from '@/types/transcription-modes';
 
 interface TranscriptionStatusProps {
-  job: TranscriptionJobData | ExtendedTranscriptionJobData;
+  job: TranscriptionJobData | SimplifiedTranscriptionJobData;
   onRetry?: (jobId: string) => void;
   onCancel?: (jobId: string) => void;
   onDownload?: (jobId: string, format: 'txt' | 'json' | 'srt' | 'pdf') => void;
@@ -278,18 +278,18 @@ export default function TranscriptionStatus({
           <div>
             <p className="font-medium text-gray-700">Mode</p>
             <div className="flex items-center gap-2">
-              {getModeIcon((job as ExtendedTranscriptionJobData)?.mode)}
+              {getModeIcon((job as SimplifiedTranscriptionJobData)?.mode)}
               <p className="text-gray-600 capitalize">
-                {(job as ExtendedTranscriptionJobData)?.mode || 'AI'}
+                {(job as SimplifiedTranscriptionJobData)?.mode || 'AI'}
               </p>
             </div>
           </div>
           
-          {(job as ExtendedTranscriptionJobData)?.priority && (
+          {(job as SimplifiedTranscriptionJobData)?.priority && (
             <div>
               <p className="font-medium text-gray-700">Priority</p>
               <p className="text-gray-600 capitalize">
-                {(job as ExtendedTranscriptionJobData).priority}
+                {(job as SimplifiedTranscriptionJobData).priority}
               </p>
             </div>
           )}

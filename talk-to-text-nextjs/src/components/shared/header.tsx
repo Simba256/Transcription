@@ -13,6 +13,7 @@ const navigation = [
   { name: "Home", href: "/" },
   { name: "About", href: "/about" },
   { name: "Services", href: "/services" },
+  { name: "TTT Canada", href: "/ttt-canada" },
   { name: "Pricing", href: "/pricing" },
   { name: "Contact", href: "/contact" },
 ];
@@ -108,15 +109,40 @@ const Header = () => {
                   >
                     Dashboard
                   </Link>
-                  {(userProfile?.role === 'transcriber' || userProfile?.roles?.includes('transcriber')) && (
-                    <Link
-                      href="/transcriber"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <User className="inline h-4 w-4 mr-2" />
-                      Transcriber Dashboard
-                    </Link>
+                  {userProfile?.role === 'admin' && (
+                    <>
+                      <div className="border-t border-gray-200 my-1"></div>
+                      <div className="px-4 py-2 text-xs text-gray-500 font-medium">ADMIN</div>
+                      <Link
+                        href="/admin"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Admin Dashboard
+                      </Link>
+                      <Link
+                        href="/admin/manual-transcriptions"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Manual Transcriptions
+                      </Link>
+                      <Link
+                        href="/admin/ttt-canada-orders"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        TTT Canada Orders
+                      </Link>
+                      <Link
+                        href="/admin/setup"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Admin Settings
+                      </Link>
+                      <div className="border-t border-gray-200 my-1"></div>
+                    </>
                   )}
                   <Link
                     href="/settings"

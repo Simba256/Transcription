@@ -1,4 +1,4 @@
-import { transcriptionQueue, TranscriptionJobData } from './transcription-queue';
+import { simplifiedTranscriptionQueue as transcriptionQueue, SimplifiedTranscriptionJobData as TranscriptionJobData } from './transcription-queue';
 
 // Conditional import for server-side only
 let speechmaticsService: any = null;
@@ -359,22 +359,44 @@ class TranscriptionService {
         throw new Error('Transcription not yet completed');
       }
 
-      if (!job.transcript) {
+      // Get the appropriate transcript based on job mode and completion type
+      let transcriptText: string | undefined;
+      
+      if (job.finalTranscript) {
+        // Final transcript is available (preferred)
+        transcriptText = job.finalTranscript;
+      } else if (job.aiTranscript) {
+        // AI transcript available (for AI-only jobs)
+        transcriptText = job.aiTranscript;
+      } else if (job.adminData?.adminTranscript) {
+        // Admin transcript available (for human/hybrid jobs)
+        transcriptText = job.adminData.adminTranscript;
+      }
+      
+      if (!transcriptText) {
         throw new Error('Transcript data not available');
       }
 
       switch (format) {
         case 'txt':
-          return job.transcript;
+          return transcriptText;
         
         case 'json':
-          return JSON.stringify(job.fullTranscript || { transcript: job.transcript }, null, 2);
+          return JSON.stringify({
+            transcript: transcriptText,
+            mode: job.mode,
+            language: job.language,
+            fileName: job.fileName,
+            completedAt: job.completedAt,
+            ...(job.adminData && { adminNotes: job.adminData.adminNotes })
+          }, null, 2);
         
         case 'srt':
-          return this.convertToSRT(job.fullTranscript || { results: [] });
+          // For simplified system, convert plain text to basic SRT format
+          return this.convertPlainTextToSRT(transcriptText);
         
         default:
-          return job.transcript;
+          return transcriptText;
       }
     } catch (error) {
       console.error('Error downloading transcription:', error);
@@ -495,6 +517,32 @@ class TranscriptionService {
     const milliseconds = Math.floor((seconds % 1) * 1000);
 
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`;
+  }
+
+  /**
+   * Convert plain text to basic SRT format (for simplified system)
+   */
+  private convertPlainTextToSRT(text: string): string {
+    // Split text into sentences or chunks
+    const sentences = text.split(/[.!?]\s+/).filter(s => s.trim().length > 0);
+    let srtContent = '';
+    let subtitleIndex = 1;
+    
+    // Assume 3 seconds per sentence as a basic approximation
+    const secondsPerSentence = 3;
+    
+    sentences.forEach((sentence, index) => {
+      const startTime = index * secondsPerSentence;
+      const endTime = (index + 1) * secondsPerSentence;
+      
+      srtContent += `${subtitleIndex}\n`;
+      srtContent += `${this.formatSRTTime(startTime)} --> ${this.formatSRTTime(endTime)}\n`;
+      srtContent += `${sentence.trim()}.\n\n`;
+      
+      subtitleIndex++;
+    });
+    
+    return srtContent || `1\n00:00:00,000 --> 00:00:10,000\n${text}\n\n`;
   }
 
   /**

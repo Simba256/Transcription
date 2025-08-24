@@ -10,21 +10,20 @@ import {
   getDocs,
   serverTimestamp
 } from 'firebase/firestore';
-import { speechmaticsService } from './speechmatics';
 import { updateUserUsage } from './firestore';
+import { openaiService } from './openai-service';
+import { getAudioDurationFromBuffer, getMimeTypeFromFilename } from './audio-utils';
 import { 
   TranscriptionMode, 
-  ExtendedTranscriptionJobData, 
-  HumanTranscriberAssignment,
-  HumanTranscriber,
-  TranscriptionModeSelection,
-  HybridTranscriptionData
+  SimplifiedTranscriptionJobData, 
+  AdminTranscriptionData,
+  TranscriptionModeSelection
 } from '@/types/transcription-modes';
 
-export class TranscriptionModesService {
+export class SimplifiedTranscriptionModesService {
   
   /**
-   * Create a new transcription job with mode-specific handling
+   * Create a new transcription job with simplified admin-only workflow
    */
   async createTranscriptionJob(
     userId: string,
@@ -39,7 +38,7 @@ export class TranscriptionModesService {
     diarization: boolean = false
   ): Promise<string> {
     
-    const jobData: Omit<ExtendedTranscriptionJobData, 'id'> = {
+    const jobData: Omit<SimplifiedTranscriptionJobData, 'id'> = {
       userId,
       fileName: fileData.fileName,
       fileUrl: fileData.fileUrl,
@@ -65,7 +64,7 @@ export class TranscriptionModesService {
   }
 
   /**
-   * Route transcription job to appropriate processor based on mode
+   * Route transcription job to appropriate processor based on mode (simplified)
    */
   private async routeToProcessor(
     jobId: string, 
@@ -78,17 +77,19 @@ export class TranscriptionModesService {
         break;
       
       case 'human':
-        await this.assignToHumanTranscriber(jobId, modeSelection);
+        await this.queueForAdmin(jobId);
         break;
       
       case 'hybrid':
-        await this.processHybridTranscription(jobId, modeSelection);
+        // For hybrid: AI first, then queue for admin review
+        await this.processAITranscription(jobId);
+        // Admin review will be triggered after AI completion
         break;
     }
   }
 
   /**
-   * Process AI-only transcription (existing Speechmatics flow)
+   * Process AI transcription using OpenAI Whisper + GPT-4
    */
   private async processAITranscription(jobId: string): Promise<void> {
     try {
@@ -105,51 +106,75 @@ export class TranscriptionModesService {
       
       if (jobDoc.empty) throw new Error('Job not found');
       
-      const jobData = jobDoc.docs[0].data() as ExtendedTranscriptionJobData;
+      const jobData = jobDoc.docs[0].data() as SimplifiedTranscriptionJobData;
       
-      // Download file from URL and submit to Speechmatics
-      const response = await fetch(jobData.fileUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
-      }
+      // Variables to track actual duration
+      let actualDurationMinutes = jobData.duration || 0; // fallback to stored duration
       
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      
-      const config = {
-        type: 'transcription' as const,
-        transcription_config: {
-          language: jobData.language,
-          ...(jobData.diarization && { diarization: 'speaker' as const })
+      // Process with OpenAI Whisper + GPT-4
+      try {
+        console.log(`🎤 Starting OpenAI transcription for job ${jobId}, file: ${jobData.fileName}`);
+        
+        // Download the audio file from Firebase Storage
+        const audioBuffer = await this.downloadAudioFile(jobData.fileUrl);
+        
+        // Get actual audio duration from metadata with smart MIME type detection
+        const mimeType = getMimeTypeFromFilename(jobData.fileName);
+        console.log(`🎵 Detected MIME type for ${jobData.fileName}: ${mimeType || 'auto-detect'}`);
+        
+        const actualDurationSeconds = await getAudioDurationFromBuffer(audioBuffer, mimeType);
+        actualDurationMinutes = Math.round(actualDurationSeconds / 60 * 100) / 100;
+        
+        // Process with OpenAI complete transcription workflow
+        // Use 'none' for pure Whisper output without word changes
+        const result = await openaiService.completeTranscription(audioBuffer, {
+          language: jobData.language === 'en' ? 'en' : undefined,
+          enhancementType: 'none'  // Pure Whisper output, no GPT-4 modifications
+        });
+        
+        await updateDoc(doc(db, 'transcriptions', jobId), {
+          status: 'completed',
+          aiTranscript: result.originalTranscript,
+          finalTranscript: result.enhancedTranscript,
+          openaiJobId: `openai-whisper-${Date.now()}`,
+          processingTime: result.processingTime,
+          wordCount: result.wordCount,
+          confidence: result.confidence,
+          duration: actualDurationMinutes, // Store actual duration from metadata
+          completedAt: serverTimestamp()
+        });
+        
+        console.log(`✅ AI transcription completed for job ${jobId} - ${result.wordCount} words, ${result.confidence * 100}% confidence`);
+        
+      } catch (aiError) {
+        console.error('AI transcription failed:', aiError);
+        
+        // Provide more specific error messages
+        let errorMessage = 'AI transcription processing failed';
+        if (aiError instanceof Error) {
+          if (aiError.message.includes('API key')) {
+            errorMessage = 'OpenAI API key not configured or invalid';
+          } else if (aiError.message.includes('rate limit')) {
+            errorMessage = 'OpenAI rate limit exceeded - please try again later';
+          } else if (aiError.message.includes('file too large')) {
+            errorMessage = 'Audio file too large for processing';
+          } else {
+            errorMessage = aiError.message;
+          }
         }
-      };
-      
-      const speechmaticsResponse = await speechmaticsService.submitTranscriptionJob(
-        buffer,
-        jobData.fileName,
-        config
-      );
-
-      // Extract job ID from response
-      const speechmaticsJobId = typeof speechmaticsResponse === 'string' 
-        ? speechmaticsResponse 
-        : speechmaticsResponse.job_id;
-
-      console.log('Speechmatics job submitted:', speechmaticsJobId);
-
-      // Update with Speechmatics job ID
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        speechmaticsJobId,
-        speechmaticsStatus: 'running'
-      });
-
-      // Start automatic server-side background polling
-      this.startBackgroundPolling(speechmaticsJobId, jobId);
+        
+        await updateDoc(doc(db, 'transcriptions', jobId), {
+          status: 'error',
+          error: errorMessage,
+          errorAt: serverTimestamp()
+        });
+        throw aiError;
+      }
 
       // Update user usage statistics
-      console.log(`🎯 About to update usage stats for user ${jobData.userId}, duration: ${jobData.duration || 0} minutes`);
+      console.log(`📊 Updating usage stats for user ${jobData.userId}, actual duration: ${actualDurationMinutes} minutes`);
       try {
-        await this.updateUserTranscriptionUsage(jobData.userId, jobData.duration || 0);
+        await this.updateUserTranscriptionUsage(jobData.userId, actualDurationMinutes);
       } catch (usageError) {
         console.error('Error updating usage stats:', usageError);
         // Continue processing even if usage update fails
@@ -165,417 +190,150 @@ export class TranscriptionModesService {
   }
 
   /**
-   * Assign job to human transcriber
+   * Download audio file from Firebase Storage URL
    */
-  private async assignToHumanTranscriber(
-    jobId: string, 
-    modeSelection: TranscriptionModeSelection
-  ): Promise<void> {
-    console.log(`🎯 Starting human transcriber assignment for job ${jobId}`);
-    
+  private async downloadAudioFile(fileUrl: string): Promise<Buffer> {
     try {
-      // Find available transcriber
-      const availableTranscriber = await this.findAvailableTranscriber(modeSelection);
+      console.log(`📥 Downloading audio file from: ${fileUrl}`);
       
-      if (!availableTranscriber) {
-        console.log('⚠️ No transcribers available, queueing job');
-        // Add to queue if no transcriber available
-        await updateDoc(doc(db, 'transcriptions', jobId), {
-          status: 'pending',
-          error: 'No human transcribers available - job queued for assignment',
-          queuedAt: serverTimestamp(),
-          // Mark as properly submitted even though waiting for transcriber
-          humanTranscriptionQueued: true
-        });
-        return;
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download audio file: ${response.status} ${response.statusText}`);
       }
-
-      console.log(`✅ Assigning to transcriber: ${availableTranscriber.name} (${availableTranscriber.id})`);
-
-      // Create assignment
-      const assignmentData: Omit<HumanTranscriberAssignment, 'id'> = {
-        transcriptionId: jobId,
-        transcriberId: availableTranscriber.id!,
-        assignedAt: serverTimestamp() as any,
-        status: 'assigned',
-        estimatedCompletion: this.calculateEstimatedCompletion(modeSelection.priority)
-      };
-
-      const assignmentRef = await addDoc(collection(db, 'transcriber_assignments'), assignmentData);
-      console.log(`📝 Created assignment record: ${assignmentRef.id}`);
-
-      // Update job status
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'assigned',
-        assignedTranscriber: availableTranscriber.id,
-        humanAssignmentId: assignmentRef.id,
-        submittedAt: serverTimestamp()
-      });
-
-      console.log(`✅ Job ${jobId} successfully assigned to ${availableTranscriber.name}`);
-
-      // Notify transcriber (implement notification service)
-      await this.notifyTranscriber(availableTranscriber.id!, jobId);
-
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      console.log(`✅ Downloaded audio file: ${buffer.length} bytes`);
+      return buffer;
+      
     } catch (error) {
-      console.error(`❌ Error assigning human transcriber for job ${jobId}:`, error);
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Assignment failed',
-        errorAt: serverTimestamp()
-      });
-      throw error; // Re-throw so the API route can handle it
+      console.error('Error downloading audio file:', error);
+      throw new Error(`Failed to download audio file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Process hybrid transcription (AI first, then human review)
+   * Queue job for admin manual transcription
    */
-  private async processHybridTranscription(
+  private async queueForAdmin(jobId: string): Promise<void> {
+    console.log(`🎯 Queuing job ${jobId} for admin manual transcription`);
+    
+    try {
+      await updateDoc(doc(db, 'transcriptions', jobId), {
+        status: 'queued_for_admin',
+        submittedAt: serverTimestamp(),
+        queuedAt: serverTimestamp()
+      });
+
+      console.log(`✅ Job ${jobId} successfully queued for admin review`);
+
+    } catch (error) {
+      console.error(`❌ Error queuing job for admin ${jobId}:`, error);
+      await updateDoc(doc(db, 'transcriptions', jobId), {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Admin queueing failed',
+        errorAt: serverTimestamp()
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Admin completes manual transcription
+   */
+  async submitAdminTranscription(
     jobId: string,
-    modeSelection: TranscriptionModeSelection
-  ): Promise<void> {
-    try {
-      // Step 1: Process with AI first
-      await this.processAITranscription(jobId);
-      
-      // Note: The AI completion handler should trigger human assignment
-      // This will be handled in the status polling system
-      
-    } catch (error) {
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Hybrid processing failed',
-        errorAt: serverTimestamp()
-      });
-    }
-  }
-
-  /**
-   * Handle AI completion in hybrid mode - assign to human for review
-   */
-  async handleHybridAICompletion(jobId: string): Promise<void> {
-    try {
-      const jobDoc = await getDocs(
-        query(collection(db, 'transcriptions'), where('__name__', '==', jobId))
-      );
-      
-      if (jobDoc.empty) throw new Error('Job not found');
-      
-      const jobData = jobDoc.docs[0].data() as ExtendedTranscriptionJobData;
-      
-      if (jobData.mode !== 'hybrid') return;
-
-      // Store AI results in hybrid data
-      const hybridData: HybridTranscriptionData = {
-        aiTranscript: jobData.aiTranscript,
-        aiProcessingTime: jobData.submittedAt && jobData.completedAt 
-          ? (jobData.completedAt.seconds - jobData.submittedAt.seconds) / 60 
-          : undefined
-      };
-
-      // Update job for human review
-      await updateDoc(doc(db, 'transcriptions', jobId), {
-        status: 'human_review',
-        hybridData,
-        completedAt: null // Reset completion time
-      });
-
-      // Assign to human transcriber for review
-      await this.assignToHumanTranscriber(jobId, {
-        mode: 'hybrid',
-        priority: jobData.priority,
-        qualityLevel: 'standard'
-      });
-
-    } catch (error) {
-      console.error('Hybrid AI completion handling failed:', error);
-    }
-  }
-
-  /**
-   * Find available transcriber based on workload (least total minutes remaining)
-   */
-  private async findAvailableTranscriber(
-    modeSelection: TranscriptionModeSelection
-  ): Promise<HumanTranscriber | null> {
-    
-    console.log('🔍 Finding available transcriber for mode:', modeSelection);
-    
-    // Get all active transcribers
-    const transcriberQuery = query(
-      collection(db, 'human_transcribers'),
-      where('status', '==', 'active')
-    );
-
-    const transcribersSnapshot = await getDocs(transcriberQuery);
-    
-    if (transcribersSnapshot.empty) {
-      console.log('❌ No active transcribers found');
-      return null;
-    }
-
-    console.log(`📋 Found ${transcribersSnapshot.size} active transcribers`);
-
-    // Calculate workload for each transcriber
-    const transcriberWorkloads: Array<{
-      transcriber: HumanTranscriber;
-      currentWorkloadMinutes: number;
-    }> = [];
-
-    for (const transcriberDoc of transcribersSnapshot.docs) {
-      const transcriber = {
-        id: transcriberDoc.id,
-        ...transcriberDoc.data()
-      } as HumanTranscriber;
-
-      // Calculate current workload (total minutes of pending/assigned jobs)
-      const workload = await this.calculateTranscriberWorkload(transcriber.id!);
-      
-      transcriberWorkloads.push({
-        transcriber,
-        currentWorkloadMinutes: workload
-      });
-
-      console.log(`👤 ${transcriber.name}: ${workload} minutes remaining`);
-    }
-
-    // Sort by workload (ascending - least busy first)
-    transcriberWorkloads.sort((a, b) => a.currentWorkloadMinutes - b.currentWorkloadMinutes);
-
-    const selectedTranscriber = transcriberWorkloads[0].transcriber;
-    console.log(`✅ Selected transcriber: ${selectedTranscriber.name} (${transcriberWorkloads[0].currentWorkloadMinutes} min remaining)`);
-    
-    return selectedTranscriber;
-  }
-
-  /**
-   * Calculate current workload for a transcriber (total minutes of active jobs)
-   */
-  private async calculateTranscriberWorkload(transcriberId: string): Promise<number> {
-    try {
-      // Get all active assignments for this transcriber
-      const assignmentsQuery = query(
-        collection(db, 'transcriber_assignments'),
-        where('transcriberId', '==', transcriberId),
-        where('status', 'in', ['assigned', 'in_progress'])
-      );
-
-      const assignmentsSnapshot = await getDocs(assignmentsQuery);
-      let totalMinutes = 0;
-
-      for (const assignmentDoc of assignmentsSnapshot.docs) {
-        const assignment = assignmentDoc.data() as HumanTranscriberAssignment;
-        
-        // Get the transcription job to find duration
-        const jobQuery = query(
-          collection(db, 'transcriptions'),
-          where('__name__', '==', assignment.transcriptionId)
-        );
-        
-        const jobSnapshot = await getDocs(jobQuery);
-        if (!jobSnapshot.empty) {
-          const jobData = jobSnapshot.docs[0].data() as ExtendedTranscriptionJobData;
-          
-          // Estimate transcription time (typically 3-4x the audio duration)
-          const audioDurationMinutes = (jobData.duration || 0) / 60;
-          const transcriptionTimeEstimate = audioDurationMinutes * 3.5; // 3.5x multiplier
-          
-          totalMinutes += transcriptionTimeEstimate;
-        }
-      }
-
-      return Math.round(totalMinutes);
-    } catch (error) {
-      console.error(`Error calculating workload for transcriber ${transcriberId}:`, error);
-      return 0; // If error, assume no workload
-    }
-  }
-
-  /**
-   * Calculate estimated completion time based on priority
-   */
-  private calculateEstimatedCompletion(priority: string): any {
-    const baseMinutes = priority === 'urgent' ? 60 : priority === 'high' ? 240 : 720; // 1h, 4h, 12h
-    const completionTime = new Date();
-    completionTime.setMinutes(completionTime.getMinutes() + baseMinutes);
-    return completionTime;
-  }
-
-  /**
-   * Notify transcriber of new assignment
-   */
-  private async notifyTranscriber(transcriberId: string, jobId: string): Promise<void> {
-    // Implement notification logic (email, push notification, etc.)
-    console.log(`Notifying transcriber ${transcriberId} of job ${jobId}`);
-  }
-
-  /**
-   * Submit human transcription
-   */
-  async submitHumanTranscription(
-    assignmentId: string,
     transcription: string,
-    notes?: string
+    adminNotes?: string,
+    reviewedBy?: string
   ): Promise<void> {
     
-    const assignmentDoc = await getDocs(
-      query(collection(db, 'transcriber_assignments'), where('__name__', '==', assignmentId))
-    );
-    
-    if (assignmentDoc.empty) throw new Error('Assignment not found');
-    
-    const assignment = assignmentDoc.docs[0].data() as HumanTranscriberAssignment;
-    
-    // Update assignment
-    await updateDoc(doc(db, 'transcriber_assignments', assignmentId), {
+    const adminData: AdminTranscriptionData = {
+      adminTranscript: transcription,
+      adminNotes,
+      reviewedBy,
+      reviewedAt: serverTimestamp() as any,
+      processingTime: Date.now() // Could calculate actual time
+    };
+
+    await updateDoc(doc(db, 'transcriptions', jobId), {
       status: 'completed',
+      adminData,
+      finalTranscript: transcription,
       completedAt: serverTimestamp()
     });
 
-    // Update transcription job
-    const jobDoc = doc(db, 'transcriptions', assignment.transcriptionId);
-    const jobData = (await getDocs(
-      query(collection(db, 'transcriptions'), where('__name__', '==', assignment.transcriptionId))
-    )).docs[0]?.data() as ExtendedTranscriptionJobData;
-
-    if (jobData.mode === 'hybrid') {
-      // Update hybrid data
-      const hybridData: HybridTranscriptionData = {
-        ...jobData.hybridData,
-        humanTranscript: transcription,
-        humanNotes: notes,
-        humanProcessingTime: assignment.assignedAt && Date.now() 
-          ? (Date.now() - assignment.assignedAt.seconds * 1000) / 60000 
-          : undefined
-      };
-
-      await updateDoc(jobDoc, {
-        status: 'completed',
-        hybridData,
-        finalTranscript: transcription, // Human version takes precedence
-        humanTranscript: transcription,
-        humanNotes: notes,
-        completedAt: serverTimestamp()
-      });
-    } else {
-      // Human-only transcription
-      await updateDoc(jobDoc, {
-        status: 'completed',
-        humanTranscript: transcription,
-        finalTranscript: transcription,
-        humanNotes: notes,
-        completedAt: serverTimestamp()
-      });
-    }
+    console.log(`✅ Admin completed transcription for job ${jobId}`);
   }
 
   /**
-   * Get transcriber assignments
+   * Get jobs queued for admin review (includes queued, in progress, and completed)
    */
-  async getTranscriberAssignments(transcriberId: string): Promise<ExtendedTranscriptionJobData[]> {
-    const assignmentsQuery = query(
-      collection(db, 'transcriber_assignments'),
-      where('transcriberId', '==', transcriberId),
-      where('status', 'in', ['assigned', 'in_progress']),
-      orderBy('assignedAt', 'desc')
-    );
+  async getAdminQueue(): Promise<SimplifiedTranscriptionJobData[]> {
+    // Get all jobs that were meant for admin transcription
+    const adminStatuses = ['queued_for_admin', 'admin_review', 'completed'];
+    const allAdminJobs: SimplifiedTranscriptionJobData[] = [];
 
-    const assignments = await getDocs(assignmentsQuery);
-    const jobs: ExtendedTranscriptionJobData[] = [];
+    // Fetch jobs for each status separately (to avoid complex composite indexes)
+    for (const status of adminStatuses) {
+      try {
+        const statusQuery = query(
+          collection(db, 'transcriptions'),
+          where('status', '==', status),
+          orderBy('createdAt', 'desc')
+        );
 
-    for (const assignmentDoc of assignments.docs) {
-      const assignment = assignmentDoc.data() as HumanTranscriberAssignment;
-      
-      const jobDoc = await getDocs(
-        query(collection(db, 'transcriptions'), where('__name__', '==', assignment.transcriptionId))
-      );
-      
-      if (!jobDoc.empty) {
-        jobs.push({
-          id: jobDoc.docs[0].id,
-          ...jobDoc.docs[0].data(),
-          humanAssignmentId: assignmentDoc.id
-        } as ExtendedTranscriptionJobData);
+        const jobs = await getDocs(statusQuery);
+        const mappedJobs = jobs.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as SimplifiedTranscriptionJobData[];
+        
+        const statusJobs = mappedJobs.filter(job => 
+          // Only include jobs that were originally intended for admin manual transcription
+          job.mode === 'manual' || 
+          job.status === 'queued_for_admin' || 
+          job.status === 'admin_review' ||
+          (job.status === 'completed' && job.adminData)
+        );
+
+        allAdminJobs.push(...statusJobs);
+      } catch (error) {
+        console.warn(`Could not fetch jobs with status ${status}:`, error);
       }
     }
 
-    return jobs;
+    // Sort by creation date (newest first)
+    allAdminJobs.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.parse(a.createdAt as any);
+      const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.parse(b.createdAt as any);
+      return bTime - aTime;
+    });
+
+    return allAdminJobs;
   }
 
   /**
-   * Get transcriber stats
+   * Mark job as in progress when admin starts working on it
    */
-  async getTranscriberStats(transcriberId: string): Promise<{
-    totalJobs: number;
-    completedJobs: number;
-    averageRating: number;
-    averageCompletionTime: number;
-    earnings: number;
-    activeJobs: number;
-  }> {
-    // Get all assignments for this transcriber
-    const allAssignmentsQuery = query(
-      collection(db, 'transcriber_assignments'),
-      where('transcriberId', '==', transcriberId)
-    );
-
-    const allAssignments = await getDocs(allAssignmentsQuery);
-    
-    // Get active assignments
-    const activeAssignmentsQuery = query(
-      collection(db, 'transcriber_assignments'),
-      where('transcriberId', '==', transcriberId),
-      where('status', 'in', ['assigned', 'in_progress'])
-    );
-
-    const activeAssignments = await getDocs(activeAssignmentsQuery);
-
-    // Get completed assignments
-    const completedAssignmentsQuery = query(
-      collection(db, 'transcriber_assignments'),
-      where('transcriberId', '==', transcriberId),
-      where('status', '==', 'completed')
-    );
-
-    const completedAssignments = await getDocs(completedAssignmentsQuery);
-
-    // Calculate basic stats
-    const totalJobs = allAssignments.size;
-    const completedJobs = completedAssignments.size;
-    const activeJobs = activeAssignments.size;
-
-    // Get transcriber profile for rating and completion time
-    const transcriberDoc = await getDocs(
-      query(collection(db, 'human_transcribers'), where('__name__', '==', transcriberId))
-    );
-
-    let averageRating = 5.0;
-    let averageCompletionTime = 45;
-
-    if (!transcriberDoc.empty) {
-      const transcriber = transcriberDoc.docs[0].data();
-      averageRating = transcriber.rating || 5.0;
-      averageCompletionTime = transcriber.averageCompletionTime || 45;
+  async markJobInProgress(jobId: string): Promise<void> {
+    try {
+      await updateDoc(doc(db, 'transcriptions', jobId), {
+        status: 'admin_review',
+        adminStartedAt: serverTimestamp()
+      });
+      console.log(`✅ Job ${jobId} marked as in progress by admin`);
+    } catch (error) {
+      console.error(`❌ Error marking job ${jobId} as in progress:`, error);
+      throw error;
     }
-
-    // Simple earnings calculation (could be more sophisticated)
-    const earnings = completedJobs * 15.0; // $15 per completed job as base rate
-
-    return {
-      totalJobs,
-      completedJobs,
-      averageRating,
-      averageCompletionTime,
-      earnings,
-      activeJobs
-    };
   }
 
   /**
-   * Get jobs by mode for admin/monitoring
+   * Get jobs by mode for admin monitoring
    */
-  async getJobsByMode(mode: TranscriptionMode): Promise<ExtendedTranscriptionJobData[]> {
+  async getJobsByMode(mode: TranscriptionMode): Promise<SimplifiedTranscriptionJobData[]> {
     const jobsQuery = query(
       collection(db, 'transcriptions'),
       where('mode', '==', mode),
@@ -586,7 +344,31 @@ export class TranscriptionModesService {
     return jobs.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    })) as ExtendedTranscriptionJobData[];
+    })) as SimplifiedTranscriptionJobData[];
+  }
+
+  /**
+   * Generate realistic sample transcript for demo purposes
+   * In production, this would be replaced with actual OpenAI Whisper processing
+   */
+  private generateSampleTranscript(fileName: string, _mode: TranscriptionMode): string {
+    const sampleTranscripts = {
+      business: "Thank you for joining today's quarterly review meeting. Let me start by discussing our key performance indicators for this quarter. Our revenue has increased by 15% compared to the same period last year, which is encouraging. However, we need to address some challenges in our customer retention metrics. The team has been working on improving our onboarding process, and I'm pleased to report that we've seen a 20% improvement in user engagement during the first 30 days. Moving forward, we'll be focusing on expanding our market reach while maintaining the quality of service that our customers expect. Are there any questions about these results?",
+      
+      interview: "Good afternoon, thank you for taking the time to speak with me today. Could you please start by telling me a bit about your background and experience in this field? I've been working in this industry for about eight years now, starting as an entry-level analyst and gradually working my way up. I'm particularly passionate about data-driven decision making and how technology can improve business processes. In my current role, I've led several successful projects that resulted in significant cost savings and efficiency improvements. What I find most rewarding is mentoring junior team members and seeing them grow in their careers. I believe collaboration and continuous learning are key to success in any organization.",
+      
+      lecture: "Welcome to today's lecture on artificial intelligence and machine learning. Before we dive into the technical aspects, let's establish a foundational understanding of what AI really means. Artificial intelligence refers to the simulation of human intelligence in machines that are programmed to think and learn like humans. Machine learning, a subset of AI, involves algorithms that can automatically improve their performance through experience. We'll explore different types of machine learning including supervised learning, unsupervised learning, and reinforcement learning. Each approach has its own applications and benefits. For example, supervised learning is commonly used in image recognition and natural language processing.",
+      
+      conversation: "Hey, how was your weekend? Oh, it was great! I went hiking with some friends up in the mountains. The weather was perfect, and the views were absolutely stunning. We even saw some deer along the trail. That sounds amazing! I've been wanting to get out more myself. Maybe next time I can join you guys? Absolutely! We usually go every other weekend. It's such a great way to disconnect from work and just enjoy nature. Plus, it's good exercise too. I've been trying to stay more active lately. Same here. I think being outdoors really helps with stress relief. There's something about fresh air and physical activity that just clears your mind."
+    };
+
+    // Choose appropriate sample based on filename or default to business
+    const fileType = fileName.toLowerCase();
+    if (fileType.includes('interview')) return sampleTranscripts.interview;
+    if (fileType.includes('lecture') || fileType.includes('class') || fileType.includes('presentation')) return sampleTranscripts.lecture;
+    if (fileType.includes('conversation') || fileType.includes('chat') || fileType.includes('call')) return sampleTranscripts.conversation;
+    
+    return sampleTranscripts.business;
   }
 
   /**
@@ -605,102 +387,6 @@ export class TranscriptionModesService {
       // Don't fail the transcription if usage stats update fails
     }
   }
-
-  /**
-   * Start background polling for automatic completion (server-side)
-   */
-  private async startBackgroundPolling(speechmaticsJobId: string, firestoreDocId: string) {
-    const maxAttempts = 60; // 30 minutes max (30 seconds * 60)
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        if (attempts >= maxAttempts) {
-          console.log(`Polling timeout for job ${speechmaticsJobId}`);
-          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-            status: 'error',
-            error: 'Polling timeout exceeded',
-            errorAt: serverTimestamp()
-          });
-          return;
-        }
-
-        const job = await speechmaticsService.getJobStatusDirect(speechmaticsJobId);
-        
-        if (!job || !job.status) {
-          console.warn(`Invalid job status for ${speechmaticsJobId}:`, job);
-          attempts++;
-          setTimeout(poll, 30000); // Retry in 30 seconds
-          return;
-        }
-
-        // Update Firestore with current status
-        await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-          speechmaticsStatus: job.status,
-          lastCheckedAt: serverTimestamp()
-        });
-
-        console.log(`🔄 Background polling job ${speechmaticsJobId}: ${job.status} (attempt ${attempts + 1}/${maxAttempts})`);
-
-        if (job.status === 'done') {
-          try {
-            // Get transcript
-            const transcript = await speechmaticsService.getTranscriptDirect(speechmaticsJobId, 'json-v2');
-            const transcriptText = speechmaticsService.extractTextFromTranscript(transcript);
-            
-            // Update Firestore with completed transcript
-            await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-              status: 'completed',
-              transcript: transcriptText,
-              fullTranscript: transcript,
-              completedAt: serverTimestamp(),
-              duration: job.duration
-            });
-
-            console.log(`✅ Background polling completed job ${speechmaticsJobId} successfully`);
-          } catch (transcriptError) {
-            console.error('Error retrieving transcript in background polling:', transcriptError);
-            await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-              status: 'error',
-              error: 'Failed to retrieve transcript',
-              errorAt: serverTimestamp()
-            });
-          }
-          return; // Stop polling
-        } else if (job.status === 'rejected') {
-          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-            status: 'error',
-            error: 'Job rejected by Speechmatics',
-            errorAt: serverTimestamp()
-          });
-          console.log(`❌ Background polling: job ${speechmaticsJobId} rejected`);
-          return; // Stop polling
-        }
-
-        // Continue polling if still running
-        attempts++;
-        setTimeout(poll, 30000); // Poll every 30 seconds
-
-      } catch (error) {
-        console.error(`Background polling error for job ${speechmaticsJobId}:`, error);
-        attempts++;
-        
-        if (attempts >= maxAttempts) {
-          await updateDoc(doc(db, 'transcriptions', firestoreDocId), {
-            status: 'error',
-            error: 'Background polling failed repeatedly',
-            errorAt: serverTimestamp()
-          });
-        } else {
-          setTimeout(poll, 30000); // Retry in 30 seconds
-        }
-      }
-    };
-
-    // Start polling after a short delay
-    setTimeout(poll, 5000); // Wait 5 seconds before first poll
-    console.log(`🚀 Started background polling for job ${speechmaticsJobId} (Firestore ID: ${firestoreDocId})`);
-  }
 }
 
-export const transcriptionModesService = new TranscriptionModesService();
+export const transcriptionModesService = new SimplifiedTranscriptionModesService();

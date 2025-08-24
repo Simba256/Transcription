@@ -21,6 +21,8 @@ export interface UserProfile {
   lastName?: string;
   company?: string;
   phone?: string;
+  role?: 'admin' | 'user';
+  roles?: string[];
   subscription?: {
     plan: 'trial' | 'ai' | 'human' | 'hybrid' | 'legal';
     status: 'active' | 'cancelled' | 'expired';
@@ -65,6 +67,8 @@ export const signUpWithEmail = async (
       displayName: `${firstName} ${lastName}`,
       firstName,
       lastName,
+      role: 'user',
+      roles: ['user'],
       subscription: {
         plan: 'trial',
         status: 'active',
@@ -123,6 +127,8 @@ export const signInWithGoogle = async (): Promise<User> => {
         photoURL: user.photoURL || undefined,
         firstName,
         lastName,
+        role: 'user',
+        roles: ['user'],
         subscription: {
           plan: 'trial',
           status: 'active',
