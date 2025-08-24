@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,10 @@ import {
   AlertCircle,
   CheckCircle,
   Key,
-  Trash2
+  Trash2,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
@@ -27,6 +31,7 @@ import { updateUserProfile, signOutUser } from '@/lib/auth';
 
 export default function SettingsPage() {
   const { user, userProfile, loading, refreshProfile } = useAuth();
+  const { theme, effectiveTheme, setTheme } = useTheme();
   const router = useRouter();
   
   // Profile form state
@@ -301,6 +306,47 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
+                  {/* Theme Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Theme</Label>
+                      <p className="text-sm text-gray-500">
+                        Choose your preferred color scheme
+                        {theme === 'system' && (
+                          <span className="ml-1">
+                            (currently {effectiveTheme})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 border rounded-lg p-1">
+                      <Button
+                        variant={theme === 'light' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setTheme('light')}
+                        className="h-8 px-2"
+                      >
+                        <Sun className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={theme === 'dark' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setTheme('dark')}
+                        className="h-8 px-2"
+                      >
+                        <Moon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={theme === 'system' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setTheme('system')}
+                        className="h-8 px-2"
+                      >
+                        <Monitor className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-sm font-medium">Email Notifications</Label>

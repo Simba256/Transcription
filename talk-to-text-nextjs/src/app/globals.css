@@ -81,6 +81,52 @@
   }
 }
 
+/* Dark mode with class override (takes precedence over system preference) */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #1a1a1a;
+  --card-foreground: #ededed;
+  --popover: #1a1a1a;
+  --popover-foreground: #ededed;
+  --primary: #0080ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1f1f23;
+  --secondary-foreground: #ededed;
+  --muted: #1f1f23;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #ededed;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #0080ff;
+}
+
+/* Light mode override for class-based switching */
+.light {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #003366;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f2ff;
+  --secondary-foreground: #171717;
+  --muted: #f8f9fa;
+  --muted-foreground: #6b7280;
+  --accent: #e5e1ff;
+  --accent-foreground: #171717;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #003366;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

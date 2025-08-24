@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -64,11 +65,13 @@ export default function RootLayout({
         style={{ backgroundColor: 'var(--ttt-lavender-light)' }}
         suppressHydrationWarning
       >
-        <AuthProvider>
-          <div className="min-h-screen flex flex-col">
-            {children}
-          </div>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <div className="min-h-screen flex flex-col">
+              {children}
+            </div>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
