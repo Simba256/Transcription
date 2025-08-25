@@ -12,8 +12,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LogIn, Mail, Eye, EyeOff, Check, X } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -24,6 +26,13 @@ export default function LoginPage() {
     errors: string[];
   } | null>(null);
   const router = useRouter();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
 
   // Real-time email validation for login
   useEffect(() => {
@@ -77,6 +86,23 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <>
+        <Header />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ttt-navy"></div>
+        </div>
+      </>
+    );
+  }
+
+  // Only show login page to non-authenticated users
+  if (user) {
+    return null; // Will redirect shortly
+  }
 
   return (
     <>

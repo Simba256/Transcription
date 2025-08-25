@@ -63,6 +63,9 @@ export interface SimplifiedTranscriptionJobData {
   diarization: boolean;
   tags?: string[];
   
+  // Credits and billing
+  creditsUsed?: number;
+  
   // Quality and feedback
   qualityRating?: number;
   clientFeedback?: string;

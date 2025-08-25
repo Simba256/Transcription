@@ -12,8 +12,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UserPlus, Mail, Eye, EyeOff, CheckCircle, AlertCircle, Check, X } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function RegisterPage() {
+  const { user, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -31,6 +33,13 @@ export default function RegisterPage() {
     warnings: string[];
   } | null>(null);
   const router = useRouter();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
 
   // Real-time email validation
   useEffect(() => {
@@ -104,6 +113,23 @@ export default function RegisterPage() {
     }
   };
 
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <>
+        <Header />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ttt-navy"></div>
+        </div>
+      </>
+    );
+  }
+
+  // Only show register page to non-authenticated users
+  if (user) {
+    return null; // Will redirect shortly
+  }
+
   return (
     <>
       <Header />
@@ -119,7 +145,7 @@ export default function RegisterPage() {
             <CardHeader>
               <CardTitle className="text-center">Sign Up</CardTitle>
               <CardDescription className="text-center">
-                Get started with 100 free trial uploads
+                Get started with 3 free trial uploads
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

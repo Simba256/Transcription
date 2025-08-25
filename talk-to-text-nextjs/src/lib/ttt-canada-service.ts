@@ -27,16 +27,22 @@ export interface TTTCanadaServiceConfig {
 export interface TTTCanadaResult {
   baseTranscript: string;
   enhancedTranscript?: string;
+  humanReviewedTranscript?: string;
   speakers?: string[];
   timestamps?: Array<{ time: string; speaker?: string; text: string }>;
   anonymizedVersion?: string;
   summary?: string;
+  status: 'ai_draft_complete' | 'pending_human_review' | 'human_review_complete' | 'completed';
+  humanReviewJobId?: string;
   metadata: {
     processingTime: number;
     confidenceScore: number;
     wordCount: number;
     serviceType: string;
     addOnsApplied: string[];
+    aiDraftCompletedAt?: number;
+    humanReviewRequestedAt?: number;
+    humanReviewCompletedAt?: number;
   };
 }
 
@@ -93,7 +99,7 @@ export class TTTCanadaService {
   
   /**
    * AI Draft + Human Review ($1.75 CAD/min)
-   * Speechmatics transcription with OpenAI enhancement
+   * Two-phase process: AI draft first, then human review
    */
   private async processAIHumanReview(
     audioFile: File | Buffer,
@@ -101,7 +107,9 @@ export class TTTCanadaService {
     config: TTTCanadaServiceConfig
   ): Promise<TTTCanadaResult> {
     
-    // Step 1: Speechmatics transcription
+    // Step 1: Generate AI Draft
+    console.log('🤖 Generating AI draft...');
+    
     const speechmaticsConfig = {
       type: 'transcription' as const,
       transcription_config: {
@@ -116,31 +124,50 @@ export class TTTCanadaService {
       speechmaticsConfig
     );
     
-    // Poll for completion (you already have this logic)
-    const transcript = await this.waitForCompletion(job_id);
+    const baseTranscript = await this.waitForCompletion(job_id);
     
-    // Step 2: OpenAI enhancement for Canadian context
-    const enhancedTranscript = await this.enhanceWithOpenAI(transcript, {
-      task: 'canadian_professional_review',
+    // AI enhancement for initial draft
+    const aiDraftTranscript = await this.enhanceWithOpenAI(baseTranscript, {
+      task: 'ai_draft_preparation',
       instructions: `
-        Review this transcript for a Canadian professional context:
-        1. Fix any spelling errors using Canadian English (colour, centre, etc.)
-        2. Correct grammar and punctuation
-        3. Maintain the original speaker's tone and intent
-        4. Format according to professional Canadian standards
-        5. Preserve all technical terms and proper nouns
+        Create an AI draft for human review with Canadian professional standards:
+        1. Fix obvious spelling and grammar errors using Canadian English
+        2. Structure the text for readability
+        3. Preserve ALL original content and meaning
+        4. Mark uncertain sections with [AI_UNCERTAIN: original_text]
+        5. Note speaker changes and important audio cues
+        6. Format for human reviewer to easily edit
+        
+        This is a DRAFT for human review - prioritize accuracy over perfection.
       `
     });
     
+    const aiDraftCompletedAt = Date.now();
+    
+    // Step 2: Queue for Human Review
+    console.log('👤 Queueing for human review...');
+    const humanReviewJobId = await this.queueForHumanReview({
+      fileName,
+      baseTranscript,
+      aiDraftTranscript,
+      serviceConfig: config,
+      priority: config.addOns.rushDelivery ? 'high' : 'normal'
+    });
+    
+    // Return AI draft with pending human review status
     return {
-      baseTranscript: transcript,
-      enhancedTranscript,
+      baseTranscript,
+      enhancedTranscript: aiDraftTranscript,
+      status: 'pending_human_review',
+      humanReviewJobId,
       metadata: {
-        processingTime: 0,
-        confidenceScore: 0.95,
-        wordCount: enhancedTranscript.split(' ').length,
+        processingTime: 0, // Will be updated when human review completes
+        confidenceScore: 0.85, // AI draft confidence
+        wordCount: aiDraftTranscript.split(' ').length,
         serviceType: 'AI Draft + Human Review',
-        addOnsApplied: []
+        addOnsApplied: [],
+        aiDraftCompletedAt,
+        humanReviewRequestedAt: Date.now()
       }
     };
   }
@@ -482,6 +509,91 @@ export class TTTCanadaService {
     ];
   }
   
+  /**
+   * Queue transcription for human review
+   */
+  private async queueForHumanReview(reviewRequest: {
+    fileName: string;
+    baseTranscript: string;
+    aiDraftTranscript: string;
+    serviceConfig: TTTCanadaServiceConfig;
+    priority: 'normal' | 'high';
+  }): Promise<string> {
+    
+    const humanReviewJobId = `hr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // In a real implementation, this would:
+    // 1. Store the job in a human review queue database
+    // 2. Notify available human reviewers
+    // 3. Track estimated completion time based on queue length
+    // 4. Send notifications when review is complete
+    
+    console.log(`👤 Human review job ${humanReviewJobId} queued for file: ${reviewRequest.fileName}`);
+    console.log(`📝 AI draft ready for human reviewer (${reviewRequest.aiDraftTranscript.split(' ').length} words)`);
+    console.log(`⚡ Priority: ${reviewRequest.priority}`);
+    
+    // Simulate queueing process
+    // TODO: Integrate with actual human reviewer workflow system
+    
+    return humanReviewJobId;
+  }
+  
+  /**
+   * Check human review status and get completed transcript
+   */
+  async getHumanReviewStatus(humanReviewJobId: string): Promise<{
+    status: 'pending' | 'in_progress' | 'completed';
+    estimatedCompletionTime?: number;
+    humanReviewedTranscript?: string;
+    reviewerNotes?: string;
+  }> {
+    
+    // In a real implementation, this would check the human review queue
+    // For demo purposes, we'll simulate different states
+    
+    console.log(`🔍 Checking human review status for job: ${humanReviewJobId}`);
+    
+    // TODO: Implement actual human review status checking
+    // This would query your human review queue database
+    
+    return {
+      status: 'pending',
+      estimatedCompletionTime: Date.now() + (2 * 60 * 60 * 1000) // 2 hours from now
+    };
+  }
+  
+  /**
+   * Complete human review workflow (called when human reviewer finishes)
+   */
+  async completeHumanReview(humanReviewJobId: string, humanReviewedTranscript: string, reviewerNotes?: string): Promise<TTTCanadaResult> {
+    
+    console.log(`✅ Human review completed for job: ${humanReviewJobId}`);
+    
+    // This would be called by your human reviewer interface
+    // when a reviewer submits their completed work
+    
+    // TODO: Implement actual workflow completion
+    // 1. Update job status in database
+    // 2. Notify customer that transcription is ready
+    // 3. Update billing and credits
+    // 4. Generate final formatted output
+    
+    return {
+      baseTranscript: '',
+      enhancedTranscript: '',
+      humanReviewedTranscript,
+      status: 'human_review_complete',
+      metadata: {
+        processingTime: 0,
+        confidenceScore: 0.98, // Human review confidence
+        wordCount: humanReviewedTranscript.split(' ').length,
+        serviceType: 'AI Draft + Human Review',
+        addOnsApplied: [],
+        humanReviewCompletedAt: Date.now()
+      }
+    };
+  }
+
   /**
    * Apply custom template formatting
    */

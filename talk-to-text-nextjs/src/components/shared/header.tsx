@@ -8,14 +8,20 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOutUser } from "@/lib/auth";
+import CreditBalance from "@/components/credits/CreditBalance";
 
-const navigation = [
+const publicNavigation = [
   { name: "Home", href: "/" },
   { name: "About", href: "/about" },
   { name: "Services", href: "/services" },
-  { name: "TTT Canada", href: "/ttt-canada" },
   { name: "Pricing", href: "/pricing" },
   { name: "Contact", href: "/contact" },
+];
+
+const authenticatedNavigation = [
+  { name: "Dashboard", href: "/dashboard" },
+  { name: "Credits", href: "/credits" },
+  { name: "TTT Canada", href: "/ttt-canada" },
 ];
 
 const Header = () => {
@@ -24,6 +30,9 @@ const Header = () => {
   const pathname = usePathname();
   const router = useRouter();
   const { user, userProfile, loading } = useAuth();
+
+  // Choose navigation based on authentication status
+  const navigation = user ? authenticatedNavigation : publicNavigation;
 
   const handleSignOut = async () => {
     try {
@@ -87,18 +96,23 @@ const Header = () => {
         </div>
 
         {/* Auth buttons */}
-        <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
+        <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4 lg:items-center">
           {user ? (
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-x-2"
-              >
-                <User className="h-4 w-4" />
-                <span>{userProfile?.firstName || user.displayName || 'Account'}</span>
-              </Button>
+            <>
+              <CreditBalance 
+                onPurchaseClick={() => router.push('/credits')}
+                showPurchaseButton={true}
+              />
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-x-2"
+                >
+                  <User className="h-4 w-4" />
+                  <span>{userProfile?.firstName || user.displayName || 'Account'}</span>
+                </Button>
               
               {userMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50">
@@ -108,6 +122,13 @@ const Header = () => {
                     onClick={() => setUserMenuOpen(false)}
                   >
                     Dashboard
+                  </Link>
+                  <Link
+                    href="/credits"
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    Credits
                   </Link>
                   {userProfile?.role === 'admin' && (
                     <>
@@ -161,7 +182,8 @@ const Header = () => {
                   </button>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           ) : (
             <>
               <Link href="/trial">

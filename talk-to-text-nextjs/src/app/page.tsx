@@ -1,9 +1,14 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from "next/link";
 import { ArrowRight, Shield, Zap, Globe, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Header from "@/components/shared/header";
 import Footer from "@/components/shared/footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 const features = [
   {
@@ -45,6 +50,33 @@ const services = [
 ];
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ttt-navy"></div>
+        </div>
+      </>
+    );
+  }
+
+  // Only show home page to non-authenticated users
+  if (user) {
+    return null; // Will redirect shortly
+  }
+
   return (
     <>
       <Header />

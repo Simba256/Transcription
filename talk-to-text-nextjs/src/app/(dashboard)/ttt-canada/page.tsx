@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Upload, 
   FileText, 
@@ -17,29 +18,102 @@ import {
   GraduationCap,
   Leaf,
   Building,
-  Star
+  Star,
+  CheckCircle,
+  ExternalLink
 } from 'lucide-react';
 import Header from '@/components/shared/header';
 import Footer from '@/components/shared/footer';
+import TTTCanadaUpload from '@/components/ttt-canada/TTTCanadaUpload';
+import JobProgressTracker from '@/components/ttt-canada/JobProgressTracker';
+import { TTT_CANADA_PRICING, TTT_CANADA_ADDONS, creditsToCad } from '@/lib/stripe';
 
 export default function TTTCanadaPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refreshProfile } = useAuth();
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [orders, setOrders] = useState<any[]>([]);\n  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [uploadSuccess, setUploadSuccess] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('services');
+
+  const handleUploadSuccess = (result: any) => {
+    setUploadSuccess(result);
+    setActiveTab('orders');
+    
+    // Show appropriate message based on service completion state
+    if (result.backgroundProcessing) {
+      console.log('Job created successfully, processing in background');
+    }
+    
+    // Refresh orders from backend and user profile stats
+    loadOrders();
+    refreshProfile();
+  };
+
+  const handleJobComplete = (completedJob: any) => {
+    // Update the job in orders list when background processing completes
+    setOrders(prev => prev.map(order => 
+      order.jobId === completedJob.jobId 
+        ? { ...order, ...completedJob, isCompleted: true }
+        : order
+    ));
+    
+    // Refresh user profile to update usage stats
+    refreshProfile();
+  };
+
+  const loadOrders = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingOrders(true);
+      
+      // Get Firebase ID token for authentication
+      const token = await user.getIdToken();
+      
+      const response = await fetch('/api/ttt-canada/orders', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      
+      const data = await response.json();
+      setOrders(data.orders || []);
+      
+      console.log(`📋 Loaded ${data.orders?.length || 0} TTT Canada orders`);
+      
+    } catch (error) {
+      console.error('Failed to load orders:', error);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  // Load orders on component mount and when user changes
+  useEffect(() => {
+    if (user) {
+      loadOrders();
+    }
+  }, [user]);
 
   const services = [
     {
       id: 'ai_human_review',
       name: 'AI Draft + Human Review',
-      price: '$1.75 CAD/min',
+      price: `${TTT_CANADA_PRICING.ai_human_review} credits/min`,
       icon: <FileText className="h-6 w-6" />,
-      description: 'AI transcription with professional human editing',
-      features: ['99%+ accuracy guarantee', '48-hour delivery', 'Canadian English spelling', 'Professional formatting'],
+      description: 'Two-phase workflow: AI draft delivered immediately, then human-reviewed final transcript within 48 hours',
+      features: ['AI draft available instantly', 'Human review within 48h', '99%+ final accuracy', 'Canadian English spelling'],
       recommended: true
     },
     {
       id: 'verbatim_multispeaker',
       name: 'Verbatim Multi-Speaker',
-      price: '$2.25 CAD/min',
+      price: `${TTT_CANADA_PRICING.verbatim_multispeaker} credits/min`,
       icon: <Users className="h-6 w-6" />,
       description: 'Complete verbatim with speaker identification',
       features: ['All filler words included', 'Clear speaker labels', 'Non-verbal annotations', 'Legal proceeding ready']
@@ -47,7 +121,7 @@ export default function TTTCanadaPage() {
     {
       id: 'indigenous_oral',
       name: 'Indigenous Oral History',
-      price: '$2.50 CAD/min',
+      price: `${TTT_CANADA_PRICING.indigenous_oral} credits/min`,
       icon: <Leaf className="h-6 w-6" />,
       description: 'Culturally sensitive transcription services',
       features: ['Cultural awareness training', 'Respectful formatting', 'Traditional knowledge protocols', 'Elder storytelling expertise']
@@ -55,7 +129,7 @@ export default function TTTCanadaPage() {
     {
       id: 'legal_dictation',
       name: 'Legal Dictation',
-      price: '$1.85 CAD/min',
+      price: `${TTT_CANADA_PRICING.legal_dictation} credits/min`,
       icon: <Scale className="h-6 w-6" />,
       description: 'Canadian legal document formatting',
       features: ['Legal terminology accuracy', 'Canadian citation standards', 'Professional legal format', 'Lawyer reviewed']
@@ -66,25 +140,25 @@ export default function TTTCanadaPage() {
     {
       id: 'timestamps',
       name: 'Precise Timestamps',
-      price: '+$0.25 CAD/min',
+      price: `+${TTT_CANADA_ADDONS.timestamps} credits/min`,
       description: 'Time markers at speaker changes or intervals'
     },
     {
       id: 'anonymization',
       name: 'Privacy & Anonymization',
-      price: '+$0.35 CAD/min',
+      price: `+${TTT_CANADA_ADDONS.anonymization} credits/min`,
       description: 'PIPEDA compliant PII removal and redaction'
     },
     {
       id: 'custom_template',
       name: 'Custom Template',
-      price: '+$25 CAD setup',
+      price: `+${TTT_CANADA_ADDONS.customTemplate} credits setup`,
       description: 'Organization-specific formatting and branding'
     },
     {
       id: 'rush_delivery',
       name: 'Rush Delivery',
-      price: '+$0.50 CAD/min',
+      price: `+${TTT_CANADA_ADDONS.rushDelivery} credits/min`,
       description: '24-hour delivery guarantee'
     }
   ];
@@ -146,11 +220,11 @@ export default function TTTCanadaPage() {
             </div>
           </div>
 
-          <Tabs defaultValue="services" className="space-y-8">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="services">Premium Services</TabsTrigger>
               <TabsTrigger value="upload">Upload & Order</TabsTrigger>
-              <TabsTrigger value="orders">My Orders</TabsTrigger>
+              <TabsTrigger value="orders">My Orders {orders.length > 0 && `(${orders.length})`}</TabsTrigger>
               <TabsTrigger value="templates">Templates</TabsTrigger>
             </TabsList>
 
@@ -255,38 +329,21 @@ export default function TTTCanadaPage() {
 
             {/* Upload & Order Tab */}
             <TabsContent value="upload" className="space-y-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upload Your Files</CardTitle>
-                  <CardDescription>
-                    Upload audio files and select your preferred Canadian transcription service
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-12">
-                    <Upload className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">TTT Canada Upload Portal</h3>
-                    <p className="text-gray-600 mb-6">
-                      Drag & drop your audio files or click to browse
-                    </p>
-                    <Button className="bg-red-600 hover:bg-red-700">
-                      Choose Files
-                    </Button>
-                    
-                    <div className="mt-8 text-left max-w-md mx-auto">
-                      <h4 className="font-medium mb-2">Supported formats:</h4>
-                      <p className="text-sm text-gray-600">
-                        MP3, WAV, M4A, MP4, FLAC, and 15+ other audio/video formats
-                      </p>
-                      
-                      <h4 className="font-medium mb-2 mt-4">Security:</h4>
-                      <p className="text-sm text-gray-600">
-                        256-bit encryption, PIPEDA compliant storage, secure Canadian servers
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {uploadSuccess && (
+                <Alert className="border-green-200 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    <strong>Order submitted successfully!</strong> Job ID: {uploadSuccess.jobId}
+                    <br />
+                    Your transcription will be processed using {uploadSuccess.serviceType.replace('_', ' ')} service.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              <TTTCanadaUpload 
+                selectedService={selectedService}
+                onUploadSuccess={handleUploadSuccess}
+              />
             </TabsContent>
 
             {/* My Orders Tab */}
@@ -297,16 +354,109 @@ export default function TTTCanadaPage() {
                   <CardDescription>Track your Canadian transcription projects</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12">
-                    <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No orders yet</h3>
-                    <p className="text-gray-600 mb-6">
-                      Your Canadian transcription orders will appear here
-                    </p>
-                    <Button variant="outline">
-                      Upload Your First File
-                    </Button>
-                  </div>
+                  {loadingOrders ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading your orders...</p>
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No orders yet</h3>
+                      <p className="text-gray-600 mb-6">
+                        Your Canadian transcription orders will appear here
+                      </p>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setActiveTab('upload')}
+                      >
+                        Upload Your First File
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {orders.map((order, index) => {
+                        // Show progress tracker for processing jobs
+                        if (['processing', 'ai_processing', 'pending_human_review'].includes(order.status)) {
+                          return (
+                            <JobProgressTracker
+                              key={order.jobId || index}
+                              jobId={order.jobId}
+                              serviceType={order.serviceType}
+                              onJobComplete={handleJobComplete}
+                            />
+                          );
+                        }
+                        
+                        // Show completed job summary
+                        return (
+                          <Card key={order.jobId || index} className="border-l-4 border-l-red-600">
+                          <CardContent className="pt-6">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  {order.status === 'pending_human_review' ? (
+                                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                                      ⏳ Pending Human Review
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-green-100 text-green-800">
+                                      ✅ Completed
+                                    </Badge>
+                                  )}
+                                  <span className="text-sm text-gray-500">
+                                    Job ID: {order.jobId}
+                                  </span>
+                                </div>
+                                <h4 className="font-medium">
+                                  {order.serviceType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </h4>
+                                <p className="text-sm text-gray-600">
+                                  {order.message || 'Transcription completed successfully'}
+                                </p>
+                                {order.pricing && (
+                                  <p className="text-sm font-medium text-red-600">
+                                    Total: ${order.pricing.totalCAD.toFixed(2)} CAD 
+                                    (${order.pricing.totalUSD.toFixed(2)} USD)
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="mb-2"
+                                  onClick={() => {
+                                    // Navigate to transcript view or download
+                                    console.log('View transcript for job:', order.jobId);
+                                  }}
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-1" />
+                                  View Transcript
+                                </Button>
+                                {order.result && (
+                                  <div className="text-sm text-gray-500">
+                                    {order.result.transcript?.length || 0} characters
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {order.result?.transcript && (
+                              <div className="mt-4 p-3 bg-gray-50 rounded border">
+                                <h5 className="text-sm font-medium mb-2">Preview:</h5>
+                                <p className="text-sm text-gray-700">
+                                  {order.result.transcript.substring(0, 200)}
+                                  {order.result.transcript.length > 200 && '...'}
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

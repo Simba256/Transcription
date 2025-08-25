@@ -72,6 +72,8 @@ export default function AdminManualTranscriptionsPage() {
       setTranscriptionText(job.adminData.adminTranscript);
       setAdminNotes(job.adminData.adminNotes || '');
     }
+    // For hybrid jobs that haven't been completed, optionally start with AI transcript
+    // (User can choose whether to use it via the "Use as Starting Point" button)
   };
 
   // Mark job as in progress when admin starts typing
@@ -319,7 +321,14 @@ export default function AdminManualTranscriptionsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-700">Mode</p>
-                      <p className="text-gray-600">{selectedJob.mode?.toUpperCase()}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-gray-600">{selectedJob.mode?.toUpperCase()}</p>
+                        {selectedJob.mode === 'hybrid' && selectedJob.aiTranscript && (
+                          <Badge variant="outline" className="bg-blue-100 text-blue-800 text-xs">
+                            AI Pre-processed
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <p className="font-medium text-gray-700">Created</p>
@@ -356,14 +365,41 @@ export default function AdminManualTranscriptionsPage() {
                   <CardTitle>Manual Transcription</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* AI Transcript Section for Hybrid Jobs */}
+                  {selectedJob?.aiTranscript && (
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          AI-Generated Transcript (Reference)
+                        </label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setTranscriptionText(selectedJob.aiTranscript || '')}
+                          disabled={selectedJob?.status === 'completed'}
+                        >
+                          Use as Starting Point
+                        </Button>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <p className="text-sm text-blue-900 whitespace-pre-wrap">{selectedJob.aiTranscript}</p>
+                      </div>
+                      {selectedJob.confidence && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          AI Confidence: {Math.round(selectedJob.confidence * 100)}%
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Transcription Text *
+                      {selectedJob?.aiTranscript ? 'Manual Transcription (Edit or Replace AI Version) *' : 'Transcription Text *'}
                     </label>
                     <Textarea
                       value={transcriptionText}
                       onChange={(e) => handleTranscriptionChange(e.target.value)}
-                      placeholder={selectedJob?.status === 'completed' ? 'This transcription has been completed.' : "Enter the manual transcription here..."}
+                      placeholder={selectedJob?.status === 'completed' ? 'This transcription has been completed.' : selectedJob?.aiTranscript ? "Edit the AI transcript above or write your own transcription..." : "Enter the manual transcription here..."}
                       rows={12}
                       className="w-full"
                       disabled={selectedJob?.status === 'completed'}

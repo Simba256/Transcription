@@ -17,13 +17,16 @@ import {
 } from 'lucide-react';
 import FileUpload from './FileUpload';
 import ModeSelector from '@/components/transcription/ModeSelector';
+import CreditCostEstimate from '@/components/credits/CreditCostEstimate';
 import { TranscriptionModeSelection } from '@/types/transcription-modes';
+import { CreditBalanceResponse } from '@/types/credits';
 import { estimateAudioDuration } from '@/lib/storage';
 import { getCachedAudioDuration } from '@/lib/client-audio-utils';
 import { secureApiClient } from '@/lib/secure-api-client';
 import { transcriptionService } from '@/lib/transcription';
 import { TranscriptionJobData } from '@/lib/transcription-queue';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 interface EnhancedFileUploadProps {
   onUploadComplete?: (fileId: string, downloadUrl: string) => void;
@@ -54,7 +57,8 @@ export default function EnhancedFileUpload({
   disabled = false,
   variant = 'default'
 }: EnhancedFileUploadProps) {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
+  const router = useRouter();
   const [session, setSession] = useState<UploadSession>({
     files: [],
     step: 'upload',
@@ -63,6 +67,7 @@ export default function EnhancedFileUpload({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdJobIds, setCreatedJobIds] = useState<string[]>([]);
+  const [creditBalance, setCreditBalance] = useState<CreditBalanceResponse | null>(null);
   const [recentTranscriptions, setRecentTranscriptions] = useState<TranscriptionJobData[]>([]);
 
   // Get jobs created in this session from the real-time Firestore data
@@ -92,9 +97,24 @@ export default function EnhancedFileUpload({
     jobStatuses: sessionJobs.map(job => ({ id: job.id, status: job.status }))
   });
 
-  // Subscribe to transcriptions (same as Recent Transcriptions)
+  // Load credit balance
+  const loadCreditBalance = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const data = await secureApiClient.get('/api/credits/balance');
+      setCreditBalance(data.balance);
+    } catch (error) {
+      console.error('Failed to load credit balance:', error);
+    }
+  }, [user]);
+
+  // Subscribe to transcriptions (same as Recent Transcriptions) and load credit balance
   useEffect(() => {
     if (!user) return;
+
+    // Load initial credit balance
+    loadCreditBalance();
 
     const unsubscribe = transcriptionService.subscribeToTranscriptions(
       user.uid,
@@ -299,6 +319,16 @@ export default function EnhancedFileUpload({
 
       console.log('All files processed, setting step to complete');
       
+      // Refresh user profile to update usage stats immediately after upload
+      if (createdJobIds.length > 0) {
+        console.log('📊 Refreshing user profile to update usage stats...');
+        // Add small delay to ensure Firestore write has completed
+        setTimeout(() => {
+          refreshProfile();
+          loadCreditBalance(); // Refresh credit balance after transcription
+        }, 500);
+      }
+      
       // Store created job IDs for polling
       if (createdJobIds.length > 0) {
         console.log(`Setting created job IDs for polling: ${createdJobIds.length} jobs:`, createdJobIds);
@@ -314,7 +344,16 @@ export default function EnhancedFileUpload({
     } catch (err) {
       console.error('Error in handleModeSelection:', err);
       const errorMessage = err instanceof Error ? err.message : 'Processing failed';
-      setError(errorMessage);
+      
+      // Check if this is a credit-related error
+      if (errorMessage.includes('Insufficient credits') || errorMessage.includes('insufficient credits')) {
+        setError(`${errorMessage} Please purchase more credits to continue.`);
+        // Refresh credit balance to show current state
+        loadCreditBalance();
+      } else {
+        setError(errorMessage);
+      }
+      
       onUploadError?.(errorMessage);
     } finally {
       setProcessing(false);
@@ -448,25 +487,66 @@ export default function EnhancedFileUpload({
       )}
 
       {session.step === 'mode' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Choose Transcription Mode
-            </CardTitle>
-            <CardDescription>
-              Select how you want your {session.uploadedFiles.length} file(s) to be transcribed
-              {totalDuration > 0 && ` (Total duration: ~${Math.ceil(totalDuration)} minutes)`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ModeSelector 
-              onModeSelect={handleModeSelection}
-              duration={totalDuration}
-              disabled={processing}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Choose Transcription Mode
+              </CardTitle>
+              <CardDescription>
+                Select how you want your {session.uploadedFiles.length} file(s) to be transcribed
+                {totalDuration > 0 && ` (Total duration: ~${Math.ceil(totalDuration)} minutes)`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ModeSelector 
+                onModeSelect={(selection) => {
+                  // Store the selection temporarily to show credit estimate
+                  setSession(prev => ({ ...prev, modeSelection: selection }));
+                }}
+                duration={totalDuration}
+                disabled={processing}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Credit Cost Estimate */}
+          {session.modeSelection && totalDuration > 0 && (
+            <CreditCostEstimate
+              modeSelection={session.modeSelection}
+              durationMinutes={totalDuration}
+              userBalance={creditBalance}
+              onPurchaseCredits={() => router.push('/credits')}
+              showInsufficientWarning={true}
             />
-          </CardContent>
-        </Card>
+          )}
+
+          {/* Proceed Button */}
+          {session.modeSelection && (
+            <Card>
+              <CardContent className="pt-6">
+                <Button
+                  onClick={() => handleModeSelection(session.modeSelection!)}
+                  disabled={processing}
+                  className="w-full"
+                  size="lg"
+                >
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      Start Transcription
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {(session.step === 'complete' || session.step === 'processing_complete') && (

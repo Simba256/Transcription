@@ -13,6 +13,8 @@ import {
 import { updateUserUsage } from './firestore';
 import { openaiService } from './openai-service';
 import { getAudioDurationFromBuffer, getMimeTypeFromFilename } from './audio-utils';
+import { creditService } from './credit-service';
+import { calculateCreditsNeeded } from './stripe';
 import { 
   TranscriptionMode, 
   SimplifiedTranscriptionJobData, 
@@ -23,7 +25,7 @@ import {
 export class SimplifiedTranscriptionModesService {
   
   /**
-   * Create a new transcription job with simplified admin-only workflow
+   * Create a new transcription job with credit-based system
    */
   async createTranscriptionJob(
     userId: string,
@@ -38,6 +40,39 @@ export class SimplifiedTranscriptionModesService {
     diarization: boolean = false
   ): Promise<string> {
     
+    // Calculate credits needed for this transcription
+    const estimatedDurationMinutes = Math.ceil((fileData.duration || 0) / 60);
+    const creditsNeeded = calculateCreditsNeeded(
+      modeSelection.mode,
+      modeSelection.qualityLevel,
+      estimatedDurationMinutes
+    );
+
+    // Check if user has sufficient credits
+    const creditCheck = await creditService.checkSufficientCredits(userId, creditsNeeded);
+    if (!creditCheck.sufficient) {
+      throw new Error(`Insufficient credits. Required: ${creditsNeeded}, Available: ${creditCheck.currentBalance}, Shortfall: ${creditCheck.shortfall}`);
+    }
+
+    // Deduct credits upfront
+    const deductionResult = await creditService.deductCredits(
+      userId,
+      creditsNeeded,
+      `Transcription: ${fileData.fileName}`,
+      undefined, // jobId will be updated after job creation
+      {
+        transcriptionMode: modeSelection.mode,
+        qualityLevel: modeSelection.qualityLevel,
+        durationMinutes: estimatedDurationMinutes
+      }
+    );
+
+    if (!deductionResult.success) {
+      throw new Error(`Failed to deduct credits. Available: ${deductionResult.newBalance}`);
+    }
+
+    console.log(`💳 Deducted ${creditsNeeded} credits from user ${userId}. New balance: ${deductionResult.newBalance}`);
+    
     const jobData: Omit<SimplifiedTranscriptionJobData, 'id'> = {
       userId,
       fileName: fileData.fileName,
@@ -51,11 +86,21 @@ export class SimplifiedTranscriptionModesService {
       diarization,
       retryCount: 0,
       maxRetries: 3,
+      creditsUsed: creditsNeeded, // Track credits used for this job
       createdAt: serverTimestamp() as any,
       ...(modeSelection.specialRequirements && { tags: ['special_requirements'] })
     };
 
     const docRef = await addDoc(collection(db, 'transcriptions'), jobData);
+    
+    // Update user usage statistics immediately after job creation
+    console.log(`📊 Updating usage stats immediately for user ${userId}: +1 upload, +${estimatedDurationMinutes} minutes`);
+    try {
+      await this.updateUserTranscriptionUsage(userId, estimatedDurationMinutes);
+    } catch (usageError) {
+      console.error('Error updating initial usage stats:', usageError);
+      // Continue processing even if usage update fails
+    }
     
     // Route to appropriate processing pipeline
     await this.routeToProcessor(docRef.id, modeSelection);
@@ -132,19 +177,39 @@ export class SimplifiedTranscriptionModesService {
           enhancementType: 'none'  // Pure Whisper output, no GPT-4 modifications
         });
         
-        await updateDoc(doc(db, 'transcriptions', jobId), {
-          status: 'completed',
-          aiTranscript: result.originalTranscript,
-          finalTranscript: result.enhancedTranscript,
-          openaiJobId: `openai-whisper-${Date.now()}`,
-          processingTime: result.processingTime,
-          wordCount: result.wordCount,
-          confidence: result.confidence,
-          duration: actualDurationMinutes, // Store actual duration from metadata
-          completedAt: serverTimestamp()
-        });
-        
-        console.log(`✅ AI transcription completed for job ${jobId} - ${result.wordCount} words, ${result.confidence * 100}% confidence`);
+        // Check if this is a hybrid job that needs admin review
+        if (jobData.mode === 'hybrid') {
+          // For hybrid: Update with AI results but queue for admin review
+          await updateDoc(doc(db, 'transcriptions', jobId), {
+            status: 'queued_for_admin',
+            aiTranscript: result.originalTranscript,
+            finalTranscript: result.enhancedTranscript, // Will be overwritten by admin
+            openaiJobId: `openai-whisper-${Date.now()}`,
+            processingTime: result.processingTime,
+            wordCount: result.wordCount,
+            confidence: result.confidence,
+            duration: actualDurationMinutes,
+            aiCompletedAt: serverTimestamp(),
+            queuedAt: serverTimestamp()
+          });
+          
+          console.log(`✅ AI transcription completed for hybrid job ${jobId} - queued for admin review`);
+        } else {
+          // Pure AI mode - mark as completed
+          await updateDoc(doc(db, 'transcriptions', jobId), {
+            status: 'completed',
+            aiTranscript: result.originalTranscript,
+            finalTranscript: result.enhancedTranscript,
+            openaiJobId: `openai-whisper-${Date.now()}`,
+            processingTime: result.processingTime,
+            wordCount: result.wordCount,
+            confidence: result.confidence,
+            duration: actualDurationMinutes,
+            completedAt: serverTimestamp()
+          });
+          
+          console.log(`✅ AI transcription completed for job ${jobId} - ${result.wordCount} words, ${result.confidence * 100}% confidence`);
+        }
         
       } catch (aiError) {
         console.error('AI transcription failed:', aiError);
@@ -168,17 +233,13 @@ export class SimplifiedTranscriptionModesService {
           error: errorMessage,
           errorAt: serverTimestamp()
         });
+        
+        // Refund credits for failed transcription
+        await this.refundCreditsForFailedJob(jobId, jobData.userId);
         throw aiError;
       }
 
-      // Update user usage statistics
-      console.log(`📊 Updating usage stats for user ${jobData.userId}, actual duration: ${actualDurationMinutes} minutes`);
-      try {
-        await this.updateUserTranscriptionUsage(jobData.userId, actualDurationMinutes);
-      } catch (usageError) {
-        console.error('Error updating usage stats:', usageError);
-        // Continue processing even if usage update fails
-      }
+      // Note: User usage statistics are already updated when job was created
 
     } catch (error) {
       await updateDoc(doc(db, 'transcriptions', jobId), {
@@ -186,6 +247,16 @@ export class SimplifiedTranscriptionModesService {
         error: error instanceof Error ? error.message : 'AI processing failed',
         errorAt: serverTimestamp()
       });
+      
+      // Refund credits for failed transcription
+      const jobDoc = await getDocs(
+        query(collection(db, 'transcriptions'), where('__name__', '==', jobId))
+      );
+      
+      if (!jobDoc.empty) {
+        const jobData = jobDoc.docs[0].data() as SimplifiedTranscriptionJobData;
+        await this.refundCreditsForFailedJob(jobId, jobData.userId);
+      }
     }
   }
 
@@ -385,6 +456,43 @@ export class SimplifiedTranscriptionModesService {
     } catch (error) {
       console.error('Failed to update user usage statistics:', error);
       // Don't fail the transcription if usage stats update fails
+    }
+  }
+
+  /**
+   * Refund credits for failed transcription jobs
+   */
+  private async refundCreditsForFailedJob(jobId: string, userId: string): Promise<void> {
+    try {
+      const jobDoc = await getDocs(
+        query(collection(db, 'transcriptions'), where('__name__', '==', jobId))
+      );
+      
+      if (jobDoc.empty) {
+        console.error(`Job ${jobId} not found for refund`);
+        return;
+      }
+      
+      const jobData = jobDoc.docs[0].data() as SimplifiedTranscriptionJobData;
+      const creditsToRefund = jobData.creditsUsed;
+      
+      if (!creditsToRefund || creditsToRefund <= 0) {
+        console.log(`No credits to refund for job ${jobId}`);
+        return;
+      }
+      
+      await creditService.refundCredits(
+        userId,
+        creditsToRefund,
+        `Refund for failed transcription: ${jobData.fileName}`,
+        jobId
+      );
+      
+      console.log(`💳 Refunded ${creditsToRefund} credits to user ${userId} for failed job ${jobId}`);
+      
+    } catch (error) {
+      console.error(`Failed to refund credits for job ${jobId}:`, error);
+      // Don't throw error as this is a recovery operation
     }
   }
 }

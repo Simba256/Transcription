@@ -9,17 +9,36 @@ import Footer from '@/components/shared/footer';
 import EnhancedFileUpload from '@/components/upload/EnhancedFileUpload';
 import FileManager from '@/components/upload/FileManager';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import CreditBalance from '@/components/credits/CreditBalance';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { secureApiClient } from '@/lib/secure-api-client';
+import { CreditBalanceResponse } from '@/types/credits';
+import { creditsToCad } from '@/lib/stripe';
 
 export default function DashboardPage() {
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, refreshProfile } = useAuth();
   const router = useRouter();
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<CreditBalanceResponse | null>(null);
+
+  // Load credit balance
+  const loadCreditBalance = async () => {
+    if (!user) return;
+    
+    try {
+      const data = await secureApiClient.get('/api/credits/balance');
+      setCreditBalance(data.balance);
+    } catch (error) {
+      console.error('Failed to load credit balance:', error);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
+    } else if (user) {
+      loadCreditBalance();
     }
   }, [user, loading, router]);
 
@@ -42,9 +61,8 @@ export default function DashboardPage() {
     return null;
   }
 
-  const isTrialUser = userProfile?.subscription?.plan === 'trial';
-  const trialUploadsRemaining = 100 - (userProfile?.usage?.trialUploads || 0);
-  const trialTimeRemaining = 180 - (userProfile?.usage?.trialTimeUsed || 0); // 3 hours = 180 minutes
+  const isNewUser = !userProfile?.usage?.totalTranscribed || userProfile?.usage?.totalTranscribed === 0;
+  const hasLowCredits = creditBalance && creditBalance.balance < 100;
 
   return (
     <>
@@ -62,21 +80,36 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Trial Status Banner */}
-          {isTrialUser && (
+          {/* Welcome Banner for New Users */}
+          {isNewUser && (
             <div className="mb-8 bg-gradient-to-r from-ttt-lavender-light to-ttt-lavender p-6 rounded-lg border border-ttt-lavender-dark">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-ttt-navy">Trial Account</h3>
+                  <h3 className="text-lg font-semibold text-ttt-navy">Welcome to Talk to Text Canada!</h3>
                   <p className="text-sm text-gray-700 mt-1">
-                    {trialUploadsRemaining > 0 
-                      ? `${trialUploadsRemaining} uploads and ${Math.max(0, trialTimeRemaining)} minutes remaining`
-                      : 'Trial limits reached'
-                    }
+                    Get started by uploading your first audio file below. You'll need credits for transcription services.
                   </p>
                 </div>
-                <Button variant="navy" asChild>
-                  <a href="/pricing">Upgrade Now</a>
+                <Button variant="navy" onClick={() => router.push('/credits')}>
+                  Buy Credits
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Low Credits Warning */}
+          {hasLowCredits && !isNewUser && (
+            <div className="mb-8 bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-lg border border-orange-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-orange-800">Low Credit Balance</h3>
+                  <p className="text-sm text-orange-700 mt-1">
+                    You have {creditBalance?.balance || 0} credits remaining (≈${creditsToCad(creditBalance?.balance || 0).toFixed(2)} CAD).
+                    Purchase more credits to continue transcribing.
+                  </p>
+                </div>
+                <Button variant="default" onClick={() => router.push('/credits')}>
+                  Buy Credits
                 </Button>
               </div>
             </div>
@@ -86,13 +119,26 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Credit Balance</CardTitle>
+                <CreditCard className="h-4 w-4 text-ttt-navy" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{creditBalance?.balance || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  ≈ ${creditsToCad(creditBalance?.balance || 0).toFixed(2)} CAD available
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Uploads</CardTitle>
                 <Upload className="h-4 w-4 text-ttt-navy" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{userProfile?.usage?.trialUploads || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  {isTrialUser ? `${trialUploadsRemaining} remaining` : 'Lifetime uploads'}
+                  Lifetime uploads
                 </p>
               </CardContent>
             </Card>
@@ -105,22 +151,20 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{userProfile?.usage?.totalTranscribed || 0} min</div>
                 <p className="text-xs text-muted-foreground">
-                  {isTrialUser ? `${Math.max(0, trialTimeRemaining)} min remaining` : 'Total processed'}
+                  Total processed
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Account Type</CardTitle>
-                <User className="h-4 w-4 text-ttt-navy" />
+                <CardTitle className="text-sm font-medium">Credits Spent</CardTitle>
+                <TrendingUp className="h-4 w-4 text-ttt-navy" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold capitalize">
-                  {userProfile?.subscription?.plan || 'Trial'}
-                </div>
+                <div className="text-2xl font-bold">{creditBalance?.totalSpent || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  Status: {userProfile?.subscription?.status || 'Active'}
+                  ≈ ${creditsToCad(creditBalance?.totalSpent || 0).toFixed(2)} CAD spent
                 </p>
               </CardContent>
             </Card>
@@ -166,10 +210,13 @@ export default function DashboardPage() {
                 <CardContent>
                   <EnhancedFileUpload
                     variant="default"
-                    maxFiles={isTrialUser ? trialUploadsRemaining : 10}
-                    disabled={isTrialUser && trialUploadsRemaining <= 0}
+                    maxFiles={10}
+                    disabled={hasLowCredits && (creditBalance?.balance || 0) === 0}
                     onUploadComplete={(fileId, downloadUrl) => {
                       setUploadSuccess(true);
+                      // Refresh user profile and credit balance to update stats in real-time
+                      refreshProfile();
+                      loadCreditBalance();
                       setTimeout(() => setUploadSuccess(false), 5000);
                     }}
                     onUploadError={(error) => {
