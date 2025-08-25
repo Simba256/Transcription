@@ -130,7 +130,7 @@ export default function JobProgressTracker({
     return (
       <Alert className="border-red-200 bg-red-50">
         <AlertTriangle className="h-4 w-4 text-red-600" />
-        <AlertDescription className="text-red-800">
+        <AlertDescription className="text-red-800 dark:text-red-200">
           <div className="flex items-center justify-between">
             <span>Error checking job status: {error}</span>
             <Button 
@@ -158,7 +158,7 @@ export default function JobProgressTracker({
               <CardTitle className="text-lg">
                 {formatServiceType(serviceType)}
               </CardTitle>
-              <p className="text-sm text-gray-600">Job ID: {jobId}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Job ID: {jobId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -184,7 +184,7 @@ export default function JobProgressTracker({
             {jobStatus.progress && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Progress</span>
+                  <span className="text-gray-600 dark:text-gray-400">Progress</span>
                   <span className="font-medium">{jobStatus.progress}%</span>
                 </div>
                 <Progress value={jobStatus.progress} className="w-full" />
@@ -193,7 +193,7 @@ export default function JobProgressTracker({
 
             {/* Status Message */}
             {jobStatus.message && (
-              <p className="text-sm text-gray-700">{jobStatus.message}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{jobStatus.message}</p>
             )}
 
             {/* AI Draft Available */}
@@ -202,18 +202,18 @@ export default function JobProgressTracker({
                 <CheckCircle className="h-4 w-4 text-blue-600" />
                 <AlertDescription>
                   <div className="space-y-2">
-                    <p className="font-medium text-blue-900">
+                    <p className="font-medium text-blue-900 dark:text-blue-100">
                       🤖 AI Draft Ready!
                     </p>
-                    <p className="text-sm text-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
                       Your AI-generated transcript is available while we queue it for human review.
                     </p>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="text-blue-700 border-blue-300">
+                      <Button size="sm" variant="outline" className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">
                         <Eye className="h-3 w-3 mr-1" />
                         Preview AI Draft
                       </Button>
-                      <Button size="sm" variant="outline" className="text-blue-700 border-blue-300">
+                      <Button size="sm" variant="outline" className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">
                         <Download className="h-3 w-3 mr-1" />
                         Download AI Draft
                       </Button>
@@ -225,7 +225,7 @@ export default function JobProgressTracker({
 
             {/* Estimated Times */}
             {(jobStatus.estimatedHumanReviewTime || jobStatus.estimatedCompletionTime) && (
-              <div className="text-sm text-gray-600 space-y-1">
+              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                 {jobStatus.estimatedHumanReviewTime && (
                   <p>👤 Estimated human review time: {jobStatus.estimatedHumanReviewTime}</p>
                 )}
@@ -241,10 +241,10 @@ export default function JobProgressTracker({
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <AlertDescription>
                   <div className="space-y-2">
-                    <p className="font-medium text-green-900">
+                    <p className="font-medium text-green-900 dark:text-green-100">
                       ✅ Transcription Complete!
                     </p>
-                    <p className="text-sm text-green-800">
+                    <p className="text-sm text-green-800 dark:text-green-200">
                       Your professionally reviewed transcript is ready for download.
                     </p>
                     <div className="flex gap-2">
@@ -252,7 +252,7 @@ export default function JobProgressTracker({
                         <Download className="h-3 w-3 mr-1" />
                         Download Final Transcript
                       </Button>
-                      <Button size="sm" variant="outline" className="text-green-700 border-green-300">
+                      <Button size="sm" variant="outline" className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
                         <Eye className="h-3 w-3 mr-1" />
                         View Online
                       </Button>
@@ -266,7 +266,7 @@ export default function JobProgressTracker({
             {jobStatus.status === 'failed' && (
               <Alert className="border-red-200 bg-red-50">
                 <AlertTriangle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800">
+                <AlertDescription className="text-red-800 dark:text-red-200">
                   <p className="font-medium">Processing Failed</p>
                   <p className="text-sm mt-1">{jobStatus.error || 'Unknown error occurred'}</p>
                 </AlertDescription>
@@ -274,7 +274,7 @@ export default function JobProgressTracker({
             )}
 
             {/* Order Time */}
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {jobStatus?.createdAt 
                 ? `Ordered: ${new Date(jobStatus.createdAt).toLocaleString()}`
                 : `Last updated: ${lastUpdate.toLocaleTimeString()}`
@@ -286,7 +286,7 @@ export default function JobProgressTracker({
         {!jobStatus && !error && (
           <div className="flex items-center justify-center py-4">
             <RefreshCw className="h-4 w-4 animate-spin text-gray-400 mr-2" />
-            <span className="text-sm text-gray-600">Loading job status...</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Loading job status...</span>
           </div>
         )}
       </CardContent>

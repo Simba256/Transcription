@@ -5,23 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { 
   MapPin, 
-  DollarSign,
-  Calendar,
   FileText,
-  Download,
   CheckCircle,
-  Clock,
   Eye,
-  Upload,
   Leaf,
   Scale,
   Users,
   Copy
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import AudioPlayer from '@/components/admin/AudioPlayer';
 
 interface TTTCanadaOrder {
   id: string;
@@ -45,6 +40,9 @@ interface TTTCanadaOrder {
   adminNotes?: string;
   createdAt: any;
   completedAt?: any;
+  // AI transcript fields
+  aiTranscript?: string;
+  confidence?: number;
 }
 
 export default function TTTCanadaOrdersPage() {
@@ -55,7 +53,7 @@ export default function TTTCanadaOrdersPage() {
   const [adminNotes, setAdminNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'processing' | 'completed'>('pending');
+  const [filter, setFilter] = useState<'all' | 'queued' | 'processing' | 'completed'>('queued');
 
   // Check admin permissions
   useEffect(() => {
@@ -86,8 +84,41 @@ export default function TTTCanadaOrdersPage() {
 
   const handleOrderSelect = (order: TTTCanadaOrder) => {
     setSelectedOrder(order);
-    setTranscriptionText(order.adminTranscription || '');
-    setAdminNotes(order.adminNotes || '');
+    setTranscriptionText('');
+    setAdminNotes('');
+    
+    // If order has existing admin data, load it
+    if (order.adminTranscription) {
+      setTranscriptionText(order.adminTranscription);
+      setAdminNotes(order.adminNotes || '');
+    }
+  };
+
+  // Mark order as in progress when admin starts typing
+  const markOrderInProgress = async (orderId: string) => {
+    try {
+      // Update the local order status
+      setOrders(prevOrders => 
+        prevOrders.map(o => 
+          o.id === orderId ? { ...o, status: 'processing' } : o
+        )
+      );
+      // Update selected order status if it's the current one
+      setSelectedOrder(prev => prev?.id === orderId ? { ...prev, status: 'processing' } : prev);
+      console.log(`✅ Order ${orderId} marked as in progress`);
+    } catch (error) {
+      console.error('Error marking order as in progress:', error);
+    }
+  };
+
+  // Handle transcription text changes and mark as in progress if needed
+  const handleTranscriptionChange = (value: string) => {
+    setTranscriptionText(value);
+    
+    // If order is queued and admin starts typing (non-empty value), mark as in progress
+    if (selectedOrder && selectedOrder.status === 'queued_for_admin' && value.trim() && !transcriptionText.trim()) {
+      markOrderInProgress(selectedOrder.id);
+    }
   };
 
   const handleSubmitOrder = async () => {
@@ -109,13 +140,16 @@ export default function TTTCanadaOrdersPage() {
       });
 
       if (response.ok) {
+        // Refresh the order list
         await loadOrders();
         setSelectedOrder(null);
         setTranscriptionText('');
         setAdminNotes('');
+      } else {
+        console.error('Failed to submit transcription');
       }
     } catch (error) {
-      console.error('Error submitting TTT Canada order:', error);
+      console.error('Error submitting transcription:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -146,8 +180,8 @@ export default function TTTCanadaOrdersPage() {
   const getStatusBadge = (status: string, priority: string) => {
     const statusConfig = {
       'pending': { color: 'bg-yellow-100 text-yellow-800', text: 'Pending' },
-      'processing': { color: 'bg-blue-100 text-blue-800', text: 'Processing' },
       'queued_for_admin': { color: 'bg-orange-100 text-orange-800', text: 'Queued for Admin' },
+      'processing': { color: 'bg-blue-100 text-blue-800', text: 'Processing' },
       'completed': { color: 'bg-green-100 text-green-800', text: 'Completed' }
     };
 
@@ -204,10 +238,10 @@ export default function TTTCanadaOrdersPage() {
   }
 
   const filteredOrders = orders.filter(order => {
-    if (filter === 'pending') return order.status === 'pending' || order.status === 'queued_for_admin';
+    if (filter === 'queued') return ['pending', 'queued_for_admin'].includes(order.status);
     if (filter === 'processing') return order.status === 'processing';
-    if (filter === 'completed') return order.status === 'completed';
-    return true;
+    if (filter === 'completed') return order.status === 'completed' && order.adminTranscription;
+    return true; // 'all' shows everything
   });
 
   return (
@@ -224,11 +258,11 @@ export default function TTTCanadaOrdersPage() {
       <div className="mb-6 flex justify-between items-center">
         <div className="flex gap-2">
           <Button 
-            variant={filter === 'pending' ? 'default' : 'outline'}
+            variant={filter === 'queued' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('pending')}
+            onClick={() => setFilter('queued')}
           >
-            Pending ({orders.filter(o => ['pending', 'queued_for_admin'].includes(o.status)).length})
+            Queued ({orders.filter(o => ['pending', 'queued_for_admin'].includes(o.status)).length})
           </Button>
           <Button 
             variant={filter === 'processing' ? 'default' : 'outline'}
@@ -242,7 +276,7 @@ export default function TTTCanadaOrdersPage() {
             size="sm"
             onClick={() => setFilter('completed')}
           >
-            Completed ({orders.filter(o => o.status === 'completed').length})
+            Completed ({orders.filter(o => o.status === 'completed' && o.adminTranscription).length})
           </Button>
           <Button 
             variant={filter === 'all' ? 'default' : 'outline'}
@@ -321,26 +355,23 @@ export default function TTTCanadaOrdersPage() {
                       {getServiceIcon(selectedOrder.serviceType)}
                       {selectedOrder.fileName}
                     </span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-green-600">
-                        {formatCurrency(selectedOrder.pricing.totalCAD)}
-                      </span>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => window.open(selectedOrder.fileUrl, '_blank')}
-                      >
-                        <Download className="w-4 h-4 mr-1" />
-                        Download
-                      </Button>
-                    </div>
+                    <span className="text-lg font-bold text-green-600">
+                      {formatCurrency(selectedOrder.pricing.totalCAD)}
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
                       <p className="font-medium text-gray-700">Service Type</p>
-                      <p className="text-gray-600">{getServiceName(selectedOrder.serviceType)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-gray-600">{getServiceName(selectedOrder.serviceType)}</p>
+                        {selectedOrder.serviceType === 'ai_human_review' && selectedOrder.aiTranscript && (
+                          <Badge variant="outline" className="bg-blue-100 text-blue-800 text-xs">
+                            AI Pre-processed
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <p className="font-medium text-gray-700">Duration</p>
@@ -396,6 +427,17 @@ export default function TTTCanadaOrdersPage() {
                       </p>
                     </div>
                   )}
+
+                  {/* Audio Player */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium text-gray-700 mb-3">Audio File</h4>
+                    <AudioPlayer
+                      audioUrl={selectedOrder.fileUrl}
+                      fileName={selectedOrder.fileName}
+                      title={`${selectedOrder.fileName} (${formatDuration(selectedOrder.duration)})`}
+                      onError={(error) => console.error('Audio player error:', error)}
+                    />
+                  </div>
                 </CardContent>
               </Card>
 
@@ -405,16 +447,44 @@ export default function TTTCanadaOrdersPage() {
                   <CardTitle>Canadian Specialized Transcription</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* AI Transcript Section for orders with AI preprocessing */}
+                  {selectedOrder?.aiTranscript && (
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          AI-Generated Transcript (Reference)
+                        </label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setTranscriptionText(selectedOrder.aiTranscript || '')}
+                          disabled={selectedOrder?.status === 'completed'}
+                        >
+                          Use as Starting Point
+                        </Button>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <p className="text-sm text-blue-900 whitespace-pre-wrap">{selectedOrder.aiTranscript}</p>
+                      </div>
+                      {selectedOrder.confidence && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          AI Confidence: {Math.round(selectedOrder.confidence * 100)}%
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Transcription Text *
+                      {selectedOrder?.aiTranscript ? 'Final Transcription (Edit or Replace AI Version) *' : 'Transcription Text *'}
                     </label>
                     <Textarea
                       value={transcriptionText}
-                      onChange={(e) => setTranscriptionText(e.target.value)}
-                      placeholder="Enter the specialized Canadian transcription here..."
+                      onChange={(e) => handleTranscriptionChange(e.target.value)}
+                      placeholder={selectedOrder?.status === 'completed' ? 'This order has been completed.' : selectedOrder?.aiTranscript ? "Edit the AI transcript above or write your own transcription..." : "Enter the specialized Canadian transcription here..."}
                       rows={12}
                       className="w-full"
+                      disabled={selectedOrder?.status === 'completed'}
                     />
                   </div>
 
@@ -425,19 +495,25 @@ export default function TTTCanadaOrdersPage() {
                     <Textarea
                       value={adminNotes}
                       onChange={(e) => setAdminNotes(e.target.value)}
-                      placeholder="Add notes about Canadian service requirements, cultural considerations, etc..."
+                      placeholder={selectedOrder?.status === 'completed' ? 'Admin notes for this completed order.' : "Add notes about Canadian service requirements, cultural considerations, etc..."}
                       rows={3}
                       className="w-full"
+                      disabled={selectedOrder?.status === 'completed'}
                     />
                   </div>
 
                   <div className="flex gap-3 pt-4">
                     <Button
                       onClick={handleSubmitOrder}
-                      disabled={!transcriptionText.trim() || isSubmitting}
+                      disabled={!transcriptionText.trim() || isSubmitting || selectedOrder?.status === 'completed'}
                       className="flex items-center gap-2"
                     >
-                      {isSubmitting ? (
+                      {selectedOrder?.status === 'completed' ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Already Completed
+                        </>
+                      ) : isSubmitting ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                           Submitting...

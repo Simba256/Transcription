@@ -135,11 +135,42 @@ export async function POST(request: NextRequest) {
       throw new Error('No file source provided');
     }
 
+    // Store audio file in Firebase Storage and get download URL
+    let audioFileUrl = fileUrl;
+    if (!fileUrl && buffer) {
+      try {
+        console.log(`📤 Uploading ${fileName} to Firebase Storage (${buffer.length} bytes)...`);
+        
+        // Initialize Firebase Storage
+        const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+        const { storage } = await import('@/lib/firebase');
+        
+        // Create a unique path for the audio file
+        const audioPath = `ttt-canada-audio/${userId}/${Date.now()}-${fileName}`;
+        const audioRef = ref(storage, audioPath);
+        
+        // Upload the buffer
+        const uploadResult = await uploadBytes(audioRef, buffer);
+        audioFileUrl = await getDownloadURL(uploadResult.ref);
+        
+        console.log(`✅ Audio file uploaded successfully: ${audioFileUrl}`);
+      } catch (error) {
+        console.error('❌ Failed to upload audio file to Firebase Storage:', error);
+        // Fallback: store buffer in Firestore for small files (< 1MB)
+        if (buffer.length < 1024 * 1024) {
+          console.log('⚠️ Storing small file as buffer in Firestore as fallback');
+          audioFileUrl = `buffer:${fileName}`;
+        } else {
+          throw new Error('Failed to store audio file: too large for Firestore and Storage upload failed');
+        }
+      }
+    }
+
     // Create job entry immediately and start background processing
     const jobId = await createTTTCanadaJob({
       userId,
       fileName,
-      fileUrl: fileUrl || `buffer:${fileName}`,
+      fileUrl: audioFileUrl,
       fileSize,
       duration,
       serviceType,
@@ -150,7 +181,7 @@ export async function POST(request: NextRequest) {
         creditsBreakdown: creditsCalculation
       },
       status: 'processing',
-      buffer: fileBuffer ? Array.from(buffer) : null // Store buffer if provided
+      buffer: (audioFileUrl && audioFileUrl.startsWith('buffer:') && buffer.length < 1024 * 1024) ? Array.from(buffer) : null
     });
 
     // Deduct credits upfront for the service
@@ -293,8 +324,14 @@ async function createTTTCanadaJob(jobData: any): Promise<string> {
       status: jobData.status,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      // Don't store buffer in Firestore - too large
+      // Store buffer in Firestore only for small files or when explicitly provided
       hasBuffer: !!jobData.buffer
+    };
+    
+    // Add buffer to Firestore if provided (for small files)
+    if (jobData.buffer && Array.isArray(jobData.buffer)) {
+      console.log(`💾 Storing audio buffer in Firestore (${jobData.buffer.length} bytes)`);
+      jobDoc.buffer = jobData.buffer;
     };
     
     // Add optional fields only if they have values

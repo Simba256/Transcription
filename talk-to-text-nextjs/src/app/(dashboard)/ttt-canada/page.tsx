@@ -35,6 +35,62 @@ export default function TTTCanadaPage() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [uploadSuccess, setUploadSuccess] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('services');
+  const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
+
+  // Helper function to format dates properly
+  const formatOrderDate = (timestamp: any) => {
+    if (!timestamp) return 'Unknown';
+    try {
+      // Handle Firestore timestamp
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate().toLocaleString();
+      }
+      // Handle ISO string or regular Date
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
+  };
+
+  // Helper function to view transcript
+  const handleViewTranscript = (order: any) => {
+    console.log('🔍 Debugging order data structure:', order);
+    
+    // Try different possible transcript field locations
+    const transcript = 
+      order.result?.transcript ||           // Standard transcript field
+      order.result?.enhancedTranscript ||   // TTT Canada enhanced transcript
+      order.result?.baseTranscript ||       // TTT Canada base transcript
+      order.result?.humanReviewedTranscript || // TTT Canada human reviewed
+      order.result?.adminTranscription ||   // Admin transcription
+      order.adminTranscription ||           // Direct admin transcription
+      order.transcript;                     // Direct transcript field
+      
+    console.log('📝 Found transcript:', transcript ? `${transcript.substring(0, 100)}...` : 'None');
+    
+    if (transcript) {
+      setSelectedTranscript({
+        jobId: order.jobId,
+        fileName: order.fileName,
+        serviceType: order.serviceType,
+        transcript: transcript,
+        adminNotes: order.adminNotes || order.result?.reviewerNotes,
+        completedAt: order.completedAt || order.result?.completedAt
+      });
+    } else {
+      console.error('❌ No transcript found in order:', {
+        hasResult: !!order.result,
+        resultKeys: order.result ? Object.keys(order.result) : [],
+        orderKeys: Object.keys(order)
+      });
+      alert('No transcript available for this order. Please check the console for debugging information.');
+    }
+  };
 
   const handleUploadSuccess = (result: any) => {
     setUploadSuccess(result);
@@ -204,21 +260,21 @@ export default function TTTCanadaPage() {
     <>
       <Header />
       
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8 bg-white dark:bg-gray-900">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           
           {/* Hero Section */}
           <div className="text-center mb-12">
             <div className="flex items-center justify-center gap-2 mb-4">
               <MapPin className="h-6 w-6 text-red-600" />
-              <h1 className="text-4xl font-bold text-gray-900">TalkToText Canada</h1>
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">TalkToText Canada</h1>
               <MapPin className="h-6 w-6 text-red-600" />
             </div>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
               Premium transcription services for Canadian legal, academic, and Indigenous communities. 
               Culturally aware, legally compliant, and academically rigorous.
             </p>
-            <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500">
+            <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500 dark:text-gray-400">
               <div className="flex items-center gap-1">
                 <span className="text-red-600">🍁</span>
                 <span>PIPEDA Compliant</span>
@@ -276,14 +332,14 @@ export default function TTTCanadaPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-lg font-bold text-red-600">{service.price}</div>
-                          <div className="text-xs text-gray-500">per audio minute</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">per audio minute</div>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-1">
                         {service.features.map((feature, index) => (
-                          <li key={index} className="text-sm text-gray-600 flex items-center gap-2">
+                          <li key={index} className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div>
                             {feature}
                           </li>
@@ -303,10 +359,10 @@ export default function TTTCanadaPage() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {addOns.map((addon) => (
-                      <div key={addon.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                      <div key={addon.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700">
                         <div>
                           <div className="font-medium">{addon.name}</div>
-                          <div className="text-sm text-gray-600">{addon.description}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">{addon.description}</div>
                         </div>
                         <div className="text-sm font-medium text-red-600">{addon.price}</div>
                       </div>
@@ -329,7 +385,7 @@ export default function TTTCanadaPage() {
                           {area.icon}
                         </div>
                         <h3 className="font-semibold mb-2">{area.name}</h3>
-                        <ul className="text-sm text-gray-600 space-y-1">
+                        <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
                           {area.services.map((service, serviceIndex) => (
                             <li key={serviceIndex}>{service}</li>
                           ))}
@@ -371,13 +427,13 @@ export default function TTTCanadaPage() {
                   {loadingOrders ? (
                     <div className="text-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Loading your orders...</p>
+                      <p className="text-gray-600 dark:text-gray-300">Loading your orders...</p>
                     </div>
                   ) : orders.length === 0 ? (
                     <div className="text-center py-12">
                       <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
                       <h3 className="text-lg font-medium mb-2">No orders yet</h3>
-                      <p className="text-gray-600 mb-6">
+                      <p className="text-gray-600 dark:text-gray-300 mb-6">
                         Your Canadian transcription orders will appear here
                       </p>
                       <Button 
@@ -418,14 +474,14 @@ export default function TTTCanadaPage() {
                                       ✅ Completed
                                     </Badge>
                                   )}
-                                  <span className="text-sm text-gray-500">
+                                  <span className="text-sm text-gray-500 dark:text-gray-400">
                                     Job ID: {order.jobId}
                                   </span>
                                 </div>
                                 <h4 className="font-medium">
                                   {order.serviceType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h4>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gray-600 dark:text-gray-300">
                                   {order.message || 'Transcription completed successfully'}
                                 </p>
                                 {order.pricing && (
@@ -435,8 +491,8 @@ export default function TTTCanadaPage() {
                                   </p>
                                 )}
                                 {order.createdAt && (
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    Ordered: {new Date(order.createdAt).toLocaleString()}
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Ordered: {formatOrderDate(order.createdAt)}
                                   </p>
                                 )}
                               </div>
@@ -445,16 +501,13 @@ export default function TTTCanadaPage() {
                                   variant="outline" 
                                   size="sm"
                                   className="mb-2"
-                                  onClick={() => {
-                                    // Navigate to transcript view or download
-                                    console.log('View transcript for job:', order.jobId);
-                                  }}
+                                  onClick={() => handleViewTranscript(order)}
                                 >
                                   <ExternalLink className="h-4 w-4 mr-1" />
                                   View Transcript
                                 </Button>
                                 {order.result && (
-                                  <div className="text-sm text-gray-500">
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
                                     {order.result.transcript?.length || 0} characters
                                   </div>
                                 )}
@@ -462,9 +515,9 @@ export default function TTTCanadaPage() {
                             </div>
                             
                             {order.result?.transcript && (
-                              <div className="mt-4 p-3 bg-gray-50 rounded border">
+                              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded border dark:border-gray-700">
                                 <h5 className="text-sm font-medium mb-2">Preview:</h5>
-                                <p className="text-sm text-gray-700">
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
                                   {order.result.transcript.substring(0, 200)}
                                   {order.result.transcript.length > 200 && '...'}
                                 </p>
@@ -491,27 +544,27 @@ export default function TTTCanadaPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 cursor-pointer">
+                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 cursor-pointer">
                       <Scale className="h-8 w-8 mx-auto mb-3 text-red-600" />
                       <h3 className="font-medium mb-2">Legal Templates</h3>
-                      <p className="text-sm text-gray-600">Court documents, legal memos, depositions</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Court documents, legal memos, depositions</p>
                     </div>
                     
-                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 cursor-pointer">
+                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 cursor-pointer">
                       <GraduationCap className="h-8 w-8 mx-auto mb-3 text-red-600" />
                       <h3 className="font-medium mb-2">Academic Templates</h3>
-                      <p className="text-sm text-gray-600">Research interviews, thesis transcripts</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Research interviews, thesis transcripts</p>
                     </div>
                     
-                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 cursor-pointer">
+                    <div className="border rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-700 cursor-pointer">
                       <Building className="h-8 w-8 mx-auto mb-3 text-red-600" />
                       <h3 className="font-medium mb-2">Corporate Templates</h3>
-                      <p className="text-sm text-gray-600">Meeting minutes, training materials</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Meeting minutes, training materials</p>
                     </div>
                   </div>
                   
-                  <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm text-yellow-800">
+                  <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
                       <strong>Custom Template Setup:</strong> $25 CAD one-time fee. 
                       Contact us to create templates matching your organization's specific formatting requirements.
                     </p>
@@ -524,6 +577,81 @@ export default function TTTCanadaPage() {
       </main>
 
       <Footer />
+
+      {/* Transcript Viewer Modal */}
+      {selectedTranscript && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
+              <div>
+                <h3 className="text-lg font-semibold">Transcript: {selectedTranscript.fileName}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Service: {selectedTranscript.serviceType} | Job ID: {selectedTranscript.jobId}
+                </p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setSelectedTranscript(null)}
+              >
+                ✕ Close
+              </Button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              <div className="prose prose-sm max-w-none dark:prose-invert">
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {selectedTranscript.transcript}
+                </div>
+              </div>
+              
+              {selectedTranscript.adminNotes && (
+                <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border dark:border-blue-800">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Admin Notes:</h4>
+                  <p className="text-sm text-blue-800 dark:text-blue-200 whitespace-pre-wrap">
+                    {selectedTranscript.adminNotes}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {selectedTranscript.completedAt && (
+                  <span>Completed: {formatOrderDate(selectedTranscript.completedAt)}</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedTranscript.transcript);
+                    alert('Transcript copied to clipboard!');
+                  }}
+                >
+                  📋 Copy
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    const element = document.createElement('a');
+                    const file = new Blob([selectedTranscript.transcript], { type: 'text/plain' });
+                    element.href = URL.createObjectURL(file);
+                    element.download = `${selectedTranscript.fileName}-transcript.txt`;
+                    document.body.appendChild(element);
+                    element.click();
+                    document.body.removeChild(element);
+                  }}
+                >
+                  💾 Download
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

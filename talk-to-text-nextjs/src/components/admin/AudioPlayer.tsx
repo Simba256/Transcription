@@ -32,6 +32,7 @@ export default function AudioPlayer({ audioUrl, fileName, title, onError }: Audi
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -83,30 +84,60 @@ export default function AudioPlayer({ audioUrl, fileName, title, onError }: Audi
 
   const togglePlayPause = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || isTransitioning) return;
+
+    setIsTransitioning(true);
+    setError(null); // Clear any previous errors
 
     try {
       if (isPlaying) {
         audio.pause();
         setIsPlaying(false);
       } else {
+        // Ensure audio is ready before playing
+        if (audio.readyState < 2) { // HAVE_CURRENT_DATA
+          console.log('⏳ Audio not ready, waiting...');
+          await new Promise((resolve, reject) => {
+            const onCanPlay = () => {
+              audio.removeEventListener('canplay', onCanPlay);
+              audio.removeEventListener('error', onError);
+              resolve(true);
+            };
+            const onError = () => {
+              audio.removeEventListener('canplay', onCanPlay);
+              audio.removeEventListener('error', onError);
+              reject(new Error('Audio failed to load'));
+            };
+            audio.addEventListener('canplay', onCanPlay);
+            audio.addEventListener('error', onError);
+          });
+        }
+        
         await audio.play();
         setIsPlaying(true);
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('Error controlling audio playback:', error);
       setError('Failed to play audio');
+      setIsPlaying(false);
+    } finally {
+      setIsTransitioning(false);
     }
   };
 
   const stopAudio = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || isTransitioning) return;
 
-    audio.pause();
-    audio.currentTime = 0;
-    setIsPlaying(false);
-    setCurrentTime(0);
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setError(null);
+    } catch (error) {
+      console.error('Error stopping audio:', error);
+    }
   };
 
   const skipBackward = () => {
@@ -256,10 +287,10 @@ export default function AudioPlayer({ audioUrl, fileName, title, onError }: Audi
 
         <Button
           onClick={togglePlayPause}
-          disabled={isLoading}
+          disabled={isLoading || isTransitioning}
           className="px-4"
         >
-          {isLoading ? (
+          {isLoading || isTransitioning ? (
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : isPlaying ? (
             <Pause className="w-4 h-4" />

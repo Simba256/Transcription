@@ -290,9 +290,9 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
     return (
       <Card>
         <CardContent className="text-center py-12">
-          <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+          <FileText className="h-16 w-16 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
           <h3 className="text-lg font-medium mb-2">Select a Service First</h3>
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-300">
             Choose a TTT Canada service from the options above to begin uploading
           </p>
         </CardContent>
@@ -335,7 +335,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
               }`}
             >
               <input {...getInputProps()} />
-              <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+              <Upload className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
               {isDragActive ? (
                 <p className="text-red-600 font-medium">Drop your file here...</p>
               ) : (
@@ -343,7 +343,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <p className="text-lg font-medium mb-2">
                     Drag & drop your audio file, or click to browse
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     MP3, WAV, M4A, MP4, FLAC and other formats supported (max 500MB)
                   </p>
                 </>
@@ -356,7 +356,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <FileText className="h-8 w-8 text-red-600" />
                   <div>
                     <p className="font-medium">{uploadedFile.name}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
                       {duration > 0 && ` • ${duration} minutes`}
                     </p>
@@ -436,7 +436,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">Timestamps</p>
-                      <p className="text-sm text-gray-600">Precise time markers</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Precise time markers</p>
                     </div>
                     <div className="text-right">
                       <p className="font-medium">+25 credits/min</p>
@@ -454,7 +454,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">Anonymization</p>
-                      <p className="text-sm text-gray-600">Remove personal identifiers</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Remove personal identifiers</p>
                     </div>
                     <div className="text-right">
                       <p className="font-medium">+35 credits/min</p>
@@ -472,7 +472,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">Custom Template</p>
-                      <p className="text-sm text-gray-600">Branded formatting</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Branded formatting</p>
                     </div>
                     <div className="text-right">
                       <p className="font-medium">+2500 credits setup</p>
@@ -490,7 +490,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">Rush Delivery</p>
-                      <p className="text-sm text-gray-600">24-hour turnaround</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">24-hour turnaround</p>
                     </div>
                     <div className="text-right">
                       <p className="font-medium">+50 credits/min</p>
@@ -504,14 +504,14 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
 
           {/* Pricing Summary */}
           {pricing && (
-            <Card className={`border-2 ${pricing.hasEnoughCredits ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+            <Card className={`border-2 ${pricing.hasEnoughCredits ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
               <CardHeader>
-                <CardTitle className={`flex items-center gap-2 ${pricing.hasEnoughCredits ? 'text-green-800' : 'text-red-800'}`}>
+                <CardTitle className={`flex items-center gap-2 ${pricing.hasEnoughCredits ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
                   <DollarSign className="h-5 w-5" />
                   Credit Cost Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className={pricing.hasEnoughCredits ? 'text-green-800' : 'text-red-800'}>
+              <CardContent className={pricing.hasEnoughCredits ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}>
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Base Service ({pricing.duration} min)</span>
@@ -539,7 +539,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                       <span>{creditBalance?.balance || 0} credits</span>
                     </div>
                     {!pricing.hasEnoughCredits && (
-                      <div className="flex justify-between text-sm font-medium mt-2 pt-2 border-t border-red-300">
+                      <div className="flex justify-between text-sm font-medium mt-2 pt-2 border-t border-red-300 dark:border-red-700">
                         <span>Credits Needed</span>
                         <span>{pricing.totalCredits - (creditBalance?.balance || 0)} more</span>
                       </div>
@@ -566,7 +566,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-medium">Ready to submit?</p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
                     Your file will be processed securely on Canadian servers
                   </p>
                 </div>
