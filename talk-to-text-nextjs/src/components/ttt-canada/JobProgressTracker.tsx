@@ -90,6 +90,31 @@ export default function JobProgressTracker({
     setIsPolling(true);
   };
 
+  // Prefer DOCX URLs produced by backend
+  const getDocxUrl = (result: any, mode: 'final' | 'draft' = 'final'): string | null => {
+    const files = result?.files || {};
+    if (mode === 'final') {
+      return (
+        files.humanReviewedDocxUrl ||
+        files.enhancedDocxUrl ||
+        files.baseDocxUrl ||
+        files.anonymizedDocxUrl ||
+        null
+      );
+    }
+    // draft mode
+    return files.enhancedDocxUrl || files.baseDocxUrl || null;
+  };
+
+  const triggerDownload = (url: string, suggestedName?: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    if (suggestedName) a.download = suggestedName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'processing':
@@ -166,7 +191,7 @@ export default function JobProgressTracker({
               <Badge className={getStatusColor(jobStatus.status)}>
                 <span className="flex items-center gap-1">
                   {getStatusIcon(jobStatus.status)}
-                  {jobStatus.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {jobStatus.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                 </span>
               </Badge>
             )}
@@ -213,7 +238,26 @@ export default function JobProgressTracker({
                         <Eye className="h-3 w-3 mr-1" />
                         Preview AI Draft
                       </Button>
-                      <Button size="sm" variant="outline" className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700"
+                        onClick={() => {
+                          const url = getDocxUrl(jobStatus.result, 'draft');
+                          if (url) {
+                            triggerDownload(url);
+                          } else if (jobStatus.result?.enhancedTranscript || jobStatus.result?.baseTranscript) {
+                            const text = jobStatus.result?.enhancedTranscript || jobStatus.result?.baseTranscript;
+                            const element = document.createElement('a');
+                            const file = new Blob([text], { type: 'text/plain' });
+                            element.href = URL.createObjectURL(file);
+                            element.download = 'ai-draft-transcript.txt';
+                            document.body.appendChild(element);
+                            element.click();
+                            document.body.removeChild(element);
+                          }
+                        }}
+                      >
                         <Download className="h-3 w-3 mr-1" />
                         Download AI Draft
                       </Button>
@@ -248,11 +292,37 @@ export default function JobProgressTracker({
                       Your professionally reviewed transcript is ready for download.
                     </p>
                     <div className="flex gap-2">
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => {
+                          const url = getDocxUrl(jobStatus.result, 'final');
+                          if (url) {
+                            triggerDownload(url);
+                          } else if (jobStatus.result?.enhancedTranscript || jobStatus.result?.baseTranscript) {
+                            const text = jobStatus.result?.enhancedTranscript || jobStatus.result?.baseTranscript;
+                            const element = document.createElement('a');
+                            const file = new Blob([text], { type: 'text/plain' });
+                            element.href = URL.createObjectURL(file);
+                            element.download = 'transcript.txt';
+                            document.body.appendChild(element);
+                            element.click();
+                            document.body.removeChild(element);
+                          }
+                        }}
+                      >
                         <Download className="h-3 w-3 mr-1" />
                         Download Final Transcript
                       </Button>
-                      <Button size="sm" variant="outline" className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-700"
+                        onClick={() => {
+                          const url = getDocxUrl(jobStatus.result, 'final');
+                          if (url) window.open(url, '_blank');
+                        }}
+                      >
                         <Eye className="h-3 w-3 mr-1" />
                         View Online
                       </Button>

@@ -5,6 +5,9 @@
 
 import { speechmaticsService } from './speechmatics';
 import OpenAI from 'openai';
+import { generateDocx } from './docx-generator';
+import { storage } from './firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -34,6 +37,13 @@ export interface TTTCanadaResult {
   summary?: string;
   status: 'ai_draft_complete' | 'pending_human_review' | 'human_review_complete' | 'completed';
   humanReviewJobId?: string;
+  // New: locations for generated DOCX files
+  files?: {
+    baseDocxUrl?: string;
+    enhancedDocxUrl?: string;
+    humanReviewedDocxUrl?: string;
+    anonymizedDocxUrl?: string;
+  };
   metadata: {
     processingTime: number;
     confidenceScore: number;
@@ -82,8 +92,11 @@ export class TTTCanadaService {
           throw new Error(`Unsupported service type: ${config.serviceType}`);
       }
       
-      // Apply add-ons
-      result = await this.applyAddOns(result, config);
+  // Apply add-ons
+  result = await this.applyAddOns(result, config);
+
+  // Generate and upload DOCX files
+  result.files = await this.generateAndUploadDocxVariants(result, fileName, config);
       
       // Update metadata
       result.metadata.processingTime = Date.now() - startTime;
@@ -155,7 +168,7 @@ export class TTTCanadaService {
     });
     
     // Return AI draft with pending human review status
-    return {
+  return {
       baseTranscript,
       enhancedTranscript: aiDraftTranscript,
       status: 'pending_human_review',
@@ -221,6 +234,7 @@ export class TTTCanadaService {
       baseTranscript: rawTranscript,
       enhancedTranscript,
       speakers: this.extractSpeakerList(enhancedTranscript),
+      status: 'completed',
       metadata: {
         processingTime: 0,
         confidenceScore: 0.98,
@@ -280,6 +294,7 @@ export class TTTCanadaService {
     return {
       baseTranscript,
       enhancedTranscript,
+      status: 'completed',
       metadata: {
         processingTime: 0,
         confidenceScore: 0.93,
@@ -337,6 +352,7 @@ export class TTTCanadaService {
     return {
       baseTranscript,
       enhancedTranscript,
+      status: 'completed',
       metadata: {
         processingTime: 0,
         confidenceScore: 0.97,
@@ -378,6 +394,7 @@ export class TTTCanadaService {
     return {
       baseTranscript: '[Copy typing from source document]',
       enhancedTranscript,
+      status: 'completed',
       metadata: {
         processingTime: 0,
         confidenceScore: 0.92,
@@ -412,6 +429,68 @@ export class TTTCanadaService {
     }
     
     return result;
+  }
+
+  /**
+   * Generate DOCX variants (base, enhanced, humanReviewed, anonymized) and upload to Firebase Storage
+   */
+  private async generateAndUploadDocxVariants(
+    result: TTTCanadaResult,
+    fileName: string,
+    config: TTTCanadaServiceConfig
+  ): Promise<TTTCanadaResult['files']> {
+    // If Firebase Storage isn't configured, skip uploading safely
+    if (!storage) {
+      console.warn('Firebase Storage not initialized; skipping DOCX upload');
+      return {};
+    }
+
+    const baseTitle = `TTT Canada - ${config.serviceType.replace(/_/g, ' ')}`;
+    const basePathRoot = `ttt-canada-docs/${Date.now()}`;
+    const files: TTTCanadaResult['files'] = {};
+
+    // Helper to upload a single doc
+    const uploadDoc = async (docTitle: string, content: string, suffix: string) => {
+      const buffer = await generateDocx({
+        title: docTitle,
+        content,
+        footerNote: 'Talk-to-Text Canada — Confidential',
+        metadata: {
+          author: 'Talk-to-Text Canada',
+          subject: `${config.serviceType} transcript`,
+          keywords: ['transcription', 'Canada', 'TTT Canada'],
+        },
+      });
+      const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const path = `${basePathRoot}/${safeName.replace(/\.[^.]+$/, '')}_${suffix}.docx`;
+      const objectRef = ref(storage, path);
+      const snapshot = await uploadBytes(objectRef, buffer, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = await getDownloadURL(snapshot.ref);
+      return { url, path };
+    };
+
+    try {
+      if (result.baseTranscript) {
+        const { url } = await uploadDoc(`${baseTitle} — Base Transcript`, result.baseTranscript, 'base');
+        files.baseDocxUrl = url;
+      }
+      if (result.enhancedTranscript) {
+        const { url } = await uploadDoc(`${baseTitle} — Enhanced`, result.enhancedTranscript, 'enhanced');
+        files.enhancedDocxUrl = url;
+      }
+      if (result.humanReviewedTranscript) {
+        const { url } = await uploadDoc(`${baseTitle} — Human Reviewed`, result.humanReviewedTranscript, 'human');
+        files.humanReviewedDocxUrl = url;
+      }
+      if (result.anonymizedVersion) {
+        const { url } = await uploadDoc(`${baseTitle} — Anonymized`, result.anonymizedVersion, 'anonymized');
+        files.anonymizedDocxUrl = url;
+      }
+    } catch (e) {
+      console.error('Failed generating/uploading DOCX files:', e);
+    }
+
+    return files;
   }
   
   /**
@@ -578,7 +657,7 @@ export class TTTCanadaService {
     // 3. Update billing and credits
     // 4. Generate final formatted output
     
-    return {
+    const result: TTTCanadaResult = {
       baseTranscript: '',
       enhancedTranscript: '',
       humanReviewedTranscript,
@@ -592,6 +671,20 @@ export class TTTCanadaService {
         humanReviewCompletedAt: Date.now()
       }
     };
+
+    // Try to generate and upload the human-reviewed DOCX immediately
+    try {
+      const files = await this.generateAndUploadDocxVariants(result, `human_review_${humanReviewJobId}.txt`, {
+        serviceType: 'ai_human_review',
+        language: 'en-CA',
+        addOns: {},
+      } as any);
+      result.files = files;
+    } catch (e) {
+      console.warn('Could not upload human-reviewed DOCX:', e);
+    }
+
+    return result;
   }
 
   /**

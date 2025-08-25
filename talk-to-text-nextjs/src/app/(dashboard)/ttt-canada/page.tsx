@@ -37,6 +37,18 @@ export default function TTTCanadaPage() {
   const [activeTab, setActiveTab] = useState('services');
   const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
 
+  // Pick the best available transcript field from various result shapes
+  const deriveTranscript = (result: any): string | null => {
+    if (!result) return null;
+    return (
+      result.humanReviewedTranscript ||
+      result.enhancedTranscript ||
+      result.baseTranscript ||
+      result.transcript ||
+      null
+    );
+  };
+
   // Helper function to format dates properly
   const formatOrderDate = (timestamp: any) => {
     if (!timestamp) return 'Unknown';
@@ -63,22 +75,20 @@ export default function TTTCanadaPage() {
     
     // Try different possible transcript field locations
     const transcript = 
-      order.result?.transcript ||           // Standard transcript field
-      order.result?.enhancedTranscript ||   // TTT Canada enhanced transcript
-      order.result?.baseTranscript ||       // TTT Canada base transcript
-      order.result?.humanReviewedTranscript || // TTT Canada human reviewed
+      deriveTranscript(order.result) ||
       order.result?.adminTranscription ||   // Admin transcription
       order.adminTranscription ||           // Direct admin transcription
       order.transcript;                     // Direct transcript field
       
     console.log('📝 Found transcript:', transcript ? `${transcript.substring(0, 100)}...` : 'None');
     
-    if (transcript) {
+  if (transcript) {
       setSelectedTranscript({
         jobId: order.jobId,
         fileName: order.fileName,
         serviceType: order.serviceType,
         transcript: transcript,
+    files: order.result?.files,
         adminNotes: order.adminNotes || order.result?.reviewerNotes,
         completedAt: order.completedAt || order.result?.completedAt
       });
@@ -479,7 +489,7 @@ export default function TTTCanadaPage() {
                                   </span>
                                 </div>
                                 <h4 className="font-medium">
-                                  {order.serviceType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  {order.serviceType?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                                 </h4>
                                 <p className="text-sm text-gray-600 dark:text-gray-300">
                                   {order.message || 'Transcription completed successfully'}
@@ -508,18 +518,18 @@ export default function TTTCanadaPage() {
                                 </Button>
                                 {order.result && (
                                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {order.result.transcript?.length || 0} characters
+                                    {(() => { const t = deriveTranscript(order.result); return t ? t.length : 0; })()} characters
                                   </div>
                                 )}
                               </div>
                             </div>
                             
-                            {order.result?.transcript && (
+            {(() => { const t = deriveTranscript(order.result); return !!t; })() && (
                               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded border dark:border-gray-700">
                                 <h5 className="text-sm font-medium mb-2">Preview:</h5>
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                                  {order.result.transcript.substring(0, 200)}
-                                  {order.result.transcript.length > 200 && '...'}
+              {deriveTranscript(order.result)!.substring(0, 200)}
+              {deriveTranscript(order.result)!.length > 200 && '...'}
                                 </p>
                               </div>
                             )}
@@ -636,6 +646,23 @@ export default function TTTCanadaPage() {
                   variant="outline" 
                   size="sm"
                   onClick={() => {
+                    // If the order has docx URLs on the selected transcript, prefer them
+                    const possibleDocx = [
+                      selectedTranscript?.files?.humanReviewedDocxUrl,
+                      selectedTranscript?.files?.enhancedDocxUrl,
+                      selectedTranscript?.files?.baseDocxUrl,
+                      selectedTranscript?.files?.anonymizedDocxUrl,
+                    ].find(Boolean);
+                    if (possibleDocx) {
+                      const a = document.createElement('a');
+                      a.href = possibleDocx as string;
+                      a.download = `${selectedTranscript.fileName}-transcript.docx`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      return;
+                    }
+                    // Fallback to txt download
                     const element = document.createElement('a');
                     const file = new Blob([selectedTranscript.transcript], { type: 'text/plain' });
                     element.href = URL.createObjectURL(file);
