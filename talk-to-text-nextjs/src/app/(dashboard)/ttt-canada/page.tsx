@@ -31,7 +31,8 @@ import { TTT_CANADA_PRICING, TTT_CANADA_ADDONS, creditsToCad } from '@/lib/strip
 export default function TTTCanadaPage() {
   const { user, userProfile, refreshProfile } = useAuth();
   const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [orders, setOrders] = useState<any[]>([]);\n  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [uploadSuccess, setUploadSuccess] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('services');
 
