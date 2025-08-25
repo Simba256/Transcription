@@ -275,29 +275,66 @@ async function createTTTCanadaJob(jobData: any): Promise<string> {
   const jobId = `ttt-ca-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   try {
-    // Import Firebase functions
-    const { db } = await import('@/lib/firebase');
-    const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+    // Use Firebase Admin SDK for server-side operations
+    const admin = await import('firebase-admin');
     
-    // Store job in Firestore
-    const jobDoc = {
+    // Get admin database instance (should be initialized in auth-middleware)
+    const adminDb = admin.firestore();
+    
+    // Store job in Firestore using Admin SDK
+    // Remove undefined values to avoid Firestore errors
+    const jobDoc: any = {
       jobId,
       userId: jobData.userId,
       fileName: jobData.fileName,
       fileUrl: jobData.fileUrl,
       fileSize: jobData.fileSize,
-      duration: jobData.duration,
       serviceType: jobData.serviceType,
       status: jobData.status,
-      config: jobData.config,
-      pricing: jobData.pricing,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       // Don't store buffer in Firestore - too large
       hasBuffer: !!jobData.buffer
     };
     
-    await setDoc(doc(db, 'ttt_canada_jobs', jobId), jobDoc);
+    // Add optional fields only if they have values
+    if (jobData.duration !== undefined) {
+      jobDoc.duration = jobData.duration;
+    }
+    
+    if (jobData.config) {
+      // Clean config object to remove undefined values
+      const cleanConfig: any = {};
+      Object.keys(jobData.config).forEach(key => {
+        if (jobData.config[key] !== undefined) {
+          cleanConfig[key] = jobData.config[key];
+        }
+      });
+      if (Object.keys(cleanConfig).length > 0) {
+        jobDoc.config = cleanConfig;
+      }
+    }
+    
+    if (jobData.pricing) {
+      // Clean pricing object to remove undefined values
+      const cleanPricing: any = {};
+      Object.keys(jobData.pricing).forEach(key => {
+        if (jobData.pricing[key] !== undefined) {
+          cleanPricing[key] = jobData.pricing[key];
+        }
+      });
+      if (Object.keys(cleanPricing).length > 0) {
+        jobDoc.pricing = cleanPricing;
+      }
+    }
+    
+    console.log(`💾 Storing job document:`, {
+      ...jobDoc,
+      createdAt: '[ServerTimestamp]',
+      updatedAt: '[ServerTimestamp]'
+    });
+    
+    await adminDb.collection('ttt_canada_jobs').doc(jobId).set(jobDoc);
     
     console.log(`✅ TTT Canada job ${jobId} stored in Firestore`);
     
@@ -313,22 +350,31 @@ async function createTTTCanadaJob(jobData: any): Promise<string> {
  */
 async function updateTTTCanadaJobStatus(jobId: string, status: string, data?: any): Promise<void> {
   try {
-    // Import Firebase functions
-    const { db } = await import('@/lib/firebase');
-    const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+    // Use Firebase Admin SDK for server-side operations
+    const admin = await import('firebase-admin');
+    const adminDb = admin.firestore();
     
     // Update job status in Firestore
     const updateData: any = {
       status,
-      updatedAt: serverTimestamp()
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
     
-    // Add any additional data
+    // Add any additional data, filtering out undefined values
     if (data) {
-      Object.assign(updateData, data);
+      Object.keys(data).forEach(key => {
+        if (data[key] !== undefined) {
+          updateData[key] = data[key];
+        }
+      });
     }
     
-    await updateDoc(doc(db, 'ttt_canada_jobs', jobId), updateData);
+    console.log(`🔄 Updating job ${jobId} with:`, {
+      ...updateData,
+      updatedAt: '[ServerTimestamp]'
+    });
+    
+    await adminDb.collection('ttt_canada_jobs').doc(jobId).update(updateData);
     
     console.log(`✅ Job ${jobId} status updated to: ${status}`);
   } catch (error) {

@@ -49,18 +49,20 @@ export async function GET(request: NextRequest) {
  */
 async function getTTTCanadaJobStatus(jobId: string): Promise<any> {
   try {
-    // Import Firebase functions
-    const { db } = await import('@/lib/firebase');
-    const { doc, getDoc } = await import('firebase/firestore');
+    // Use Firebase Admin SDK for server-side operations
+    const admin = await import('firebase-admin');
+    const adminDb = admin.firestore();
     
     // Get job from Firestore
-    const jobDoc = await getDoc(doc(db, 'ttt_canada_jobs', jobId));
+    const jobDoc = await adminDb.collection('ttt_canada_jobs').doc(jobId).get();
     
-    if (!jobDoc.exists()) {
+    if (!jobDoc.exists) {
+      console.log(`📄 Job ${jobId} not found in Firestore`);
       return null;
     }
     
     const jobData = jobDoc.data();
+    console.log(`📄 Found job ${jobId} with status: ${jobData?.status}`);
     console.log(`📊 Retrieved job ${jobId} from Firestore with status: ${jobData.status}`);
     
     // Return job data with computed progress

@@ -273,9 +273,12 @@ export default function JobProgressTracker({
               </Alert>
             )}
 
-            {/* Last Update */}
+            {/* Order Time */}
             <p className="text-xs text-gray-500">
-              Last updated: {lastUpdate.toLocaleTimeString()}
+              {jobStatus?.createdAt 
+                ? `Ordered: ${new Date(jobStatus.createdAt).toLocaleString()}`
+                : `Last updated: ${lastUpdate.toLocaleTimeString()}`
+              }
             </p>
           </>
         )}

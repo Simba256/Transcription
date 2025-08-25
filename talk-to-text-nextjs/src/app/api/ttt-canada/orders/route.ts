@@ -10,37 +10,32 @@ export async function GET(request: NextRequest) {
     }
     const { userId } = authResult;
 
-    // Import Firebase functions
-    const { db } = await import('@/lib/firebase');
-    const { collection, query, where, orderBy, limit, getDocs } = await import('firebase/firestore');
+    // Use Firebase Admin SDK for server-side operations
+    const admin = await import('firebase-admin');
+    const adminDb = admin.firestore();
 
     // Get query parameters
     const { searchParams } = new URL(request.url);
     const limitParam = parseInt(searchParams.get('limit') || '50');
     const statusFilter = searchParams.get('status');
 
-    // Build query
-    let ordersQuery = query(
-      collection(db, 'ttt_canada_jobs'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(Math.min(limitParam, 100)) // Max 100 orders
-    );
-
-    // Add status filter if provided
+    // Build simple query using Admin SDK
+    console.log(`📋 Building query for user ${userId}, status filter: ${statusFilter}`);
+    
+    let ordersQuery = adminDb.collection('ttt_canada_jobs').where('userId', '==', userId);
+    
     if (statusFilter && ['processing', 'ai_processing', 'pending_human_review', 'completed', 'failed'].includes(statusFilter)) {
-      const { where: whereClause } = await import('firebase/firestore');
-      ordersQuery = query(
-        collection(db, 'ttt_canada_jobs'),
-        where('userId', '==', userId),
-        where('status', '==', statusFilter),
-        orderBy('createdAt', 'desc'),
-        limit(Math.min(limitParam, 100))
-      );
+      // Add status filter
+      ordersQuery = ordersQuery.where('status', '==', statusFilter);
     }
+    
+    // Limit results
+    ordersQuery = ordersQuery.limit(Math.min(limitParam, 100));
 
     // Execute query
-    const querySnapshot = await getDocs(ordersQuery);
+    console.log('🔍 Executing Firestore query...');
+    const querySnapshot = await ordersQuery.get();
+    console.log(`📊 Query returned ${querySnapshot.docs.length} documents`);
     
     const orders = querySnapshot.docs.map(doc => {
       const data = doc.data();
@@ -69,9 +64,20 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('TTT Canada orders fetch error:', error);
+    console.error('❌ TTT Canada orders fetch error:', error);
+    
+    // More detailed error logging
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch orders' },
+      { 
+        error: error instanceof Error ? error.message : 'Failed to fetch orders',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      },
       { status: 500 }
     );
   }
@@ -96,21 +102,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Import Firebase functions
-    const { db } = await import('@/lib/firebase');
-    const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+    // Use Firebase Admin SDK for server-side operations
+    const admin = await import('firebase-admin');
+    const adminDb = admin.firestore();
 
     // Update job status
     const updateData: any = {
       status,
-      updatedAt: serverTimestamp()
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
     if (data) {
       Object.assign(updateData, data);
     }
 
-    await updateDoc(doc(db, 'ttt_canada_jobs', jobId), updateData);
+    await adminDb.collection('ttt_canada_jobs').doc(jobId).update(updateData);
 
     return NextResponse.json({
       success: true,

@@ -63,13 +63,19 @@ export default function TTTCanadaPage() {
   };
 
   const loadOrders = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('👤 No user authenticated, skipping order loading');
+      setLoadingOrders(false);
+      return;
+    }
     
     try {
       setLoadingOrders(true);
+      console.log('📋 Starting to load TTT Canada orders...');
       
       // Get Firebase ID token for authentication
       const token = await user.getIdToken();
+      console.log('🔑 Got Firebase ID token');
       
       const response = await fetch('/api/ttt-canada/orders', {
         headers: {
@@ -78,17 +84,24 @@ export default function TTTCanadaPage() {
         }
       });
       
+      console.log('📡 API Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch orders');
+        const errorData = await response.text();
+        console.error('❌ API Error:', response.status, errorData);
+        throw new Error(`Failed to fetch orders: ${response.status} ${errorData}`);
       }
       
       const data = await response.json();
-      setOrders(data.orders || []);
+      console.log('📊 API Response data:', data);
       
-      console.log(`📋 Loaded ${data.orders?.length || 0} TTT Canada orders`);
+      setOrders(data.orders || []);
+      console.log(`✅ Loaded ${data.orders?.length || 0} TTT Canada orders`);
       
     } catch (error) {
-      console.error('Failed to load orders:', error);
+      console.error('❌ Failed to load orders:', error);
+      // Set empty orders array on error and show empty state
+      setOrders([]);
     } finally {
       setLoadingOrders(false);
     }
@@ -419,6 +432,11 @@ export default function TTTCanadaPage() {
                                   <p className="text-sm font-medium text-red-600">
                                     Total: ${order.pricing.totalCAD.toFixed(2)} CAD 
                                     (${order.pricing.totalUSD.toFixed(2)} USD)
+                                  </p>
+                                )}
+                                {order.createdAt && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Ordered: {new Date(order.createdAt).toLocaleString()}
                                   </p>
                                 )}
                               </div>
