@@ -8,6 +8,7 @@ import OpenAI from 'openai';
 import { generateDocx } from './docx-generator';
 import { storage } from './firebase';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { runOCR, estimatePagesFromText } from './ocr';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -53,6 +54,7 @@ export interface TTTCanadaResult {
     aiDraftCompletedAt?: number;
     humanReviewRequestedAt?: number;
     humanReviewCompletedAt?: number;
+  pages?: number;
   };
 }
 
@@ -372,11 +374,25 @@ export class TTTCanadaService {
     fileName: string,
     config: TTTCanadaServiceConfig
   ): Promise<TTTCanadaResult> {
-    
-    // For copy typing, we might receive an image/PDF instead of audio
-    // This would use OpenAI Vision API for OCR + enhancement
-    
-    const enhancedTranscript = await this.enhanceWithOpenAI('', {
+    // Copy typing: OCR from image/PDF using Google Vision, then enhance/cleanup
+    const buffer = (audioFile instanceof Buffer)
+      ? audioFile
+      : Buffer.from(await (audioFile as File).arrayBuffer());
+
+    let ocrText = '';
+    let pages = 1;
+    try {
+      const ocr = await runOCR(buffer, fileName);
+      ocrText = ocr.text || '';
+      pages = ocr.pages || estimatePagesFromText(ocrText);
+      console.log(`📝 OCR extracted ${ocrText.split(' ').length} words across ~${pages} page(s)`);
+    } catch (e) {
+      console.warn('OCR failed, falling back to empty text:', e);
+      ocrText = '';
+      pages = 1;
+    }
+
+    const enhancedTranscript = await this.enhanceWithOpenAI(ocrText, {
       task: 'copy_typing_enhancement',
       instructions: `
         Clean up and format this scanned/handwritten text:
@@ -392,7 +408,7 @@ export class TTTCanadaService {
     });
     
     return {
-      baseTranscript: '[Copy typing from source document]',
+      baseTranscript: ocrText || '[Copy typing from source document]',
       enhancedTranscript,
       status: 'completed',
       metadata: {
@@ -400,7 +416,8 @@ export class TTTCanadaService {
         confidenceScore: 0.92,
         wordCount: enhancedTranscript.split(' ').length,
         serviceType: 'Copy Typing',
-        addOnsApplied: ['ocr_enhancement']
+        addOnsApplied: ['ocr_enhancement'],
+        pages
       }
     };
   }

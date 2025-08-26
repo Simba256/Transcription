@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       fileSize: { required: true, type: 'number' },
       serviceType: { required: true, type: 'string' },
       language: { type: 'string', minLength: 2, maxLength: 10 },
-      addOns: { type: 'object' }
+  addOns: { }
     });
 
     if (!validationResult.success) {
@@ -73,10 +73,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate credits needed
-    const durationMinutes = Math.ceil((duration || 0) / 60);
+    // For copy_typing: treat duration field as number of pages if provided by client, otherwise estimate as 1.
+    let units = Math.ceil((duration || 0) / 60);
+    if (serviceType === 'copy_typing') {
+      // Duration is not applicable; treat as pages. If client passed pages in duration, keep it; otherwise at least 1 page.
+      units = Math.max(1, Math.ceil(duration || 1));
+    }
     const creditsCalculation = calculateTTTCanadaCredits(
       serviceType as any,
-      durationMinutes,
+      units,
       {
         timestamps: addOns.timestamps || false,
         anonymization: addOns.anonymization || false,
@@ -99,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate legacy pricing for compatibility
-    const pricing = calculateTTTCanadaPricing(serviceType, duration || 0, addOns);
+  const pricing = calculateTTTCanadaPricing(serviceType, duration || 0, addOns);
 
     const config: TTTCanadaServiceConfig = {
       serviceType: serviceType as any,
@@ -137,9 +142,9 @@ export async function POST(request: NextRequest) {
 
     // Store audio file in Firebase Storage and get download URL
     let audioFileUrl = fileUrl;
-    if (!fileUrl && buffer) {
+  if (!fileUrl && buffer) {
       try {
-        console.log(`📤 Uploading ${fileName} to Firebase Storage (${buffer.length} bytes)...`);
+  console.log(`📤 Uploading ${fileName} to Firebase Storage (${buffer.length} bytes)...`);
         
         // Initialize Firebase Storage
         const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
@@ -167,7 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create job entry immediately and start background processing
-    const jobId = await createTTTCanadaJob({
+  const jobId = await createTTTCanadaJob({
       userId,
       fileName,
       fileUrl: audioFileUrl,
@@ -190,14 +195,7 @@ export async function POST(request: NextRequest) {
       creditsCalculation.totalCredits,
       `TTT Canada ${serviceType} transcription - ${fileName}`,
       jobId,
-      {
-        serviceType: 'ttt_canada',
-        serviceSubtype: serviceType,
-        fileName,
-        duration: durationMinutes,
-        baseCredits: creditsCalculation.baseCredits,
-        addOnCredits: creditsCalculation.addOnCredits
-      }
+      { durationMinutes: units }
     );
 
     // Start background processing (don't await)
@@ -256,7 +254,7 @@ function calculateTTTCanadaPricing(
     'verbatim_multispeaker': 2.25,
     'indigenous_oral': 2.50,
     'legal_dictation': 1.85,
-    'copy_typing': 2.80 // Assuming per-minute for audio, would be per-page for documents
+    'copy_typing': 2.80 // For copy typing, this function is legacy; credits path uses per-page already
   };
 
   const basePrice = (basePrices[serviceType] || 1.75) * durationMinutes;

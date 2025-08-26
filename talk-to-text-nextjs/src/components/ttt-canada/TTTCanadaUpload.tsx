@@ -91,6 +91,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
   const [language, setLanguage] = useState<'en-CA' | 'fr-CA' | 'indigenous'>('en-CA');
   const [clientInstructions, setClientInstructions] = useState('');
   const [specialRequirements, setSpecialRequirements] = useState('');
+  const [pageCount, setPageCount] = useState<number>(1);
   
   // Add-ons
   const [addOns, setAddOns] = useState({
@@ -124,17 +125,26 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
     setUploadedFile(file);
     
     try {
-      const detectedDuration = await getCachedAudioDuration(file);
-      setDuration(detectedDuration);
+      if (selectedService === 'copy_typing') {
+        // No audio duration for copy typing
+        setDuration(0);
+        setPageCount(prev => Math.max(1, prev));
+      } else {
+        const detectedDuration = await getCachedAudioDuration(file);
+        setDuration(detectedDuration);
+      }
     } catch (error) {
       console.error('Duration detection error:', error);
       setDuration(0);
     }
-  }, []);
+  }, [selectedService]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
+    accept: selectedService === 'copy_typing' ? {
+      'application/pdf': ['.pdf'],
+      'image/*': ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp']
+    } : {
       'audio/*': ['.mp3', '.wav', '.m4a', '.mp4', '.flac', '.aac', '.ogg'],
       'video/*': ['.mp4', '.mov', '.avi', '.mkv']
     },
@@ -156,15 +166,18 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
   };
 
   const calculatePricing = () => {
-    if (!selectedService || !duration) return null;
+    if (!selectedService) return null;
     
     const service = serviceConfigs[selectedService];
     if (!service) return null;
 
-    // Calculate credits using the new system
+    // Calculate credits (minutes for audio services, pages for copy typing)
+    const units = selectedService === 'copy_typing' ? Math.max(1, pageCount) : duration;
+    if (!units) return null;
+
     const creditsCalculation = calculateTTTCanadaCredits(
       selectedService as keyof typeof TTT_CANADA_PRICING,
-      duration,
+      units,
       addOns
     );
 
@@ -173,7 +186,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
 
     return {
       service,
-      duration,
+  duration: units,
       baseCredits: creditsCalculation.baseCredits,
       addOnCredits: creditsCalculation.addOnCredits,
       totalCredits: creditsCalculation.totalCredits,
@@ -226,7 +239,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
         fileName: uploadedFile.name,
         fileBuffer: buffer, // Send buffer directly
         fileSize: uploadedFile.size,
-        duration: duration * 60, // Convert to seconds
+        duration: selectedService === 'copy_typing' ? Math.max(1, pageCount) : duration * 60, // pages for copy typing; seconds for others
         serviceType: selectedService,
         language,
         addOns,
@@ -267,12 +280,13 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
       setDuration(0);
       setClientInstructions('');
       setSpecialRequirements('');
-      setAddOns({
+  setAddOns({
         timestamps: false,
         anonymization: false,
         customTemplate: false,
         rushDelivery: false
       });
+  setPageCount(1);
 
     } catch (error) {
       console.error('TTT Canada upload error:', error);
@@ -303,7 +317,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
   return (
     <div className="space-y-6">
       {/* Selected Service Display */}
-      <Card className="border-red-200 bg-red-50">
+  <Card className="border-red-200 bg-red-50">
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             <MapPin className="h-5 w-5 text-red-600" />
@@ -312,7 +326,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                 {serviceConfigs[selectedService]?.name}
               </h4>
               <p className="text-sm text-red-700">
-                {serviceConfigs[selectedService]?.price} credits per minute
+        {serviceConfigs[selectedService]?.price} credits per {selectedService === 'copy_typing' ? 'page' : 'minute'}
               </p>
             </div>
           </div>
@@ -322,7 +336,9 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
       {/* File Upload */}
       <Card>
         <CardHeader>
-          <CardTitle>Upload Your Audio File</CardTitle>
+          <CardTitle>
+            {selectedService === 'copy_typing' ? 'Upload Your Document or Image' : 'Upload Your Audio File'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {!uploadedFile ? (
@@ -341,10 +357,12 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
               ) : (
                 <>
                   <p className="text-lg font-medium mb-2">
-                    Drag & drop your audio file, or click to browse
+                    {selectedService === 'copy_typing' ? 'Drag & drop your PDF or image, or click to browse' : 'Drag & drop your audio file, or click to browse'}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    MP3, WAV, M4A, MP4, FLAC and other formats supported (max 500MB)
+                    {selectedService === 'copy_typing' 
+                      ? 'PDF, JPG, PNG, TIFF supported (max 500MB)'
+                      : 'MP3, WAV, M4A, MP4, FLAC and other formats supported (max 500MB)'}
                   </p>
                 </>
               )}
@@ -358,7 +376,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                     <p className="font-medium">{uploadedFile.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
-                      {duration > 0 && ` • ${duration} minutes`}
+                      {selectedService !== 'copy_typing' && duration > 0 && ` • ${duration} minutes`}
                     </p>
                   </div>
                 </div>
@@ -379,24 +397,37 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
       {/* Service Options */}
       {uploadedFile && (
         <>
-          {/* Language Selection */}
+          {/* Language Selection / Page Count for Copy Typing */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Language & Instructions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label>Primary Language</Label>
-                <select 
-                  value={language} 
-                  onChange={(e) => setLanguage(e.target.value as any)}
-                  className="w-full mt-1 p-2 border rounded-md"
-                >
-                  <option value="en-CA">English (Canadian)</option>
-                  <option value="fr-CA">French (Canadian)</option>
-                  <option value="indigenous">Indigenous Languages</option>
-                </select>
-              </div>
+              {selectedService !== 'copy_typing' ? (
+                <div>
+                  <Label>Primary Language</Label>
+                  <select 
+                    value={language} 
+                    onChange={(e) => setLanguage(e.target.value as any)}
+                    className="w-full mt-1 p-2 border rounded-md"
+                  >
+                    <option value="en-CA">English (Canadian)</option>
+                    <option value="fr-CA">French (Canadian)</option>
+                    <option value="indigenous">Indigenous Languages</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Estimated Pages</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={pageCount}
+                    onChange={(e) => setPageCount(Math.max(1, Number(e.target.value || 1)))}
+                    className="w-full mt-1"
+                  />
+                </div>
+              )}
 
               <div>
                 <Label>Client Instructions (Optional)</Label>
@@ -439,7 +470,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                       <p className="text-sm text-gray-600 dark:text-gray-300">Precise time markers</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">+25 credits/min</p>
+                      <p className="font-medium">+25 credits/{selectedService === 'copy_typing' ? 'page' : 'min'}</p>
                       {addOns.timestamps && <CheckCircle className="h-4 w-4 text-red-600 mt-1" />}
                     </div>
                   </div>
@@ -457,7 +488,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                       <p className="text-sm text-gray-600 dark:text-gray-300">Remove personal identifiers</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">+35 credits/min</p>
+                      <p className="font-medium">+35 credits/{selectedService === 'copy_typing' ? 'page' : 'min'}</p>
                       {addOns.anonymization && <CheckCircle className="h-4 w-4 text-red-600 mt-1" />}
                     </div>
                   </div>
@@ -493,7 +524,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                       <p className="text-sm text-gray-600 dark:text-gray-300">24-hour turnaround</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">+50 credits/min</p>
+                      <p className="font-medium">+50 credits/{selectedService === 'copy_typing' ? 'page' : 'min'}</p>
                       {addOns.rushDelivery && <CheckCircle className="h-4 w-4 text-red-600 mt-1" />}
                     </div>
                   </div>
@@ -514,7 +545,7 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
               <CardContent className={pricing.hasEnoughCredits ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Base Service ({pricing.duration} min)</span>
+                    <span>Base Service ({pricing.duration} {selectedService === 'copy_typing' ? 'page(s)' : 'min'})</span>
                     <span>{pricing.baseCredits} credits</span>
                   </div>
                   
@@ -571,17 +602,17 @@ export default function TTTCanadaUpload({ selectedService, onUploadSuccess }: TT
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  {pricing && !pricing.hasEnoughCredits ? (
+                  {pricing ? (!pricing.hasEnoughCredits ? (
                     <Button
                       onClick={() => window.open('/credits', '_blank')}
                       className="bg-yellow-600 hover:bg-yellow-700"
                     >
                       Buy Credits
                     </Button>
-                  ) : null}
+                  ) : null) : null}
                   <Button
                     onClick={handleSubmit}
-                    disabled={isUploading || !uploadedFile || (pricing && !pricing.hasEnoughCredits)}
+                    disabled={Boolean(isUploading || !uploadedFile || (pricing ? !pricing.hasEnoughCredits : false))}
                     className="bg-red-600 hover:bg-red-700 min-w-[120px]"
                   >
                     {isUploading ? (

@@ -214,6 +214,15 @@ export default function TTTCanadaPage() {
       description: 'Canadian legal document formatting',
       features: ['Legal terminology accuracy', 'Canadian citation standards', 'Professional legal format', 'Lawyer reviewed']
     }
+    ,
+    {
+      id: 'copy_typing',
+      name: 'Copy Typing',
+      price: `${TTT_CANADA_PRICING.copy_typing} credits/page`,
+      icon: <FileText className="h-6 w-6" />,
+      description: 'OCR-powered document digitization from PDFs and images',
+      features: ['Google Vision OCR', 'OpenAI cleanup & formatting', 'DOCX export', 'Anonymization optional']
+    }
   ];
 
   const addOns = [
@@ -313,14 +322,18 @@ export default function TTTCanadaPage() {
               
               {/* Service Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {services.map((service) => (
-                  <Card 
-                    key={service.id} 
-                    className={`cursor-pointer transition-all hover:shadow-lg ${
-                      selectedService === service.id ? 'ring-2 ring-red-600' : ''
-                    } ${service.recommended ? 'ring-1 ring-yellow-400' : ''}`}
-                    onClick={() => setSelectedService(service.id)}
-                  >
+                {services.map((service, index) => {
+                  const isLastOdd = index === services.length - 1 && services.length % 2 === 1;
+                  return (
+                    <Card 
+                      key={service.id} 
+                      className={`cursor-pointer transition-all hover:shadow-lg ${
+                        selectedService === service.id ? 'ring-2 ring-red-600' : ''
+                      } ${service.recommended ? 'ring-1 ring-yellow-400' : ''} ${
+                        isLastOdd ? 'md:col-span-2 md:max-w-xl md:justify-self-center' : ''
+                      }`}
+                      onClick={() => setSelectedService(service.id)}
+                    >
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -342,7 +355,9 @@ export default function TTTCanadaPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-lg font-bold text-red-600">{service.price}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">per audio minute</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {service.id === 'copy_typing' ? 'per page' : 'per audio minute'}
+                          </div>
                         </div>
                       </div>
                     </CardHeader>
@@ -356,8 +371,9 @@ export default function TTTCanadaPage() {
                         ))}
                       </ul>
                     </CardContent>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
 
               {/* Add-Ons Section */}
@@ -419,8 +435,8 @@ export default function TTTCanadaPage() {
                   </AlertDescription>
                 </Alert>
               )}
-              
-              <TTTCanadaUpload 
+
+              <TTTCanadaUpload
                 selectedService={selectedService}
                 onUploadSuccess={handleUploadSuccess}
               />
