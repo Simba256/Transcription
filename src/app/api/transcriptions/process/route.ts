@@ -1,0 +1,170 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { speechmaticsService } from '@/lib/speechmatics/service';
+import { getTranscriptionById, updateTranscriptionStatus, TranscriptionMode } from '@/lib/firebase/transcriptions';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase/config';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { jobId, language = 'en', operatingPoint = 'enhanced' } = body;
+
+    if (!jobId) {
+      return NextResponse.json(
+        { error: 'Job ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get the transcription job details
+    const transcriptionJob = await getTranscriptionById(jobId);
+    
+    if (!transcriptionJob) {
+      return NextResponse.json(
+        { error: 'Transcription job not found' },
+        { status: 404 }
+      );
+    }
+
+    // Only process AI and hybrid mode jobs
+    if (!['ai', 'hybrid'].includes(transcriptionJob.mode)) {
+      return NextResponse.json(
+        { error: 'This endpoint only processes AI and hybrid transcription jobs' },
+        { status: 400 }
+      );
+    }
+
+    // Check if job is already completed 
+    if (['complete', 'pending-review'].includes(transcriptionJob.status)) {
+      return NextResponse.json(
+        { error: `Job is already ${transcriptionJob.status}` },
+        { status: 400 }
+      );
+    }
+
+    // Only process jobs that are in processing status or failed (for retry)
+    if (!['processing', 'failed'].includes(transcriptionJob.status)) {
+      return NextResponse.json(
+        { error: `Cannot process job with status: ${transcriptionJob.status}. Expected 'processing' or 'failed'.` },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[API] Processing transcription job ${jobId} with mode: ${transcriptionJob.mode}`);
+
+    // Ensure status is processing (in case it was failed and we're retrying)
+    if (transcriptionJob.status === 'failed') {
+      await updateTranscriptionStatus(jobId, 'processing');
+    }
+
+    // Download the audio file from Firebase Storage
+    const audioBuffer = await downloadAudioFile(transcriptionJob.downloadURL);
+    
+    if (!audioBuffer) {
+      await updateTranscriptionStatus(jobId, 'failed', {
+        specialInstructions: 'Failed to download audio file'
+      });
+      
+      return NextResponse.json(
+        { error: 'Failed to download audio file' },
+        { status: 500 }
+      );
+    }
+
+    // Process with Speechmatics in the background
+    // Note: In production, you'd want to use a queue system like Bull or similar
+    processTranscriptionAsync(jobId, audioBuffer, transcriptionJob.originalFilename, {
+      language,
+      operatingPoint,
+      enableDiarization: true,
+      enablePunctuation: true
+    }, transcriptionJob.mode);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Transcription processing started',
+      jobId,
+      status: 'processing'
+    });
+
+  } catch (error) {
+    console.error('[API] Error processing transcription job:', error);
+    
+    return NextResponse.json(
+      { 
+        error: 'Failed to process transcription job',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Download audio file from Firebase Storage URL
+ */
+async function downloadAudioFile(downloadURL: string): Promise<Buffer | null> {
+  try {
+    console.log(`[API] Downloading audio file from: ${downloadURL}`);
+    
+    const response = await fetch(downloadURL);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+    
+  } catch (error) {
+    console.error('[API] Error downloading audio file:', error);
+    return null;
+  }
+}
+
+/**
+ * Process transcription asynchronously
+ */
+async function processTranscriptionAsync(
+  jobId: string,
+  audioBuffer: Buffer,
+  filename: string,
+  speechmaticsConfig: any,
+  mode: TranscriptionMode
+): Promise<void> {
+  try {
+    console.log(`[API] Starting async processing for job ${jobId}`);
+    
+    const result = await speechmaticsService.transcribeAudio(
+      audioBuffer,
+      filename,
+      speechmaticsConfig
+    );
+
+    if (result.success && result.transcript) {
+      // Determine final status based on transcription mode
+      const finalStatus = mode === 'hybrid' ? 'pending-review' : 'complete';
+      
+      await updateTranscriptionStatus(jobId, finalStatus, {
+        transcript: result.transcript,
+        duration: result.duration || 0
+      });
+
+      console.log(`[API] Successfully processed job ${jobId} - Status: ${finalStatus}`);
+      
+    } else {
+      await updateTranscriptionStatus(jobId, 'failed', {
+        specialInstructions: result.error || 'Speechmatics transcription failed'
+      });
+      
+      console.error(`[API] Failed to process job ${jobId}:`, result.error);
+    }
+    
+  } catch (error) {
+    console.error(`[API] Error in async processing for job ${jobId}:`, error);
+    
+    await updateTranscriptionStatus(jobId, 'failed', {
+      specialInstructions: 'Internal processing error'
+    });
+  }
+}

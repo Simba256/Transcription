@@ -1,0 +1,584 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import jsPDF from 'jspdf';
+import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
+import { FileText, Search, Filter } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { CreditDisplay } from '@/components/ui/CreditDisplay';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { getTranscriptionsByUser, TranscriptionJob, updateTranscriptionStatus } from '@/lib/firebase/transcriptions';
+import { Timestamp } from 'firebase/firestore';
+import { formatDuration, formatTime } from '@/lib/utils';
+
+
+export default function TranscriptionsPage() {
+  const { user, userData } = useAuth();
+  const { toast } = useToast();
+  const [transcriptions, setTranscriptions] = useState<TranscriptionJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [modeFilter, setModeFilter] = useState('all');
+  const [isPolling, setIsPolling] = useState(false);
+
+  // Load transcriptions from Firestore
+  const loadTranscriptions = async (showLoading = true) => {
+    if (!user) return;
+    
+    try {
+      if (showLoading) setLoading(true);
+      const userTranscriptions = await getTranscriptionsByUser(user.uid);
+      setTranscriptions(userTranscriptions);
+      
+      // Check if there are any processing jobs
+      const hasProcessingJobs = userTranscriptions.some(t => 
+        t.status === 'processing'
+      );
+      setIsPolling(hasProcessingJobs);
+      
+    } catch (error) {
+      console.error('Error loading transcriptions:', error);
+      if (showLoading) {
+        toast({
+          title: 'Error loading transcriptions',
+          description: 'Please try refreshing the page.',
+          variant: 'destructive'
+        });
+      }
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTranscriptions();
+  }, [user]);
+
+  // Auto-refresh when there are processing jobs
+  useEffect(() => {
+    if (!isPolling || !user) return;
+
+    console.log('Starting auto-refresh for processing jobs...');
+    const interval = setInterval(() => {
+      loadTranscriptions(false); // Don't show loading spinner for background updates
+    }, 5000); // Check every 5 seconds
+
+    return () => {
+      console.log('Stopping auto-refresh');
+      clearInterval(interval);
+    };
+  }, [isPolling, user]);
+
+  // Filter transcriptions based on search and filters
+  const filteredTranscriptions = useMemo(() => {
+    return transcriptions.filter(transcription => {
+      const matchesSearch = transcription.originalFilename?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || transcription.status === statusFilter;
+      
+      // Convert mode to display name for filtering
+      const modeDisplayName = transcription.mode === 'ai' ? 'AI Transcription' :
+                             transcription.mode === 'hybrid' ? 'Hybrid Review' :
+                             transcription.mode === 'human' ? 'Human Transcription' : transcription.mode;
+      const matchesMode = modeFilter === 'all' || modeDisplayName === modeFilter;
+      
+      return matchesSearch && matchesStatus && matchesMode;
+    });
+  }, [transcriptions, searchTerm, statusFilter, modeFilter]);
+
+  const handleDownload = async (transcription: TranscriptionJob, format: 'txt' | 'pdf' | 'docx' = 'txt') => {
+    try {
+      // TODO: Implement actual download logic here
+      // This will be replaced with real API calls in a future phase
+      
+      const content = transcription.transcript || 'Transcript not available for ' + transcription.originalFilename;
+      const filename = `${transcription.originalFilename.split('.')[0]}_transcript`;
+      
+      if (format === 'txt') {
+        // Simple text file
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${filename}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+      } else if (format === 'pdf') {
+        // Generate actual PDF using jsPDF
+        const pdf = new jsPDF();
+        
+        // Add title
+        pdf.setFontSize(18);
+        pdf.setFont(undefined, 'bold');
+        pdf.text('TRANSCRIPT', 105, 20, { align: 'center' });
+        
+        // Add metadata
+        pdf.setFontSize(12);
+        pdf.setFont(undefined, 'normal');
+        let yPos = 35;
+        
+        pdf.text(`File: ${transcription.originalFilename}`, 20, yPos);
+        yPos += 8;
+        pdf.text(`Mode: ${transcription.mode.charAt(0).toUpperCase() + transcription.mode.slice(1)}`, 20, yPos);
+        yPos += 8;
+        pdf.text(`Status: ${transcription.status.charAt(0).toUpperCase() + transcription.status.slice(1)}`, 20, yPos);
+        yPos += 8;
+        pdf.text(`Duration: ${formatDuration(transcription.duration)}`, 20, yPos);
+        yPos += 8;
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, yPos);
+        yPos += 15;
+        
+        // Add a line separator
+        pdf.line(20, yPos, 190, yPos);
+        yPos += 10;
+        
+        // Add transcript content
+        pdf.setFontSize(11);
+        
+        // Split content into lines that fit the page width
+        const lines = pdf.splitTextToSize(content, 170);
+        
+        for (let i = 0; i < lines.length; i++) {
+          if (yPos > 270) { // Near bottom of page
+            pdf.addPage();
+            yPos = 20;
+          }
+          pdf.text(lines[i], 20, yPos);
+          yPos += 6;
+        }
+        
+        // Add footer on last page
+        const pageCount = pdf.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          pdf.setPage(i);
+          pdf.setFontSize(8);
+          pdf.text('Generated by TTT Transcription Service', 105, 285, { align: 'center' });
+          pdf.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+        }
+        
+        // Save the PDF
+        pdf.save(`${filename}.pdf`);
+        
+      } else if (format === 'docx') {
+        // Generate actual DOCX using docx library
+        const doc = new Document({
+          sections: [
+            {
+              children: [
+                // Title
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: "TRANSCRIPT",
+                      bold: true,
+                      size: 32,
+                    }),
+                  ],
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 400 },
+                }),
+                
+                // Metadata
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `File: ${transcription.originalFilename}`,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Mode: ${transcription.mode.charAt(0).toUpperCase() + transcription.mode.slice(1)}`,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Status: ${transcription.status.charAt(0).toUpperCase() + transcription.status.slice(1)}`,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Duration: ${formatDuration(transcription.duration)}`,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Generated: ${new Date().toLocaleString()}`,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                }),
+                
+                // Transcript content
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: content,
+                      size: 22,
+                    }),
+                  ],
+                  spacing: { line: 276 }, // 1.15 line spacing
+                }),
+                
+                // Footer
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: "Generated by TTT Transcription Service",
+                      size: 18,
+                      italics: true,
+                    }),
+                  ],
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 600 },
+                }),
+              ],
+            },
+          ],
+        });
+        
+        // Generate and download DOCX
+        const buffer = await Packer.toBuffer(doc);
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${filename}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+      } else {
+        // Fallback to text
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${filename}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+      
+      toast({ title: 'Download started', description: `Transcript downloaded as ${format.toUpperCase()}` });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({ title: 'Download failed', description: 'Please try again', variant: 'destructive' });
+    }
+  };
+
+  const handleRetry = async (transcriptionId: string) => {
+    try {
+      // For AI/hybrid modes, set back to processing status for retry
+      const transcription = transcriptions.find(t => t.id === transcriptionId);
+      if (!transcription) return;
+      
+      let retryStatus: 'processing' | 'pending-transcription';
+      if (transcription.mode === 'human') {
+        retryStatus = 'pending-transcription';
+      } else {
+        retryStatus = 'processing';
+      }
+      
+      await updateTranscriptionStatus(transcriptionId, retryStatus);
+      
+      // Update local state
+      setTranscriptions(prev => 
+        prev.map(t => t.id === transcriptionId ? { ...t, status: retryStatus } : t)
+      );
+      
+      const statusMessage = retryStatus === 'processing' ? 'processing' : 'transcription queue';
+      toast({ 
+        title: 'Retry initiated', 
+        description: `The transcription has been moved back to ${statusMessage}.` 
+      });
+    } catch (error) {
+      console.error('Error retrying transcription:', error);
+      toast({ title: 'Retry failed', description: 'Please try again.', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[#003366] mb-2">
+                My Transcriptions
+              </h1>
+              <p className="text-gray-600">
+                View and manage all your transcription jobs.
+              </p>
+            </div>
+            {isPolling && (
+              <div className="flex items-center text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+                <div className="animate-pulse w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                <span className="text-sm font-medium">Auto-refreshing...</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Filters and Search */}
+        <Card className="border-0 shadow-sm mb-8">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search transcriptions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-4">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-40">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="complete">Complete</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="pending-review">Pending Review</SelectItem>
+                    <SelectItem value="pending-transcription">Pending Transcription</SelectItem>
+                    <SelectItem value="under-review">Under Review</SelectItem>
+                    <SelectItem value="queued">Queued</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={modeFilter} onValueChange={setModeFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Modes</SelectItem>
+                    <SelectItem value="AI Transcription">AI Transcription</SelectItem>
+                    <SelectItem value="Hybrid Review">Hybrid Review</SelectItem>
+                    <SelectItem value="Human Transcription">Human Transcription</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Results Summary */}
+        {!loading && (
+          <div className="mb-6 text-sm text-gray-600">
+            Showing {filteredTranscriptions.length} of {transcriptions.length} transcriptions
+            {(searchTerm || statusFilter !== 'all' || modeFilter !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                  setModeFilter('all');
+                }}
+                className="ml-4 text-[#b29dd9] hover:text-[#9d87c7]"
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Transcriptions List */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-[#003366]">
+              Transcriptions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {loading && (
+                <div className="text-center text-gray-500 py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003366] mx-auto mb-4"></div>
+                  Loading transcriptions...
+                </div>
+              )}
+              
+              {!loading && filteredTranscriptions.map((transcription) => (
+                <div
+                  key={transcription.id}
+                  className="flex items-center justify-between p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <FileText className="h-5 w-5 text-[#b29dd9]" />
+                      <h3 className="font-semibold text-[#003366] text-lg">
+                        {transcription.originalFilename}
+                      </h3>
+                      <StatusBadge status={transcription.status} />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600 font-medium">Mode:</span>
+                        <p className="text-[#003366]">
+                          {transcription.mode === 'ai' ? 'AI Transcription' :
+                           transcription.mode === 'hybrid' ? 'Hybrid Review' :
+                           transcription.mode === 'human' ? 'Human Transcription' : transcription.mode}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Duration:</span>
+                        <p className="text-[#003366]">{formatDuration(transcription.duration)}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Credits Used:</span>
+                        <CreditDisplay amount={transcription.creditsUsed} size="sm" />
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">
+                          {transcription.completedAt ? 'Completed:' : 'Uploaded:'}
+                        </span>
+                        <p className="text-[#003366]">
+                          {transcription.completedAt 
+                            ? (transcription.completedAt as Timestamp).toDate().toLocaleDateString()
+                            : (transcription.createdAt as Timestamp).toDate().toLocaleDateString()
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3 ml-6">
+                    {transcription.status === 'complete' && (
+                      <>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownload(transcription, 'txt')}
+                            className="border-[#b29dd9] text-[#b29dd9] hover:bg-[#b29dd9] hover:text-white"
+                          >
+                            TXT
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownload(transcription, 'pdf')}
+                            className="border-[#b29dd9] text-[#b29dd9] hover:bg-[#b29dd9] hover:text-white"
+                          >
+                            PDF
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownload(transcription, 'docx')}
+                            className="border-[#b29dd9] text-[#b29dd9] hover:bg-[#b29dd9] hover:text-white"
+                          >
+                            DOCX
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          asChild
+                          className="bg-[#003366] hover:bg-[#002244] text-white"
+                        >
+                          <Link href={`/transcript/${transcription.id}`}>
+                            View
+                          </Link>
+                        </Button>
+                      </>
+                    )}
+                    
+                    {transcription.status === 'failed' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRetry(transcription.id)}
+                        className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+                      >
+                        Retry
+                      </Button>
+                    )}
+                    
+                    {(transcription.status === 'processing' || 
+                      transcription.status === 'under-review' || 
+                      transcription.status === 'queued' ||
+                      transcription.status === 'pending-review' ||
+                      transcription.status === 'pending-transcription') && (
+                      <div className="text-sm text-gray-500 px-3 py-2 bg-gray-100 rounded">
+                        In progress...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              {!loading && filteredTranscriptions.length === 0 && (
+                <div className="text-center py-12">
+                  <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No transcriptions found
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    {searchTerm || statusFilter !== 'all' || modeFilter !== 'all'
+                      ? 'Try adjusting your search or filters.'
+                      : 'Upload your first audio or video file to get started.'}
+                  </p>
+                  {!searchTerm && statusFilter === 'all' && modeFilter === 'all' && (
+                    <Button asChild className="bg-[#003366] hover:bg-[#002244] text-white">
+                      <Link href="/upload">
+                        Upload File
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Footer />
+    </div>
+  );
+}

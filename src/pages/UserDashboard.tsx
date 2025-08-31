@@ -1,0 +1,367 @@
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Upload, FileText, CreditCard, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { CreditDisplay } from '@/components/ui/CreditDisplay';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCredits } from '@/contexts/CreditContext';
+import { getTranscriptionsByUser, TranscriptionJob } from '@/lib/firebase/transcriptions';
+import { Timestamp } from 'firebase/firestore';
+
+
+// Transaction interface now comes from CreditContext
+
+export function UserDashboard() {
+  const { user, userData } = useAuth();
+  const { transactions } = useCredits();
+  
+  const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  
+  // Load recent transcription jobs from Firestore
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadRecentJobs = async () => {
+      try {
+        setJobsLoading(true);
+        const jobs = await getTranscriptionsByUser(user.uid);
+        setRecentJobs(jobs.slice(0, 5)); // Show only 5 most recent
+      } catch (error) {
+        console.error('Error loading recent jobs:', error);
+      } finally {
+        setJobsLoading(false);
+      }
+    };
+    
+    loadRecentJobs();
+  }, [user]);
+
+  // Real transaction data now comes from CreditContext
+
+  // Demo user credits - in real implementation, this would come from userData
+  const userCredits = userData?.credits || 500;
+
+  // Calculate real average turnaround time from user's completed jobs
+  const calculateAvgTurnaround = (jobs: TranscriptionJob[]) => {
+    const completedJobs = jobs.filter(j => 
+      j.status === 'complete' && 
+      j.createdAt && 
+      j.completedAt
+    );
+    
+    if (completedJobs.length === 0) {
+      return '2.5hrs'; // Default fallback
+    }
+    
+    const totalProcessingTime = completedJobs.reduce((sum, job) => {
+      // Handle different date formats safely
+      let startTime: Date, endTime: Date;
+      
+      if (job.createdAt instanceof Timestamp) {
+        startTime = job.createdAt.toDate();
+      } else if (job.createdAt instanceof Date) {
+        startTime = job.createdAt;
+      } else {
+        startTime = new Date(job.createdAt);
+      }
+      
+      if (job.completedAt instanceof Timestamp) {
+        endTime = job.completedAt.toDate();
+      } else if (job.completedAt instanceof Date) {
+        endTime = job.completedAt;
+      } else {
+        endTime = new Date(job.completedAt);
+      }
+      
+      return sum + (endTime.getTime() - startTime.getTime());
+    }, 0);
+    
+    const avgMilliseconds = totalProcessingTime / completedJobs.length;
+    const avgMinutes = avgMilliseconds / (1000 * 60);
+    const avgHours = avgMinutes / 60;
+    
+    // Format based on duration
+    if (avgMinutes < 60) {
+      return `${Math.round(avgMinutes)}min`;
+    } else if (avgHours < 24) {
+      const hours = Math.floor(avgHours);
+      const minutes = Math.round((avgHours - hours) * 60);
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    } else {
+      const days = Math.floor(avgHours / 24);
+      const hours = Math.round(avgHours % 24);
+      return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+    }
+  };
+
+  const stats = {
+    totalJobs: recentJobs.length,
+    completedJobs: recentJobs.filter(j => j.status === 'complete').length,
+    creditsUsedThisMonth: recentJobs.reduce((s, j) => s + (j.creditsUsed || 0), 0),
+    avgTurnaroundTime: calculateAvgTurnaround(recentJobs)
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Section */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-[#003366] mb-2">
+            Welcome back, {userData?.name || user?.email?.split('@')[0] || 'User'}!
+          </h1>
+          <p className="text-gray-600">
+            Here's an overview of your transcription activity and account status.
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Available Credits</p>
+                  <CreditDisplay amount={userCredits} size="lg" />
+                </div>
+                <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
+                  <CreditCard className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Jobs</p>
+                  <p className="text-2xl font-bold text-[#003366]">{stats.totalJobs}</p>
+                </div>
+                <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold text-[#003366]">{stats.completedJobs}</p>
+                </div>
+                <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Avg. Turnaround</p>
+                  <p className="text-2xl font-bold text-[#003366]">{stats.avgTurnaroundTime}</p>
+                </div>
+                <div className="w-12 h-12 bg-[#2c3e50] rounded-lg flex items-center justify-center">
+                  <Clock className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Quick Actions */}
+          <div className="lg:col-span-1">
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-[#003366]">
+                  Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  asChild
+                  className="w-full bg-[#003366] hover:bg-[#002244] text-white"
+                >
+                  <Link href="/upload">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload New File
+                  </Link>
+                </Button>
+                
+                <Button
+                  asChild
+                  className="w-full bg-white border border-[#b29dd9] text-[#003366] hover:bg-[#b29dd9] hover:text-white shadow-sm"
+                >
+                  <Link href="/billing">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Buy Credits
+                  </Link>
+                </Button>
+
+                {/* Credit Balance Alert */}
+                {userCredits < 100 && (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start">
+                      <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" />
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">
+                          Low Credit Balance
+                        </p>
+                        <p className="text-sm text-yellow-700 mt-1">
+                          You have {userCredits} credits remaining. Consider purchasing more to avoid interruptions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Jobs */}
+          <div className="lg:col-span-2">
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg font-semibold text-[#003366]">
+                  Recent Jobs
+                </CardTitle>
+                <Button 
+                  size="sm" 
+                  asChild
+                  className="bg-transparent text-[#b29dd9] hover:text-[#9d87c7] hover:bg-gray-100"
+                >
+                  <Link href="/transcriptions">
+                    View All
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {jobsLoading && (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003366] mx-auto mb-4"></div>
+                      <p className="text-gray-500">Loading recent jobs...</p>
+                    </div>
+                  )}
+                  
+                  {!jobsLoading && recentJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <h3 className="font-medium text-[#003366] truncate">
+                            {job.originalFilename}
+                          </h3>
+                          <StatusBadge status={job.status} />
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <span>
+                            {job.mode === 'ai' ? 'AI Transcription' :
+                             job.mode === 'hybrid' ? 'Hybrid Review' :
+                             job.mode === 'human' ? 'Human Transcription' : job.mode}
+                          </span>
+                          <span>{job.duration} min</span>
+                          <CreditDisplay amount={job.creditsUsed || 0} size="sm" />
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        {job.status === 'complete' && (
+                          <Button
+                            size="sm"
+                            asChild
+                            className="bg-white border border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white shadow-sm"
+                          >
+                            <Link href={`/transcript/${job.id}`}>
+                              View
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {!jobsLoading && recentJobs.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium mb-2">No transcriptions yet</p>
+                      <p className="text-sm">Upload your first audio or video file to get started!</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Recent Transactions */}
+        <div className="mt-8">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg font-semibold text-[#003366]">
+                Recent Credit Activity
+              </CardTitle>
+              <Button 
+                size="sm" 
+                asChild
+                className="bg-transparent text-[#b29dd9] hover:text-[#9d87c7] hover:bg-gray-100"
+              >
+                <Link href="/billing">
+                  View All
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {transactions.slice(0, 5).map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0"
+                  >
+                    <div>
+                      <p className="font-medium text-[#003366]">
+                        {transaction.description}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {transaction.date.toISOString().slice(0, 10)}
+                      </p>
+                    </div>
+                    <div className={`font-medium ${
+                      transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {transaction.amount > 0 ? '+' : ''}{transaction.amount} credits
+                    </div>
+                  </div>
+                ))}
+                
+                {transactions.length === 0 && (
+                  <p className="text-gray-500 text-center py-8">
+                    No credit activity yet. Purchase credits to get started!
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Footer />
+    </div>
+  );
+}
