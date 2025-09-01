@@ -7,7 +7,7 @@ import { getTranscriptionById, updateTranscriptionStatus } from '@/lib/firebase/
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = cookieStore.get('auth-token')?.value;
     
     if (!token) {
