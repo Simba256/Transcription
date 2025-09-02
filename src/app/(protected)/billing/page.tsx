@@ -65,8 +65,8 @@ export default function BillingPage() {
         credits: pkg.credits 
       });
       setPaymentData({
-        clientSecret: resp.clientSecret,
-        paymentIntentId: resp.paymentIntentId,
+        clientSecret: resp.clientSecret!,
+        paymentIntentId: resp.paymentIntentId!,
         packageInfo: pkg,
       });
     } catch (e: unknown) {
@@ -212,12 +212,11 @@ export default function BillingPage() {
                   <div className="mt-4">
                     <div className="flex items-center justify-center space-x-2">
                       <span className="text-3xl font-bold text-[#003366]">
-                        ${pkg.price}
+                        CA${pkg.price}
                       </span>
-                      <span className="text-gray-600">CAD</span>
                       {pkg.originalPrice && (
                         <span className="text-lg text-gray-400 line-through">
-                          ${pkg.originalPrice}
+                          CA${pkg.originalPrice}
                         </span>
                       )}
                     </div>

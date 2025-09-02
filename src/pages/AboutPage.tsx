@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import { Shield, Users, Award, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Header } from '../components/layout/Header';
@@ -83,52 +84,84 @@ export function AboutPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <Card className="border-0 shadow-lg text-center">
+            <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
-                <div className="w-16 h-16 bg-[#003366] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Shield className="h-8 w-8 text-white" />
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                    <Image
+                      src="/security.jpg"
+                      alt="Security"
+                      width={64}
+                      height={64}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#003366]">Security</h3>
                 </div>
-                <h3 className="text-xl font-semibold text-[#003366] mb-4">Security</h3>
-                <p className="text-gray-600">
+                <p className="text-gray-600 text-left">
                   Your data is protected with enterprise-grade encryption and strict 
                   confidentiality protocols.
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="border-0 shadow-lg text-center">
+            <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
-                <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Award className="h-8 w-8 text-white" />
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                    <Image
+                      src="/quality.jpg"
+                      alt="Quality"
+                      width={64}
+                      height={64}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#003366]">Quality</h3>
                 </div>
-                <h3 className="text-xl font-semibold text-[#003366] mb-4">Quality</h3>
-                <p className="text-gray-600">
+                <p className="text-gray-600 text-left">
                   We maintain the highest standards of accuracy through advanced AI 
                   and expert human review.
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="border-0 shadow-lg text-center">
+            <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
-                <div className="w-16 h-16 bg-[#2c3e50] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Users className="h-8 w-8 text-white" />
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                    <Image
+                      src="/service-upd.png"
+                      alt="Service"
+                      width={64}
+                      height={64}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#003366]">Service</h3>
                 </div>
-                <h3 className="text-xl font-semibold text-[#003366] mb-4">Service</h3>
-                <p className="text-gray-600">
+                <p className="text-gray-600 text-left">
                   Our dedicated support team is here to help you succeed with 
                   personalized assistance.
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="border-0 shadow-lg text-center">
+            <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
-                <div className="w-16 h-16 bg-[#003366] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <MapPin className="h-8 w-8 text-white" />
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                    <Image
+                      src="/canadian.jpg"
+                      alt="Canadian"
+                      width={64}
+                      height={64}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#003366]">Canadian</h3>
                 </div>
-                <h3 className="text-xl font-semibold text-[#003366] mb-4">Canadian</h3>
-                <p className="text-gray-600">
+                <p className="text-gray-600 text-left">
                   Proudly Canadian-owned and operated, compliant with all local 
                   privacy regulations.
                 </p>

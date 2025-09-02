@@ -33,7 +33,7 @@ export function CreditDisplay({
         <Coins className={cn(iconSizes[size], 'text-[#b29dd9]')} />
       )}
       <span className={cn(sizeClasses[size])}>
-        {amount.toLocaleString()} credits
+        {amount.toLocaleString()} Credits
       </span>
     </div>
   );

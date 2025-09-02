@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowRight, Shield, Clock, Users, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,8 +15,19 @@ export function LandingPage() {
       <Header />
       
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-[#003366] to-[#2c3e50] text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+      <section 
+        className="relative text-white"
+        style={{
+          backgroundImage: "url('/bg_1.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003366]/80 to-[#2c3e50]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
             <h1 className="text-4xl md:text-6xl font-bold mb-6">
               Professional Transcription
@@ -165,29 +177,84 @@ export function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[#003366] mb-2">99.5%</div>
-              <div className="text-gray-600">Accuracy Rate</div>
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                <Image
+                  src="/accuracy.jpg"
+                  alt="Accuracy"
+                  width={64}
+                  height={64}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left">
+                <div className="text-3xl font-bold text-[#003366] mb-2">99.5%</div>
+                <div className="text-gray-600">Accuracy Rate</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[#003366] mb-2">24/7</div>
-              <div className="text-gray-600">Processing</div>
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                <Image
+                  src="/processing.jpg"
+                  alt="Processing"
+                  width={64}
+                  height={64}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left">
+                <div className="text-3xl font-bold text-[#003366] mb-2">24/7</div>
+                <div className="text-gray-600">Processing</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[#003366] mb-2">SOC 2</div>
-              <div className="text-gray-600">Compliant</div>
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                <Image
+                  src="/compliance.jpg"
+                  alt="Compliance"
+                  width={64}
+                  height={64}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left">
+                <div className="text-3xl font-bold text-[#003366] mb-2">SOC 2</div>
+                <div className="text-gray-600">Compliant</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-[#003366] mb-2">10k+</div>
-              <div className="text-gray-600">Files Processed</div>
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                <Image
+                  src="/file_process.jpg"
+                  alt="Files Processed"
+                  width={64}
+                  height={64}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-left">
+                <div className="text-3xl font-bold text-[#003366] mb-2">10k+</div>
+                <div className="text-gray-600">Files Processed</div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="bg-[#003366] text-white py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section 
+        className="relative text-white py-24"
+        style={{
+          backgroundImage: "url('/bg_2.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-[#003366]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Ready to Get Started?
           </h2>

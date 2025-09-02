@@ -32,7 +32,8 @@ import { Timestamp } from 'firebase/firestore';
 import { formatTime, formatDuration } from '@/lib/utils';
 
 export default function TranscriptViewerPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
   const { user, userData } = useAuth();
   const { toast } = useToast();
@@ -99,6 +100,12 @@ export default function TranscriptViewerPage() {
     return text ? text.trim().split(/\s+/).filter(word => word.length > 0).length : 0;
   };
 
+  const formatTranscriptText = (text: string) => {
+    if (!text) return text;
+    // Remove spaces before commas and periods
+    return text.replace(/\s+([,.!?;:])/g, '$1');
+  };
+
   const handlePlayPause = () => {
     if (audioRef.current && transcription?.downloadURL) {
       if (isPlaying) {
@@ -158,7 +165,8 @@ export default function TranscriptViewerPage() {
   const exportTranscript = async (format: 'txt' | 'pdf' | 'docx') => {
     if (!transcription) return;
     
-    const content = isEditing ? editedTranscript : (transcription.transcript || '');
+    const rawContent = isEditing ? editedTranscript : (transcription.transcript || '');
+    const content = formatTranscriptText(rawContent);
     const filename = `${transcription.originalFilename.split('.')[0]}_transcript`;
     
     try {
@@ -181,12 +189,12 @@ export default function TranscriptViewerPage() {
         
         // Add title
         pdf.setFontSize(18);
-        pdf.setFont(undefined, 'bold');
+        pdf.setFont('helvetica', 'bold');
         pdf.text('TRANSCRIPT', 105, 20, { align: 'center' });
         
         // Add metadata
         pdf.setFontSize(12);
-        pdf.setFont(undefined, 'normal');
+        pdf.setFont('helvetica', 'normal');
         let yPos = 35;
         
         pdf.text(`File: ${transcription.originalFilename}`, 20, yPos);
@@ -322,7 +330,7 @@ export default function TranscriptViewerPage() {
         });
         
         const buffer = await Packer.toBuffer(doc);
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        const blob = new Blob([new Uint8Array(buffer)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -697,7 +705,7 @@ export default function TranscriptViewerPage() {
                       <div className="bg-white rounded-lg border border-gray-200 p-6">
                         <div className="prose max-w-none">
                           <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-                            {transcription.transcript || 'No transcript content available.'}
+                            {formatTranscriptText(transcription.transcript || '') || 'No transcript content available.'}
                           </div>
                         </div>
                         {transcription.transcript && (

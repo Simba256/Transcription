@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Upload, FileAudio, FileVideo, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,21 +44,24 @@ export default function UploadPage() {
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
       creditsPerMinute: 100,
-      turnaround: '60 minutes'
+      turnaround: '60 mins',
+      icon: '/ai_transcription.jpg'
     },
     {
       id: 'hybrid',
       name: 'Hybrid Review',
       description: 'AI transcription reviewed by human experts',
       creditsPerMinute: 150,
-      turnaround: '24-48 hours'
+      turnaround: '24-48 hrs',
+      icon: '/hybrid_review.jpg'
     },
     {
       id: 'human',
       name: 'Human Transcription',
       description: 'Professional human transcription for highest accuracy',
       creditsPerMinute: 200,
-      turnaround: '24-72 hours'
+      turnaround: '24-72 hrs',
+      icon: '/human_transcription.jpg'
     }
   ];
 
@@ -189,8 +193,8 @@ export default function UploadPage() {
 
     if (hasInsufficientCredits) {
       toast({
-        title: "Insufficient credits",
-        description: "Please purchase more credits to process these files.",
+        title: "Insufficient Credits",
+        description: "Please purchase more Credits to process these files.",
         variant: "destructive",
       });
       return;
@@ -469,23 +473,34 @@ export default function UploadPage() {
                   <Label
                     htmlFor={mode.id}
                     key={mode.id}
-                    className={`cursor-pointer border rounded-lg p-6 flex flex-col transition-colors min-h-[200px] ${
+                    className={`cursor-pointer border rounded-lg p-6 flex flex-col transition-colors min-h-[250px] ${
                       transcriptionMode === mode.id
                         ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
                         : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-[#003366] text-lg">{mode.name}</h3>
-                      <RadioGroupItem value={mode.id} id={mode.id} />
+                    {/* Icon and Title in one line */}
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                        <Image
+                          src={mode.icon}
+                          alt={mode.name}
+                          width={48}
+                          height={48}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <h3 className="font-semibold text-[#003366] text-lg flex-1">{mode.name}</h3>
+                      <RadioGroupItem value={mode.id} id={mode.id} className="flex-shrink-0" />
                     </div>
                     
+                    {/* Description */}
                     <div className="flex-1 flex flex-col justify-between">
                       <p className="text-gray-600 mb-6 leading-relaxed">{mode.description}</p>
                       
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-gray-700">Cost per minute:</span>
+                          <span className="text-sm font-medium text-gray-700">Cost/min:</span>
                           <CreditDisplay amount={mode.creditsPerMinute} size="sm" />
                         </div>
                         
@@ -559,7 +574,7 @@ export default function UploadPage() {
                           Insufficient Credits
                         </p>
                         <p className="text-red-700">
-                          You need {estimatedCredits - (userData?.credits || 0)} more credits to process these files.
+                          You need {estimatedCredits - (userData?.credits || 0)} more Credits to process these files.
                         </p>
                       </div>
                     </div>

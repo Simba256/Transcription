@@ -342,7 +342,7 @@ export function TranscriptionQueue() {
                             variant="ghost" 
                             size="sm" 
                             className="text-green-600"
-                            onClick={() => handleAction(item.id, 'approve-review')}
+                            onClick={() => item.id && handleAction(item.id, 'approve-review')}
                             disabled={isLoading}
                           >
                             <CheckCircle className="h-4 w-4 mr-1" />
@@ -370,7 +370,7 @@ export function TranscriptionQueue() {
                           variant="ghost" 
                           size="sm" 
                           className="text-purple-600"
-                          onClick={() => handleAction(item.id, 'process-with-speechmatics')}
+                          onClick={() => item.id && handleAction(item.id, 'process-with-speechmatics')}
                           disabled={isLoading}
                           title="Retry with Speechmatics AI"
                         >
@@ -382,7 +382,7 @@ export function TranscriptionQueue() {
                         variant="ghost" 
                         size="sm" 
                         className="text-red-600"
-                        onClick={() => handleAction(item.id, 'reject')}
+                        onClick={() => item.id && handleAction(item.id, 'reject')}
                         disabled={isLoading}
                       >
                         <XCircle className="h-4 w-4 mr-1" />
@@ -509,7 +509,7 @@ export function TranscriptionQueue() {
                 </Button>
                 {selectedJob.status === 'pending-review' && (
                   <Button
-                    onClick={() => handleAction(selectedJob.id, 'approve-review')}
+                    onClick={() => selectedJob.id && handleAction(selectedJob.id, 'approve-review')}
                     disabled={isLoading}
                     className="bg-[#003366] hover:bg-[#004080]"
                   >
@@ -518,7 +518,7 @@ export function TranscriptionQueue() {
                 )}
                 {selectedJob.status === 'pending-transcription' && (
                   <Button
-                    onClick={() => handleAction(selectedJob.id, 'submit-transcription', transcript)}
+                    onClick={() => selectedJob.id && handleAction(selectedJob.id, 'submit-transcription', transcript)}
                     disabled={isLoading || !transcript.trim()}
                     className="bg-[#003366] hover:bg-[#004080]"
                   >

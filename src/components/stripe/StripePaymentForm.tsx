@@ -47,7 +47,7 @@ export function StripePaymentForm({
 
     // Retrieve the PaymentIntent to check if email is required
     stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
-      if (paymentIntent?.metadata?.userEmail) {
+      if (paymentIntent && (paymentIntent as any).metadata?.userEmail) {
         setEmailRequired(false);
       }
     });
@@ -175,7 +175,7 @@ export function StripePaymentForm({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-medium text-[#003366]">{packageInfo.name}</h3>
                 <span className="text-2xl font-bold text-[#003366]">
-                  ${packageInfo.price} CAD
+                  CA${packageInfo.price}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
@@ -256,7 +256,7 @@ export function StripePaymentForm({
                     Processing...
                   </>
                 ) : (
-                  `Pay $${packageInfo.price} CAD`
+                  `Pay CA$${packageInfo.price}`
                 )}
               </Button>
             </div>
