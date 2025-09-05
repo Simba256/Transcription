@@ -57,8 +57,19 @@ export function ContactPage() {
       <Header />
       
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-[#003366] to-[#2c3e50] text-white py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section 
+        className="relative text-white py-24"
+        style={{
+          backgroundImage: "url('/bg_1.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003366]/80 to-[#2c3e50]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Get in Touch
@@ -185,7 +196,7 @@ export function ContactPage() {
               <Card className="border border-[#b29dd9] shadow-lg">
                 <CardContent className="p-8">
                   <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center flex-shrink-0">
                       <Phone className="h-6 w-6 text-white" />
                     </div>
                     <div>
@@ -209,7 +220,7 @@ export function ContactPage() {
               <Card className="border border-[#b29dd9] shadow-lg">
                 <CardContent className="p-8">
                   <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-[#2c3e50] rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center flex-shrink-0">
                       <Clock className="h-6 w-6 text-white" />
                     </div>
                     <div>

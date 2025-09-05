@@ -6,8 +6,8 @@ import ClientWrapper from "@/components/ClientWrapper";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Next.js Firebase Auth",
-  description: "Authentication system with Firebase",
+  title: "Talk to Text Canada",
+  description: "Professional transcription services for legal professionals, businesses, and individuals across Canada",
 };
 
 export default function RootLayout({

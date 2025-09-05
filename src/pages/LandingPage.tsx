@@ -77,7 +77,13 @@ export function LandingPage() {
             <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
               <CardContent className="p-8 text-center">
                 <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Clock className="h-8 w-8 text-white" />
+                  <Image
+                    src="/images/AI.svg"
+                    alt="AI Transcription"
+                    width={48}
+                    height={48}
+                    className="w-12 h-12"
+                  />
                 </div>
                 <h3 className="text-xl font-semibold text-[#003366] mb-4">
                   AI Transcription
@@ -106,7 +112,13 @@ export function LandingPage() {
             <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
               <CardContent className="p-8 text-center">
                 <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Users className="h-8 w-8 text-white" />
+                  <Image
+                    src="/images/Human.svg"
+                    alt="Human Transcription"
+                    width={48}
+                    height={48}
+                    className="w-12 h-12"
+                  />
                 </div>
                 <h3 className="text-xl font-semibold text-[#003366] mb-4">
                   Human Transcription
@@ -135,7 +147,13 @@ export function LandingPage() {
             <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow">
               <CardContent className="p-8 text-center">
                 <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Shield className="h-8 w-8 text-white" />
+                  <Image
+                    src="/images/Hybrid.svg"
+                    alt="Hybrid Review"
+                    width={56}
+                    height={56}
+                    className="w-14 h-14"
+                  />
                 </div>
                 <h3 className="text-xl font-semibold text-[#003366] mb-4">
                   Hybrid Review
@@ -178,9 +196,9 @@ export function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 flex-shrink-0">
                 <Image
-                  src="/accuracy.jpg"
+                  src="/TBLP/Accuracy rate.svg"
                   alt="Accuracy"
                   width={64}
                   height={64}
@@ -193,9 +211,9 @@ export function LandingPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 flex-shrink-0">
                 <Image
-                  src="/processing.jpg"
+                  src="/TBLP/24-7.svg"
                   alt="Processing"
                   width={64}
                   height={64}
@@ -208,9 +226,9 @@ export function LandingPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 flex-shrink-0">
                 <Image
-                  src="/compliance.jpg"
+                  src="/TBLP/SOC 2.svg"
                   alt="Compliance"
                   width={64}
                   height={64}
@@ -223,9 +241,9 @@ export function LandingPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 flex-shrink-0">
                 <Image
-                  src="/file_process.jpg"
+                  src="/TBLP/10K+.svg"
                   alt="Files Processed"
                   width={64}
                   height={64}

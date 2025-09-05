@@ -13,8 +13,19 @@ export function AboutPage() {
       <Header />
       
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-[#003366] to-[#2c3e50] text-white py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section 
+        className="relative text-white py-24"
+        style={{
+          backgroundImage: "url('/bg_1.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003366]/80 to-[#2c3e50]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               About Talk To Text Canada
@@ -87,9 +98,9 @@ export function AboutPage() {
             <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
                 <div className="flex items-center space-x-4 mb-6">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
                     <Image
-                      src="/security.jpg"
+                      src="/sqsc/Security.svg"
                       alt="Security"
                       width={64}
                       height={64}
@@ -108,9 +119,9 @@ export function AboutPage() {
             <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
                 <div className="flex items-center space-x-4 mb-6">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
                     <Image
-                      src="/quality.jpg"
+                      src="/sqsc/quality.svg"
                       alt="Quality"
                       width={64}
                       height={64}
@@ -129,7 +140,7 @@ export function AboutPage() {
             <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
                 <div className="flex items-center space-x-4 mb-6">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
                     <Image
                       src="/service-upd.png"
                       alt="Service"
@@ -150,9 +161,9 @@ export function AboutPage() {
             <Card className="border-0 shadow-lg">
               <CardContent className="p-8">
                 <div className="flex items-center space-x-4 mb-6">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
                     <Image
-                      src="/canadian.jpg"
+                      src="/sqsc/canadian.svg"
                       alt="Canadian"
                       width={64}
                       height={64}
@@ -186,8 +197,14 @@ export function AboutPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="w-24 h-24 bg-[#003366] rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="text-white text-2xl font-bold">AI</span>
+              <div className="flex items-center justify-center mx-auto mb-6">
+                <Image
+                  src="/ourExpertise/advanced ai technology.svg"
+                  alt="Advanced AI Technology"
+                  width={80}
+                  height={80}
+                  className="w-20 h-20"
+                />
               </div>
               <h3 className="text-xl font-semibold text-[#003366] mb-4">
                 Advanced AI Technology
@@ -199,8 +216,14 @@ export function AboutPage() {
             </div>
 
             <div className="text-center">
-              <div className="w-24 h-24 bg-[#b29dd9] rounded-full flex items-center justify-center mx-auto mb-6">
-                <Users className="h-12 w-12 text-white" />
+              <div className="flex items-center justify-center mx-auto mb-6">
+                <Image
+                  src="/ourExpertise/expert transcribers.svg"
+                  alt="Expert Transcribers"
+                  width={80}
+                  height={80}
+                  className="w-20 h-20"
+                />
               </div>
               <h3 className="text-xl font-semibold text-[#003366] mb-4">
                 Expert Transcribers
@@ -212,8 +235,14 @@ export function AboutPage() {
             </div>
 
             <div className="text-center">
-              <div className="w-24 h-24 bg-[#2c3e50] rounded-full flex items-center justify-center mx-auto mb-6">
-                <Shield className="h-12 w-12 text-white" />
+              <div className="flex items-center justify-center mx-auto mb-6">
+                <Image
+                  src="/ourExpertise/Security specialists.svg"
+                  alt="Security Specialists"
+                  width={80}
+                  height={80}
+                  className="w-20 h-20"
+                />
               </div>
               <h3 className="text-xl font-semibold text-[#003366] mb-4">
                 Security Specialists
@@ -228,8 +257,19 @@ export function AboutPage() {
       </section>
 
       {/* Contact CTA */}
-      <section className="bg-[#003366] text-white py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section 
+        className="relative text-white py-24"
+        style={{
+          backgroundImage: "url('/bg_2.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-[#003366]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Ready to Experience the Difference?
           </h2>
@@ -240,13 +280,13 @@ export function AboutPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href="/signup"
-              className="bg-[#b29dd9] hover:bg-[#9d87c7] text-white px-8 py-3 rounded-lg font-medium transition-colors"
+              className="bg-[#b29dd9] hover:bg-[#9d87c7] text-white px-8 py-2 rounded-lg font-medium transition-colors"
             >
               Get Started Today
             </a>
             <a
               href="/contact"
-              className="border border-white text-white hover:bg-white hover:text-[#003366] px-8 py-3 rounded-lg font-medium transition-colors"
+              className="border border-white text-white hover:bg-white hover:text-[#003366] px-8 py-2 rounded-lg font-medium transition-colors"
             >
               Contact Us
             </a>

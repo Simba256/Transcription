@@ -66,8 +66,19 @@ export function PricingPage() {
       <Header />
       
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-[#003366] to-[#2c3e50] text-white py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section 
+        className="relative text-white py-24"
+        style={{
+          backgroundImage: "url('/bg_1.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003366]/80 to-[#2c3e50]/80"></div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-6">
             Simple, Transparent Pricing
           </h1>
@@ -169,9 +180,9 @@ export function PricingPage() {
                   AI Transcription
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  1 credit
+                  100 Credits
                 </div>
-                <div className="text-gray-600">per minute</div>
+                <div className="text-gray-600">/ minute</div>
                 <p className="text-sm text-gray-500 mt-4">
                   Fast, automated transcription with good accuracy
                 </p>
@@ -184,9 +195,9 @@ export function PricingPage() {
                   Hybrid Review
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  2 credits
+                  200 Credits
                 </div>
-                <div className="text-gray-600">per minute</div>
+                <div className="text-gray-600">/ minute</div>
                 <p className="text-sm text-gray-500 mt-4">
                   AI transcription reviewed by human experts
                 </p>
@@ -199,9 +210,9 @@ export function PricingPage() {
                   Human Transcription
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  3 credits
+                  300 Credits
                 </div>
-                <div className="text-gray-600">per minute</div>
+                <div className="text-gray-600">/ minute</div>
                 <p className="text-sm text-gray-500 mt-4">
                   Professional human transcription for highest accuracy
                 </p>

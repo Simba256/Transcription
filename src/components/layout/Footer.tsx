@@ -9,8 +9,20 @@ export function Footer() {
   const isLightFooter = pathname === '/' || pathname === '/about';
 
   return (
-    <footer className={isLightFooter ? "bg-white text-gray-900" : "bg-[#003366] text-white"}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <footer 
+      className={isLightFooter ? "bg-white text-gray-900" : "relative text-white"}
+      style={!isLightFooter ? {
+        backgroundImage: "url('/bg_2.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      } : {}}
+    >
+      {!isLightFooter && (
+        <div className="absolute inset-0 bg-[#003366]/80"></div>
+      )}
+      
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="col-span-1 md:col-span-2">
             <div className="mb-4">
