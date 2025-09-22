@@ -1,0 +1,106 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // User uploads - organized by userId (transcriptions folder)
+    match /transcriptions/{userId}/{fileName} {
+      // Users can read their own files, admins can read all files
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Users can upload their own files
+      allow create: if isSignedIn() && isOwner(userId) && 
+                       // File size limit: 100MB
+                       request.resource.size < 100 * 1024 * 1024 &&
+                       // Allowed file types for audio/video
+                       (request.resource.contentType.matches('audio/.*') ||
+                       request.resource.contentType.matches('video/.*') ||
+                       request.resource.contentType in [
+                         'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/m4a',
+                         'video/mp4', 'video/avi', 'video/mov'
+                       ]);
+      
+      // Users can update/replace their own files, admins can update any file
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Users can delete their own files, admins can delete any file
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
+    // Legacy uploads folder (keep for backwards compatibility)
+    match /uploads/{userId}/{fileName} {
+      // Users can read their own files, admins can read all files
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Users can upload their own files
+      allow create: if isSignedIn() && isOwner(userId) && 
+                       // File size limit: 100MB
+                       request.resource.size < 100 * 1024 * 1024 &&
+                       // Allowed file types for audio/video
+                       (request.resource.contentType.matches('audio/.*') ||
+                       request.resource.contentType.matches('video/.*') ||
+                       request.resource.contentType in [
+                         'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/m4a',
+                         'video/mp4', 'video/avi', 'video/mov'
+                       ]);
+      
+      // Users can update/replace their own files, admins can update any file
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Users can delete their own files, admins can delete any file
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
+    // Transcription outputs/results - organized by userId
+    match /transcripts/{userId}/{fileName} {
+      // Users can read their own transcripts, admins can read all transcripts
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // System/admins can create transcript files
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // System/admins can update transcript files
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Users can delete their own transcripts, admins can delete any transcript
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
+    // Public assets (logos, etc.) - read-only for all
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Temporary files (processing, cache, etc.)
+    match /temp/{allPaths=**} {
+      // Short-lived files for processing
+      allow read, write: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    // Demo users - broader access for testing
+    match /{allPaths=**} {
+      allow read, write: if isSignedIn() && request.auth.token.email in ['user@demo.com', 'admin@demo.com'];
+    }
+
+    // Admin access to everything
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

@@ -286,7 +286,7 @@ export default function UploadPage() {
 
             if (!transcriptionResponse.ok) {
               const errorData = await transcriptionResponse.json();
-              console.error(`Failed to start Speechmatics processing for job ${jobId}:`, errorData.error);
+              console.error(`Failed to start Speechmatics processing for job ${jobId}:`, errorData.error || errorData.message);
               
               // Don't fail the upload, but log the issue
               toast({
@@ -295,7 +295,19 @@ export default function UploadPage() {
                 variant: "default",
               });
             } else {
-              console.log(`Successfully started Speechmatics processing for job ${jobId}`);
+              // Check the response body for success status
+              const responseData = await transcriptionResponse.json();
+              if (responseData.success === false) {
+                console.warn(`Speechmatics processing not available for job ${jobId}:`, responseData.message);
+                
+                toast({
+                  title: "Manual Processing Required",
+                  description: `File uploaded successfully. ${responseData.message}`,
+                  variant: "default",
+                });
+              } else {
+                console.log(`Successfully started Speechmatics processing for job ${jobId}`);
+              }
             }
           } catch (error) {
             console.error(`Error starting Speechmatics processing for job ${jobId}:`, error);

@@ -1,0 +1,150 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isOwnerOrAdmin(userId) {
+      return isOwner(userId) || isAdmin();
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all profiles
+      allow read: if isOwnerOrAdmin(userId);
+      
+      // Users can create their own profile during signup
+      allow create: if isSignedIn() && isOwner(userId) && 
+                       request.resource.data.keys().hasAll(['email', 'role', 'createdAt']) &&
+                       request.resource.data.role in ['user', 'admin'] &&
+                       request.resource.data.email == request.auth.token.email;
+      
+      // Users can update their own profile (except role), admins can update anyone's profile
+      allow update: if isOwner(userId) && 
+                       (!('role' in request.resource.data) || 
+                        request.resource.data.role == resource.data.role) ||
+                       isAdmin();
+      
+      // Only admins can delete user profiles
+      allow delete: if isAdmin();
+    }
+
+    // Transcriptions collection
+    match /transcriptions/{transcriptionId} {
+      // Users can read their own transcriptions, admins can read all transcriptions
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Users can create transcriptions for themselves
+      allow create: if isSignedIn() && 
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.keys().hasAll(['userId', 'filename', 'status', 'mode']) &&
+                       // Allow additional optional fields
+                       request.resource.data.keys().hasOnly([
+                         'userId', 'filename', 'originalFilename', 'filePath', 'downloadURL',
+                         'status', 'mode', 'duration', 'creditsUsed', 'specialInstructions',
+                         'transcript', 'createdAt', 'updatedAt', 'completedAt'
+                       ]);
+      
+      // Users can update their own transcriptions, admins can update any transcription
+      allow update: if isSignedIn() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Users can delete their own transcriptions, admins can delete any transcription
+      allow delete: if isSignedIn() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Credits collection
+    match /credits/{userId} {
+      // Users can read their own credits, admins can read all credits
+      allow read: if isOwnerOrAdmin(userId);
+      
+      // Users can create their own credit record during signup
+      allow create: if isSignedIn() && isOwner(userId) &&
+                       request.resource.data.keys().hasAll(['userId', 'balance']);
+      
+      // Users can update their own credits (for spending), admins can update anyone's credits
+      allow update: if isOwnerOrAdmin(userId);
+      
+      // Only admins can delete credit records
+      allow delete: if isAdmin();
+    }
+
+    // Transactions collection
+    match /transactions/{transactionId} {
+      // Users can read their own transactions, admins can read all transactions
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Users can create transactions for themselves, admins can create for anyone
+      allow create: if isSignedIn() && 
+                       (request.resource.data.userId == request.auth.uid || isAdmin()) &&
+                       request.resource.data.keys().hasAll(['userId', 'type', 'amount', 'createdAt']);
+      
+      // Only admins can update transactions
+      allow update: if isAdmin();
+      
+      // Only admins can delete transactions
+      allow delete: if isAdmin();
+    }
+
+    // Queue collection (for transcription processing)
+    match /queue/{jobId} {
+      // Users can read their own queue items, admins can read all
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // System/users can create queue items
+      allow create: if isSignedIn() && 
+                       request.resource.data.keys().hasAll(['userId', 'status', 'createdAt']);
+      
+      // System/admins can update queue items
+      allow update: if isSignedIn() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Only admins can delete queue items
+      allow delete: if isAdmin();
+    }
+
+    // Usage records collection
+    match /usage/{recordId} {
+      // Users can read their own usage, admins can read all usage
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // System can create usage records
+      allow create: if isSignedIn() && 
+                       request.resource.data.keys().hasAll(['userId', 'date', 'service']);
+      
+      // System/admins can update usage records
+      allow update: if isSignedIn() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Only admins can delete usage records
+      allow delete: if isAdmin();
+    }
+
+    // Settings/configuration (admin only)
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Remove the overly permissive demo rule - demo users should follow same rules
+    // Demo users are identified by email in other rules, not by bypassing security
+  }
+}

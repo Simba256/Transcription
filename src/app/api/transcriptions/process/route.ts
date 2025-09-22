@@ -6,15 +6,40 @@ import { storage } from '@/lib/firebase/config';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('[API] Processing transcription request received');
+    
     const body = await request.json();
     const { jobId, language = 'en', operatingPoint = 'enhanced' } = body;
 
+    console.log(`[API] Processing request for job: ${jobId}, language: ${language}, operatingPoint: ${operatingPoint}`);
+
     if (!jobId) {
+      console.error('[API] No job ID provided');
       return NextResponse.json(
         { error: 'Job ID is required' },
         { status: 400 }
       );
     }
+
+    // Check if Speechmatics is configured
+    console.log(`[API] Checking if Speechmatics is ready...`);
+    if (!speechmaticsService.isReady()) {
+      console.warn(`[API] Speechmatics not configured for job ${jobId}. Marking as pending.`);
+      
+      // Update job status to indicate manual processing needed
+      await updateTranscriptionStatus(jobId, 'pending-transcription', {
+        specialInstructions: 'Speechmatics API not configured - requires manual processing'
+      });
+      
+      return NextResponse.json({
+        success: false,
+        message: 'Speechmatics API not configured. Job marked for manual processing.',
+        jobId,
+        status: 'pending-transcription'
+      }, { status: 200 }); // Return 200 since it's not really an error
+    }
+
+    console.log(`[API] Speechmatics is ready, proceeding with job ${jobId}`);
 
     // Get the transcription job details
     const transcriptionJob = await getTranscriptionById(jobId);

@@ -21,14 +21,30 @@ export interface SpeechmaticsResult {
 export class SpeechmaticsService {
   private apiKey: string;
   private apiUrl: string;
+  private isConfigured: boolean;
 
   constructor() {
     this.apiKey = process.env.SPEECHMATICS_API_KEY || '';
     this.apiUrl = process.env.SPEECHMATICS_API_URL || 'https://asr.api.speechmatics.com/v2';
+    this.isConfigured = !!this.apiKey;
 
-    if (!this.apiKey) {
-      throw new Error('SPEECHMATICS_API_KEY environment variable is required');
+    console.log(`[Speechmatics] Initializing service...`);
+    console.log(`[Speechmatics] API URL: ${this.apiUrl}`);
+    console.log(`[Speechmatics] API Key present: ${this.isConfigured}`);
+    console.log(`[Speechmatics] API Key length: ${this.apiKey.length}`);
+
+    if (!this.isConfigured) {
+      console.warn('[Speechmatics] SPEECHMATICS_API_KEY environment variable is missing. Speechmatics functionality will be disabled.');
+    } else {
+      console.log('[Speechmatics] Service initialized successfully');
     }
+  }
+
+  /**
+   * Check if Speechmatics is properly configured
+   */
+  isReady(): boolean {
+    return this.isConfigured;
   }
 
   /**
@@ -40,6 +56,13 @@ export class SpeechmaticsService {
     config: SpeechmaticsConfig = {}
   ): Promise<SpeechmaticsResult> {
     try {
+      if (!this.isConfigured) {
+        return {
+          success: false,
+          error: 'Speechmatics API is not configured. Please set SPEECHMATICS_API_KEY environment variable.'
+        };
+      }
+
       const {
         language = 'en',
         operatingPoint = 'enhanced',
@@ -52,8 +75,9 @@ export class SpeechmaticsService {
       // Create form data for job creation with file upload (Speechmatics v2 API approach)
       const formData = new FormData();
       
-      // Add the audio file
-      formData.append('data_file', new Blob([audioBuffer]), filename);
+      // Add the audio file - convert Buffer to Uint8Array for better compatibility
+      const uint8Array = new Uint8Array(audioBuffer);
+      formData.append('data_file', new Blob([uint8Array]), filename);
       
       // Add the configuration as JSON (using only valid Speechmatics properties)
       const jobConfig = {
