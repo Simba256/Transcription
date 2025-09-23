@@ -21,26 +21,28 @@ export function UserDashboard() {
   const { user, userData } = useAuth();
   const { transactions } = useCredits();
 
+  const [allJobs, setAllJobs] = useState<TranscriptionJob[]>([]);
   const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
-  
-  // Load recent transcription jobs from Firestore
+
+  // Load all transcription jobs from Firestore
   useEffect(() => {
     if (!user) return;
-    
-    const loadRecentJobs = async () => {
+
+    const loadJobs = async () => {
       try {
         setJobsLoading(true);
         const jobs = await getTranscriptionsByUser(user.uid);
+        setAllJobs(jobs); // Store all jobs for stats
         setRecentJobs(jobs.slice(0, 5)); // Show only 5 most recent
       } catch (error) {
-        console.error('Error loading recent jobs:', error);
+        console.error('Error loading jobs:', error);
       } finally {
         setJobsLoading(false);
       }
     };
-    
-    loadRecentJobs();
+
+    loadJobs();
   }, [user]);
 
   // Real transaction data now comes from CreditContext
@@ -102,17 +104,17 @@ export function UserDashboard() {
   };
 
   const stats = {
-    totalJobs: recentJobs.length,
-    completedJobs: recentJobs.filter(j => j.status === 'complete').length,
-    creditsUsedThisMonth: recentJobs.reduce((s, j) => s + (j.creditsUsed || 0), 0),
-    avgTurnaroundTime: calculateAvgTurnaround(recentJobs)
+    totalJobs: allJobs.length,
+    completedJobs: allJobs.filter(j => j.status === 'complete').length,
+    creditsUsedThisMonth: allJobs.reduce((s, j) => s + (j.creditsUsed || 0), 0),
+    avgTurnaroundTime: calculateAvgTurnaround(allJobs)
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#003366] mb-2">

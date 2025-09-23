@@ -47,6 +47,7 @@ export default function TranscriptViewerPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTranscript, setEditedTranscript] = useState('');
   const [saving, setSaving] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<'txt' | 'pdf' | 'docx'>('txt');
   
   const audioRef = useRef<HTMLAudioElement>(null);
   
@@ -280,9 +281,9 @@ export default function TranscriptViewerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <Header />
-        <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 py-8 flex-1">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <LoadingSpinner size="lg" className="mb-4" />
@@ -297,18 +298,18 @@ export default function TranscriptViewerPage() {
 
   if (error || !transcription) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <Header />
-        <main className="container mx-auto px-4 py-8">
-          <Button 
-            variant="ghost" 
+        <main className="container mx-auto px-4 py-8 flex-1">
+          <Button
+            variant="ghost"
             onClick={() => router.back()}
             className="mb-4 hover:bg-gray-100"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Transcriptions
           </Button>
-          
+
           <div className="flex items-center justify-center min-h-[400px]">
             <Card className="max-w-md">
               <CardContent className="p-8 text-center">
@@ -317,7 +318,7 @@ export default function TranscriptViewerPage() {
                   {error || 'Transcript not found'}
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  {error === 'You do not have permission to view this transcription' 
+                  {error === 'You do not have permission to view this transcription'
                     ? 'You can only view transcriptions that belong to you.'
                     : 'The transcript you\'re looking for doesn\'t exist or has been removed.'
                   }
@@ -335,10 +336,10 @@ export default function TranscriptViewerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+
+      <main className="container mx-auto px-4 py-8 flex-1">
         {/* Header Section */}
         <div className="mb-6">
           <Button 
@@ -411,18 +412,17 @@ export default function TranscriptViewerPage() {
               <div className="flex">
                 <Button
                   variant="outline"
-                  onClick={() => exportTranscript('txt')}
+                  onClick={() => exportTranscript(selectedFormat)}
                   className="border-gray-300 rounded-r-none border-r-0"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Export
+                  Export {selectedFormat.toUpperCase()}
                 </Button>
-                <select 
-                  onChange={(e) => exportTranscript(e.target.value as 'txt' | 'pdf' | 'docx')}
+                <select
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value as 'txt' | 'pdf' | 'docx')}
                   className="border border-gray-300 rounded-l-none rounded-r-md px-2 py-2 text-sm bg-white hover:bg-gray-50"
-                  defaultValue=""
                 >
-                  <option value="" disabled>Format</option>
                   <option value="txt">TXT</option>
                   <option value="pdf">PDF</option>
                   <option value="docx">DOCX</option>

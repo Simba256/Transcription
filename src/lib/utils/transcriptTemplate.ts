@@ -258,11 +258,11 @@ export async function exportTranscriptPDF(templateData: TranscriptTemplateData):
 // Helper function to generate metadata table rows
 function generateMetadataRows(templateData: TranscriptTemplateData): TableRow[] {
   const metadata = [
-    ['Date:', templateData.date],
-    ['File Name:', templateData.fileName],
-    ['Provider Name:', templateData.providerName || 'N/A'],
     ...(templateData.clientName ? [['Client Name:', templateData.clientName]] : []),
     ...(templateData.projectName ? [['Project Name:', templateData.projectName]] : []),
+    ['Date:', templateData.date],
+    ['File Name:', templateData.fileName],
+    ['Provider Name:', templateData.providerName || 'Talk to Text'],
     ...(templateData.patientName ? [['Patient Name:', templateData.patientName]] : []),
     ...(templateData.location ? [['Location:', templateData.location]] : []),
     ...(templateData.time ? [['Time:', templateData.time]] : []),
@@ -274,15 +274,29 @@ function generateMetadataRows(templateData: TranscriptTemplateData): TableRow[] 
         new TableCell({
           children: [new Paragraph({
             children: [new TextRun({ text: label, bold: true, size: 22 })],
+            spacing: { before: 100, after: 100 },
           })],
           width: { size: 30, type: WidthType.PERCENTAGE },
-          shading: { fill: "F5F5F5" }, // Light gray background
+          shading: { fill: "F5F5F5" }, // Light gray background matching PDF
+          margins: {
+            top: 120,
+            bottom: 120,
+            left: 120,
+            right: 120,
+          },
         }),
         new TableCell({
           children: [new Paragraph({
             children: [new TextRun({ text: value, size: 22 })],
+            spacing: { before: 100, after: 100 },
           })],
           width: { size: 70, type: WidthType.PERCENTAGE },
+          margins: {
+            top: 120,
+            bottom: 120,
+            left: 120,
+            right: 120,
+          },
         }),
       ],
     })
@@ -292,22 +306,30 @@ function generateMetadataRows(templateData: TranscriptTemplateData): TableRow[] 
 // Helper function to generate DOCX transcript content with timestamps
 function generateDocxTranscriptContent(templateData: TranscriptTemplateData): Paragraph[] {
   if (templateData.timestampedTranscript && templateData.timestampedTranscript.length > 0) {
-    // Create paragraphs for each timestamped segment
+    // Create paragraphs for each timestamped segment matching PDF formatting
     return templateData.timestampedTranscript.map(segment =>
       new Paragraph({
         children: [
           new TextRun({
             text: `[${formatTimestamp(segment.start)}] `,
             bold: true,
-            color: "666666", // Gray color for timestamps
+            color: "646464", // Match PDF gray color for timestamps
             size: 22,
           }),
           new TextRun({
             text: segment.text,
             size: 22,
+            color: "000000", // Black text for content
           }),
         ],
-        spacing: { line: 276, after: 200 }, // Line spacing and space after each segment
+        spacing: {
+          line: 300, // Slightly increased line spacing for readability
+          after: 240 // Space after each segment matching PDF
+        },
+        indent: {
+          left: 0, // No additional indent for clean look
+          hanging: 0
+        },
       })
     );
   } else {
@@ -318,9 +340,10 @@ function generateDocxTranscriptContent(templateData: TranscriptTemplateData): Pa
           new TextRun({
             text: templateData.transcriptContent || "{{transcript_body}}",
             size: 22,
+            color: "000000",
           }),
         ],
-        spacing: { line: 276 },
+        spacing: { line: 300 },
       })
     ];
   }
@@ -333,29 +356,29 @@ export async function exportTranscriptDOCX(templateData: TranscriptTemplateData)
         headers: {
           default: new Header({
             children: [
-              // Professional header matching PDF
+              // Professional header matching PDF with proper spacing
               new Paragraph({
                 children: [
                   new TextRun({
                     text: "TALK TO TEXT CANADA",
                     bold: true,
-                    size: 36, // Larger like PDF
-                    color: "000000",
+                    size: 36, // Match PDF header size
+                    color: "003366", // Match the brand color
                   }),
                 ],
                 alignment: AlignmentType.LEFT,
-                spacing: { after: 120 },
+                spacing: { before: 200, after: 200 },
               }),
-              // Header underline
+              // Header underline matching PDF
               new Paragraph({
                 children: [new TextRun("")],
-                spacing: { after: 240 },
+                spacing: { after: 300 },
                 border: {
                   bottom: {
                     color: "000000",
                     space: 1,
                     style: "single",
-                    size: 6,
+                    size: 8, // Slightly thicker to match PDF
                   },
                 },
               }),
@@ -365,7 +388,7 @@ export async function exportTranscriptDOCX(templateData: TranscriptTemplateData)
         footers: {
           default: new Footer({
             children: [
-              // Footer with separator line like PDF
+              // Footer separator line like PDF
               new Paragraph({
                 children: [new TextRun("")],
                 border: {
@@ -373,16 +396,17 @@ export async function exportTranscriptDOCX(templateData: TranscriptTemplateData)
                     color: "000000",
                     space: 1,
                     style: "single",
-                    size: 6,
+                    size: 4,
                   },
                 },
-                spacing: { after: 120 },
+                spacing: { before: 200, after: 200 },
               }),
+              // Footer content - simple website URL
               new Paragraph({
                 children: [
                   new TextRun({
                     text: "www.talktotext.ca",
-                    size: 16,
+                    size: 20,
                   }),
                 ],
                 alignment: AlignmentType.LEFT,
@@ -402,12 +426,12 @@ export async function exportTranscriptDOCX(templateData: TranscriptTemplateData)
             rows: generateMetadataRows(templateData),
             width: { size: 100, type: WidthType.PERCENTAGE },
             borders: {
-              top: { style: "single", size: 6, color: "999999" },
-              bottom: { style: "single", size: 6, color: "999999" },
-              left: { style: "single", size: 6, color: "999999" },
-              right: { style: "single", size: 6, color: "999999" },
-              insideHorizontal: { style: "single", size: 3, color: "CCCCCC" },
-              insideVertical: { style: "single", size: 3, color: "CCCCCC" },
+              top: { style: "single", size: 4, color: "969696" },
+              bottom: { style: "single", size: 4, color: "969696" },
+              left: { style: "single", size: 4, color: "969696" },
+              right: { style: "single", size: 4, color: "969696" },
+              insideHorizontal: { style: "single", size: 2, color: "CCCCCC" },
+              insideVertical: { style: "single", size: 2, color: "CCCCCC" },
             },
           }),
 

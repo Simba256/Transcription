@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX, exportTranscriptTXT } from '@/lib/utils/transcriptTemplate';
-import { FileText, Search, Filter } from 'lucide-react';
+import { FileText, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,8 @@ export default function TranscriptionsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [modeFilter, setModeFilter] = useState('all');
   const [isPolling, setIsPolling] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Load transcriptions from Firestore
   const loadTranscriptions = async (showLoading = true) => {
@@ -83,16 +85,27 @@ export default function TranscriptionsPage() {
     return transcriptions.filter(transcription => {
       const matchesSearch = transcription.originalFilename?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || transcription.status === statusFilter;
-      
+
       // Convert mode to display name for filtering
       const modeDisplayName = transcription.mode === 'ai' ? 'AI Transcription' :
                              transcription.mode === 'hybrid' ? 'Hybrid Review' :
                              transcription.mode === 'human' ? 'Human Transcription' : transcription.mode;
       const matchesMode = modeFilter === 'all' || modeDisplayName === modeFilter;
-      
+
       return matchesSearch && matchesStatus && matchesMode;
     });
   }, [transcriptions, searchTerm, statusFilter, modeFilter]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredTranscriptions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTranscriptions = filteredTranscriptions.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, modeFilter]);
 
   const handleDownload = async (transcription: TranscriptionJob, format: 'txt' | 'pdf' | 'docx' = 'txt') => {
     try {
@@ -163,10 +176,10 @@ export default function TranscriptionsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="w-full max-w-sm sm:max-w-lg md:max-w-4xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-6 sm:px-12 md:px-16 lg:px-20 xl:px-24 2xl:px-32 py-8 flex-1">
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -241,7 +254,7 @@ export default function TranscriptionsPage() {
         {/* Results Summary */}
         {!loading && (
           <div className="mb-6 text-sm text-gray-600">
-            Showing {filteredTranscriptions.length} of {transcriptions.length} transcriptions
+            Showing {startIndex + 1}-{Math.min(endIndex, filteredTranscriptions.length)} of {filteredTranscriptions.length} transcriptions
             {(searchTerm || statusFilter !== 'all' || modeFilter !== 'all') && (
               <Button
                 variant="ghost"
@@ -260,14 +273,14 @@ export default function TranscriptionsPage() {
         )}
 
         {/* Transcriptions List */}
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm w-full">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-[#003366]">
               Transcriptions
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+          <CardContent className="w-full">
+            <div className="space-y-4 w-full">
               {loading && (
                 <div className="text-center text-gray-500 py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003366] mx-auto mb-4"></div>
@@ -275,10 +288,10 @@ export default function TranscriptionsPage() {
                 </div>
               )}
               
-              {!loading && filteredTranscriptions.map((transcription) => (
+              {!loading && paginatedTranscriptions.map((transcription) => (
                 <div
                   key={transcription.id}
-                  className="flex items-center justify-between p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="w-full flex items-center justify-between p-6 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
@@ -403,6 +416,74 @@ export default function TranscriptionsPage() {
                       </Link>
                     </Button>
                   )}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {!loading && filteredTranscriptions.length > 0 && totalPages > 1 && (
+                <div className="w-full mt-6 pt-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center space-x-2 flex-wrap justify-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="flex items-center space-x-1"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span>Previous</span>
+                      </Button>
+
+                      <div className="flex items-center space-x-1 flex-wrap">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                          // Show first page, last page, current page, and pages around current page
+                          const isVisible = page === 1 ||
+                                           page === totalPages ||
+                                           (page >= currentPage - 2 && page <= currentPage + 2);
+
+                          if (!isVisible) {
+                            // Show ellipsis for gaps
+                            if (page === currentPage - 3 || page === currentPage + 3) {
+                              return <span key={page} className="px-2 text-gray-400">...</span>;
+                            }
+                            return null;
+                          }
+
+                          return (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page)}
+                              className={`w-8 h-8 p-0 flex-shrink-0 ${
+                                currentPage === page
+                                  ? 'bg-[#003366] text-white'
+                                  : 'text-gray-700 hover:bg-gray-100'
+                              }`}
+                            >
+                              {page}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="flex items-center space-x-1"
+                      >
+                        <span>Next</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="text-sm text-gray-600 flex-shrink-0">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
