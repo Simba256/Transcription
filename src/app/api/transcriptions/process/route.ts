@@ -5,8 +5,15 @@ import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, TranscriptionMode } from '@/lib/firebase/transcriptions-admin';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase/config';
+import { rateLimiters } from '@/lib/middleware/rate-limit';
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting first
+  const rateLimitResponse = await rateLimiters.transcription(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     console.log('[API] Processing transcription request received');
     

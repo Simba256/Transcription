@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { adminAuth } from '@/lib/firebase/admin';
+import { rateLimiters } from '@/lib/middleware/rate-limit';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-11-20.acacia',
 });
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting first
+  const rateLimitResponse = await rateLimiters.billing(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

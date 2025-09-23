@@ -3,10 +3,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // =============================================================
-    // REMOVED OVERLY PERMISSIVE GLOBAL RULE FOR SECURITY
-    // Previously allowed any authenticated user to access all documents
-    // Now relying on granular collection-specific rules for proper security
-    // =============================================================
+    // GLOBAL PRODUCTION RULE (Requested):
+    // Allow read/write for any authenticated user across all documents.
+    // NOTE: This OVERRIDES the granular rules below because a wildcard
+    // match "/{document=**}" takes precedence when it applies. Keep this
+    // only if you intentionally want broad access for any signed-in user.
+    // For tighter security, remove or comment this block and rely on the
+    // collection-specific rules defined further down.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
 
     
     // Helper functions
