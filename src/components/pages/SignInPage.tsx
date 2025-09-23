@@ -267,7 +267,4 @@ export function SignInPage() {
   );
 }
 // Default export for Next.js pages compatibility
-export default SignIn;
-
-// Default export for Next.js pages compatibility
 export default SignInPage;

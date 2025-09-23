@@ -157,4 +157,4 @@ export function ForgotPasswordPage() {
   );
 }
 // Default export for Next.js pages compatibility
-export default ForgotPassword;
+export default ForgotPasswordPage;

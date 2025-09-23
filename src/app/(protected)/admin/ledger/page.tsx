@@ -1,6 +1,6 @@
 'use client';
 
-import { AdminLedger } from '@/pages/admin/AdminLedger';
+import { AdminLedger } from '@/components/pages/admin/AdminLedger';
 
 export default function AdminLedgerPage() {
   return <AdminLedger />;

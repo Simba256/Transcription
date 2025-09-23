@@ -277,4 +277,4 @@ export function PricingPage() {
   );
 }
 // Default export for Next.js pages compatibility
-export default Pricing;
+export default PricingPage;

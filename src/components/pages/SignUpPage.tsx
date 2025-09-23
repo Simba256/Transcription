@@ -288,4 +288,4 @@ export function SignUpPage() {
   );
 }
 // Default export for Next.js pages compatibility
-export default SignUp;
+export default SignUpPage;

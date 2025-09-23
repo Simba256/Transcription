@@ -4,8 +4,8 @@ import React from 'react';
 import Image from 'next/image';
 import { Shield, Users, Award, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Header } from '../components/layout/Header';
-import { Footer } from '../components/layout/Footer';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
 
 function AboutPage() {
   return (

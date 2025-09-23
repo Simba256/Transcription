@@ -369,6 +369,3 @@ export function UserDashboard() {
 }
 // Default export for Next.js pages compatibility
 export default UserDashboard;
-
-// Default export for Next.js pages compatibility
-export default UserDashboard;
