@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { CreditCard, Download, Clock, CheckCircle } from 'lucide-react';
+import { CreditCard, Download, Clock, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
@@ -25,6 +25,18 @@ export default function BillingPage() {
     paymentIntentId: string;
     packageInfo: typeof packages[0];
   } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const transactionsPerPage = 10;
+
+  // Calculate pagination
+  const totalPages = Math.ceil(transactions.length / transactionsPerPage);
+  const startIndex = (currentPage - 1) * transactionsPerPage;
+  const endIndex = startIndex + transactionsPerPage;
+  const currentTransactions = transactions.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
   const packages = [
     {
@@ -129,7 +141,7 @@ export default function BillingPage() {
     // Prepare CSV data
     const headers = ['Date', 'Type', 'Description', 'Amount (Credits)', 'Job ID'];
     const csvData = transactions.map(transaction => [
-      transaction.date.toLocaleDateString(),
+      transaction.createdAt.toLocaleDateString(),
       transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1),
       transaction.description,
       transaction.amount.toString(),
@@ -283,8 +295,9 @@ export default function BillingPage() {
           </CardHeader>
           <CardContent>
             {transactions.length > 0 ? (
-              <div className="space-y-4">
-                {transactions.map((transaction) => (
+              <>
+                <div className="space-y-4">
+                  {currentTransactions.map((transaction) => (
                   <div
                     key={transaction.id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
@@ -315,7 +328,7 @@ export default function BillingPage() {
                           {transaction.description}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {transaction.date.toLocaleDateString()} at {transaction.date.toLocaleTimeString()}
+                          {transaction.createdAt.toLocaleDateString()} at {transaction.createdAt.toLocaleTimeString()}
                         </p>
                       </div>
                     </div>
@@ -326,8 +339,60 @@ export default function BillingPage() {
                       {transaction.amount > 0 ? '+' : ''}{transaction.amount} credits
                     </div>
                   </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                    <div className="text-sm text-gray-600">
+                      Showing {startIndex + 1} to {Math.min(endIndex, transactions.length)} of {transactions.length} transactions
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => goToPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="flex items-center"
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(page)}
+                            className={`w-8 h-8 p-0 ${
+                              currentPage === page
+                                ? 'bg-[#b29dd9] hover:bg-[#9d87c7] text-white'
+                                : 'text-[#003366] hover:bg-gray-50'
+                            }`}
+                          >
+                            {page}
+                          </Button>
+                        ))}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => goToPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="flex items-center"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-12">
                 <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
