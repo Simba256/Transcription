@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { Users, FileText, DollarSign, TrendingUp, Clock, CheckCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -12,7 +11,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { useRouter } from 'next/navigation';
-import { getTranscriptionsByUser } from '@/lib/firebase/transcriptions';
+import { TranscriptionJob } from '@/lib/firebase/transcriptions';
+import { UserData } from '@/lib/firebase/auth';
 import { collection, getDocs, query, orderBy, limit, getFirestore } from 'firebase/firestore';
 
 export default function AdminPage() {
@@ -20,9 +20,9 @@ export default function AdminPage() {
   const { getAllUsers } = useCredits();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [recentJobs, setRecentJobs] = useState<any[]>([]);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
+  const [recentUsers, setRecentUsers] = useState<UserData[]>([]);
+  const [, setAllUsers] = useState<UserData[]>([]);
   const [systemStats, setSystemStats] = useState({
     totalUsers: 0,
     activeJobs: 0,

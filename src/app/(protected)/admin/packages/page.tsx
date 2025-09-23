@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit3, Trash2, Package, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ interface CreditPackage {
 export function PackageManager() {
   const { toast } = useToast();
   const [isCreating, setIsCreating] = useState(false);
-  const [editingPackage, setEditingPackage] = useState<string | null>(null);
+  const [, setEditingPackage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [packageCounter, setPackageCounter] = useState(4);
 

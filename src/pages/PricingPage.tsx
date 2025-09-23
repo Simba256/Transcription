@@ -243,7 +243,7 @@ export function PricingPage() {
 
             <div>
               <h3 className="text-lg font-semibold text-[#003366] mb-2">
-                Can I get a refund if I'm not satisfied?
+                Can I get a refund if I&apos;m not satisfied?
               </h3>
               <p className="text-gray-600">
                 Yes, we offer a 30-day money-back guarantee on all credit purchases.

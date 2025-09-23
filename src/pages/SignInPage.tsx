@@ -101,8 +101,10 @@ export function SignInPage() {
       });
       
       // Navigation will be handled by useEffect
-    } catch (error: any) {
-      const errorMsg = getErrorMessage(error?.message || error?.toString() || 'Unknown error');
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(
+        (error instanceof Error ? error.message : String(error)) || 'Unknown error'
+      );
       
       toast({
         title: errorMsg.title,
@@ -240,7 +242,7 @@ export function SignInPage() {
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Link
                   href="/signup"
                   className="font-medium text-[#b29dd9] hover:text-[#9d87c7]"

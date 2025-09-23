@@ -2,8 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import jsPDF from 'jspdf';
-import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
 import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX, exportTranscriptTXT } from '@/lib/utils/transcriptTemplate';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';

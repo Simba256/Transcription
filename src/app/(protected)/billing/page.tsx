@@ -17,7 +17,7 @@ import { secureApiClient } from '@/lib/secure-api-client';
 
 export default function BillingPage() {
   const { user, userData } = useAuth();
-  const { transactions, purchaseCredits, refreshCredits } = useCredits();
+  const { transactions, purchaseCredits } = useCredits();
   const { toast } = useToast();
   const [purchasingPackage, setPurchasingPackage] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<{

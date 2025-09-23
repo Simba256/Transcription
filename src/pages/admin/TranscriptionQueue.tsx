@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, Play, Download, CheckCircle, XCircle, Eye, Edit, RefreshCw, Zap } from 'lucide-react';
+import { Search, Filter, Download, CheckCircle, XCircle, Eye, Edit, RefreshCw, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,14 +15,12 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
-import { 
-  getAllTranscriptionJobs, 
-  getTranscriptionJobsByStatus, 
+import {
+  getAllTranscriptionJobs,
   approveTranscriptionReview,
   rejectTranscriptionJob,
   submitHumanTranscription,
-  TranscriptionJob,
-  TranscriptionStatus
+  TranscriptionJob
 } from '@/lib/firebase/transcriptions';
 import { formatDuration } from '@/lib/utils';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
@@ -316,7 +314,7 @@ export function TranscriptionQueue() {
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
                         <h3 className="font-medium text-[#003366]">{item.originalFilename || item.filename || 'Unknown file'}</h3>
-                        <StatusBadge status={item.status as any} />
+                        <StatusBadge status={item.status} />
                       </div>
                       <div className="flex items-center space-x-4 text-sm text-gray-600">
                         <span>{userEmails[item.userId] || 'Loading...'}</span>

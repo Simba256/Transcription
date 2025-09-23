@@ -18,8 +18,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { generateFilePath } from '@/lib/firebase/storage';
-import { createTranscriptionJobAPI, processTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
-import { TranscriptionMode } from '@/lib/firebase/transcriptions';
+import { createTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
+import { TranscriptionMode, TranscriptionJob } from '@/lib/firebase/transcriptions';
 import { formatDuration, getBillingMinutes } from '@/lib/utils';
 
 interface UploadFile {
@@ -42,7 +42,7 @@ export default function UploadPage() {
   const [location, setLocation] = useState('');
   const [locationEnabled, setLocationEnabled] = useState(false);
   const { user, userData } = useAuth();
-  const { addTransaction, consumeCredits } = useCredits();
+  const { consumeCredits } = useCredits();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -80,7 +80,7 @@ export default function UploadPage() {
             title: "Location detected",
             description: `Location set to: ${locationString}`,
           });
-        } catch (error) {
+        } catch {
           // Fallback to coordinates if geocoding fails
           const coords = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
           setLocation(coords);
@@ -164,7 +164,7 @@ export default function UploadPage() {
         resolve(media.duration);
       });
       
-      media.addEventListener('error', (e) => {
+      media.addEventListener('error', () => {
         URL.revokeObjectURL(objectUrl);
         reject(new Error('Failed to load media file'));
       });
@@ -320,7 +320,7 @@ export default function UploadPage() {
           initialStatus = 'processing'; // AI and hybrid modes start processing immediately
         }
 
-        const jobData: any = {
+        const jobData: Omit<TranscriptionJob, 'id' | 'createdAt' | 'updatedAt'> = {
           userId: user.uid,
           filename: result.name,
           originalFilename: uploadFile.file.name,

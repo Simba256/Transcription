@@ -43,7 +43,7 @@ export function SignUpPage() {
     
     if (formData.password !== formData.confirmPassword) {
       toast({
-        title: "Passwords don't match",
+        title: "Passwords don&apos;t match",
         description: "Please make sure your passwords match.",
         variant: "destructive",
       });
@@ -68,10 +68,10 @@ export function SignUpPage() {
         description: "Welcome to Talk To Text Canada.",
       });
       router.push('/dashboard');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('🚫 Signup error in page:', error);
       
-      if (error?.message === 'EMAIL_VERIFICATION_REQUIRED') {
+      if ((error as Error)?.message === 'EMAIL_VERIFICATION_REQUIRED') {
         toast({
           title: "Verify your email",
           description: "We've sent a verification link to your inbox. Please verify, then sign in.",
@@ -89,13 +89,13 @@ export function SignUpPage() {
       
       toast({
         title: "Sign up failed",
-        description: error?.message || "Please try again or contact support.",
+        description: (error instanceof Error ? error.message : String(error)) || "Please try again or contact support.",
         variant: "destructive",
       });
     }
   };
 
-  const handleGoogleSignUp = async () => {
+  const _handleGoogleSignUp = async () => {
     try {
       await signUpWithGoogle();
       toast({
@@ -103,7 +103,7 @@ export function SignUpPage() {
         description: "Welcome to Talk To Text Canada.",
       });
       router.push('/dashboard');
-    } catch (error: any) {
+    } catch {
       toast({
         title: "Google sign-up failed",
         description: "Please try again or contact support.",

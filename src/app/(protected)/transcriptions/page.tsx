@@ -17,7 +17,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { getTranscriptionsByUser } from '@/lib/firebase/transcriptions';
 import { TranscriptionJob, updateTranscriptionStatus } from '@/lib/firebase/transcriptions';
 import { Timestamp } from 'firebase/firestore';
-import { formatDuration, formatTime } from '@/lib/utils';
+import { formatDuration } from '@/lib/utils';
 
 
 export default function TranscriptionsPage() {

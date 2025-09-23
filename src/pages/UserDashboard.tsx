@@ -121,7 +121,7 @@ export function UserDashboard() {
             Welcome back, {userData?.name || user?.email?.split('@')[0] || 'User'}!
           </h1>
           <p className="text-gray-600">
-            Here's an overview of your transcription activity and account status.
+            Here&apos;s an overview of your transcription activity and account status.
           </p>
         </div>
 

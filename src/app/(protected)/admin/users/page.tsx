@@ -21,6 +21,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { getAllUsers } from '@/lib/firebase/firestore';
+import { UserData } from '@/lib/firebase/auth';
 
 export default function UserManagementPage() {
   const { userData, loading: authLoading } = useAuth();
@@ -29,7 +30,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
 
   useEffect(() => {
     // Check if user is admin
