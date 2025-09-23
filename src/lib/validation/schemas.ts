@@ -166,7 +166,7 @@ export const CreatePaymentIntentSchema = z.object({
     .max(5000, 'Maximum amount $5,000.00'),
   currency: z.string()
     .length(3, 'Currency must be 3 characters')
-    .default('usd'),
+    .default('cad'),
 });
 
 /**

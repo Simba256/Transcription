@@ -84,7 +84,8 @@ export default function BillingPage() {
       const resp = await secureApiClient.post('/api/billing/create-payment-intent', {
         packageId: pkg.id,
         amount: pkg.price,
-        credits: pkg.credits
+        credits: pkg.credits,
+        currency: 'cad'
       });
       setPaymentData({
         clientSecret: resp.clientSecret!,
