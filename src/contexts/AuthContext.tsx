@@ -68,12 +68,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Set auth token - this will only run on the client since Firebase auth only works client-side
         try {
-          const token = getCookie('auth-token');
-          if (!token) {
-            // If no token but user is signed in, get and set token
-            const idToken = await firebaseUser.getIdToken();
-            document.cookie = `auth-token=${idToken}; path=/; max-age=${60 * 60 * 24 * 7}`;
-          }
+          // Always get a fresh token to ensure it's valid
+          const idToken = await firebaseUser.getIdToken(true); // Force refresh
+          document.cookie = `auth-token=${idToken}; path=/; max-age=${60 * 60}; SameSite=Lax`; // 1 hour expiry
         } catch (error) {
           console.warn('Cookie handling error:', error);
         }
@@ -146,6 +143,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     setLoading(true);
+
+    // Clear the auth token cookie
+    document.cookie = 'auth-token=; path=/; max-age=0';
+
     await firebaseSignOut();
     setUser(null);
     setUserData(null);

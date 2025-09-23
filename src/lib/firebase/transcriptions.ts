@@ -4,6 +4,13 @@ import { db } from './config';
 export type TranscriptionStatus = 'processing' | 'pending-review' | 'pending-transcription' | 'complete' | 'failed';
 export type TranscriptionMode = 'ai' | 'hybrid' | 'human';
 
+export interface TranscriptSegment {
+  start: number; // Start time in seconds
+  end: number;   // End time in seconds
+  text: string;  // Text content
+  confidence?: number; // Optional confidence score
+}
+
 export interface TranscriptionJob {
   id?: string;
   userId: string;
@@ -17,9 +24,17 @@ export interface TranscriptionJob {
   creditsUsed: number;
   specialInstructions?: string;
   transcript?: string;
+  timestampedTranscript?: TranscriptSegment[]; // New field for timestamped data
   createdAt: Timestamp;
   updatedAt: Timestamp;
   completedAt?: Timestamp;
+  // Template metadata fields
+  clientName?: string;
+  projectName?: string;
+  providerName?: string;
+  patientName?: string;
+  location?: string;
+  recordingTime?: string;
 }
 
 const TRANSCRIPTIONS_COLLECTION = 'transcriptions';

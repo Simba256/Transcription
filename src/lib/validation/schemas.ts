@@ -70,6 +70,25 @@ export const CreateTranscriptionJobSchema = z.object({
   specialInstructions: z.string()
     .max(1000, 'Special instructions too long')
     .optional(),
+  // Template metadata fields
+  clientName: z.string()
+    .max(200, 'Client name too long')
+    .optional(),
+  projectName: z.string()
+    .max(200, 'Project name too long')
+    .optional(),
+  providerName: z.string()
+    .max(200, 'Provider name too long')
+    .optional(),
+  patientName: z.string()
+    .max(200, 'Patient name too long')
+    .optional(),
+  location: z.string()
+    .max(200, 'Location too long')
+    .optional(),
+  recordingTime: z.string()
+    .max(50, 'Recording time too long')
+    .optional(),
   userId: z.string().optional(), // Will be overridden by authenticated user
 });
 

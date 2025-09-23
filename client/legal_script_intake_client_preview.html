@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LegalScript Studio — Intake | Talk to Text Canada</title>
+  <style>
+    :root{
+      --navy:#003366;            /* brand primary */
+      --lav:#b09bd6;             /* lavender */
+      --lav-dark:#7e6ba8;        /* darker lavender */
+      --ink:#1a1f2b;             /* text */
+      --muted:#6b7280;           /* secondary text */
+      --bg:#f7f8fb;              /* page background */
+      --card:#fff;               /* card background */
+      --border:#e5e7eb;          /* border */
+      --ok:#065f46;              /* success */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;line-height:1.55}
+
+    /* Header */
+    header{position:sticky;top:0;background:var(--navy);color:#fff;border-bottom:1px solid #002a55;z-index:30}
+    .wrap{max-width:1000px;margin:0 auto;padding:14px 18px}
+    .nav{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px}
+    .brand .logo{height:32px;width:auto;border-radius:6px;background:#ffffff22;display:inline-block}
+    .nav a{color:#fff;text-decoration:none;opacity:.9}
+    .nav a:hover{opacity:1}
+    .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #ffffff44;border-radius:10px;padding:8px 12px;background:#ffffff14;color:#fff;font-weight:700;cursor:pointer}
+    .btn:hover{background:#ffffff26}
+
+    /* Card */
+    main{padding:26px 18px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:920px;margin:0 auto;padding:18px 18px 8px}
+    h1{font-size:clamp(22px,3.2vw,28px);color:var(--navy);margin:.2rem 0 .6rem}
+    .sub{color:var(--muted);margin-top:-4px}
+    .hint{font-size:.92rem;color:var(--muted)}
+
+    /* Form */
+    form{margin-top:10px}
+    fieldset{border:1px dashed var(--border);border-radius:14px;padding:14px 14px 6px;margin:14px 0}
+    legend{font-weight:800;color:var(--navy);padding:0 6px}
+    label{font-size:.92rem;color:#374151;display:block;margin:0 0 6px}
+    input[type="text"], input[type="date"], select, textarea, input[type="file"]{
+      width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink);font-size:1rem
+    }
+    textarea{min-height:96px}
+    .row{display:grid;gap:12px}
+    .col-2{grid-template-columns:1fr 1fr}
+    .col-3{grid-template-columns:1fr 1fr 1fr}
+    @media (max-width:900px){.col-2,.col-3{grid-template-columns:1fr}}
+    .checkbox{display:flex;align-items:center;gap:10px;margin:6px 0}
+    .pill{display:inline-block;background:#eef2ff;border:1px solid #c7d2fe;color:#1e3a8a;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+    .cta{display:flex;justify-content:center}
+    .submit{background:var(--navy);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:800;cursor:pointer}
+    .submit:hover{filter:brightness(.96)}
+
+    /* Footer note */
+    .note{font-size:.9rem;color:var(--muted);text-align:center;margin-top:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <div class="brand">
+        <span class="logo" aria-hidden style="width:32px"></span>
+        <span>Talk to Text Canada</span>
+      </div>
+      <nav>
+        <a href="#">Home</a>
+        <span aria-hidden>·</span>
+        <a href="#">Services</a>
+        <span aria-hidden>·</span>
+        <a class="btn" href="#">Client Portal ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <h1>LegalScript Studio — Intake</h1>
+      <p class="sub">Tell us what to produce. We’ll use our template (or yours if you upload one). You’ll upload audio after this step.</p>
+
+      <form>
+        <!-- BASICS -->
+        <fieldset>
+          <legend>Basics</legend>
+          <div class="row col-3">
+            <div>
+              <label for="project_name">Project / Case Title *</label>
+              <input id="project_name" name="project_name" type="text" placeholder="e.g., Smith v. Jones – Discovery" required>
+            </div>
+            <div>
+              <label for="turnaround">Turnaround</label>
+              <select id="turnaround" name="turnaround">
+                <option>Standard (3–5 business days)</option>
+                <option>Rush (24–48 hours)</option>
+                <option>Same Day</option>
+              </select>
+            </div>
+            <div>
+              <label for="due_date">Requested Due Date</label>
+              <input id="due_date" name="due_date" type="date">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- WHAT TO PRODUCE -->
+        <fieldset>
+          <legend>What do you need us to produce?</legend>
+          <div class="row col-2">
+            <div>
+              <label for="document_type">Document Type *</label>
+              <select id="document_type" name="document_type" required>
+                <option value="">— Select —</option>
+                <option value="court_style_doc">Court‑style document</option>
+                <option value="letter">Letter (demand/cover/counsel)</option>
+                <option value="affidavit">Affidavit / Declaration</option>
+                <option value="case_note">Case notes / interview summary</option>
+                <option value="memo">Memo / chronology / brief</option>
+                <option value="transcript_legal">Transcript (legal formatting)</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="style">Preferred Style</label>
+              <select id="style" name="style">
+                <option value="intelligent">Intelligent Verbatim (cleaned)</option>
+                <option value="strict">Strict Verbatim (word‑for‑word)</option>
+              </select>
+            </div>
+            <div class="colspan" style="grid-column:1/-1">
+              <label for="instructions">Key Details / Instructions</label>
+              <textarea id="instructions" name="instructions" placeholder="Sections, headings, tone, citations, exhibits, signature blocks, spacing, margins…"></textarea>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- BRANDING / CAPTION / LETTER DETAILS -->
+        <fieldset>
+          <legend>Branding / Caption / Letter Details</legend>
+          <div class="row col-2">
+            <div>
+              <label for="letterhead">Letterhead / Branding</label>
+              <select id="letterhead" name="letterhead">
+                <option value="use_firm_defaults">Use my firm defaults on file</option>
+                <option value="none">No letterhead</option>
+                <option value="custom">I’ll specify below</option>
+              </select>
+            </div>
+            <div class="colspan" style="grid-column:1/-1">
+              <label for="branding_notes">Branding / Caption / Address Block Notes</label>
+              <textarea id="branding_notes" name="branding_notes" placeholder="Firm name & address block, signatory, commissioner details; caption lines if relevant."></textarea>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- VOCAB & PRIVACY -->
+        <fieldset>
+          <legend>Vocabulary & Privacy</legend>
+          <div class="row">
+            <div>
+              <label for="vocabulary">Names / Spellings / Acronyms (comma‑separated)</label>
+              <input id="vocabulary" name="vocabulary" type="text" placeholder="Cassels, voir dire, Manulife, WSIB, FNHA">
+            </div>
+            <div class="checkbox"><input id="deidentify" type="checkbox"><label for="deidentify">De‑identify personal data</label></div>
+            <div class="checkbox"><input id="mask_profanity" type="checkbox"><label for="mask_profanity">Mask profanity</label></div>
+            <div class="checkbox"><input id="tracked_changes" type="checkbox"><label for="tracked_changes">Deliver with Tracked Changes copy</label></div>
+          </div>
+        </fieldset>
+
+        <!-- OPTIONAL UPLOADS -->
+        <fieldset>
+          <legend>Optional Uploads</legend>
+          <div class="row col-2">
+            <div>
+              <label for="client_template">Upload your firm template (DOCX)</label>
+              <input id="client_template" name="client_template" type="file" accept=".docx">
+            </div>
+            <div>
+              <label for="reference_files">Reference documents (multiple)</label>
+              <input id="reference_files" name="reference_files" type="file" multiple accept=".pdf,.doc,.docx,.txt,.rtf">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- TRANSCRIPT OPTIONS (ONLY IF A TRANSCRIPT IS A DELIVERABLE) -->
+        <fieldset>
+          <legend>Transcript Options (if a transcript is one of your deliverables)</legend>
+          <div class="row col-3">
+            <div>
+              <label for="transcription_mode">Transcription Mode</label>
+              <select id="transcription_mode" name="transcription_mode">
+                <option value="">— Not requesting a transcript —</option>
+                <option value="human">Human</option>
+                <option value="hybrid">Hybrid (AI + Human review)</option>
+                <option value="ai">AI‑only (auto on upload)</option>
+              </select>
+            </div>
+            <div>
+              <label for="timecode_interval">Timestamps</label>
+              <select id="timecode_interval" name="timecode_interval">
+                <option value="0">None</option>
+                <option value="30">Every 30s</option>
+                <option value="60">Every 60s</option>
+                <option value="300">Every 300s</option>
+                <option value="600">Every 600s</option>
+              </select>
+            </div>
+            <div>
+              <label for="speaker_labels">Speaker Labels</label>
+              <select id="speaker_labels" name="speaker_labels">
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint">AI‑only transcripts don’t need this intake. If you choose “AI‑only,” we’ll auto‑transcribe right after you upload audio, then continue with your legal document.</p>
+        </fieldset>
+
+        <div class="checkbox" style="margin-top:10px">
+          <input id="ack" type="checkbox" required>
+          <label for="ack">I understand Talk to Text Canada provides transcription/formatting, not legal advice.</label>
+        </div>
+
+        <div class="cta" style="margin:16px 0 10px">
+          <button class="submit" type="submit">Submit and Continue to Upload</button>
+        </div>
+        <p class="note">Your files are handled on Canadian infrastructure. NDAs available on request.</p>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

@@ -12,6 +12,8 @@ export async function createTranscriptionJobAPI(
   job: Omit<TranscriptionJob, 'id' | 'createdAt' | 'updatedAt' | 'userId'>
 ): Promise<string> {
   try {
+    console.log('Creating transcription job:', job);
+
     const response = await fetch('/api/transcriptions/create', {
       method: 'POST',
       headers: {
@@ -21,12 +23,16 @@ export async function createTranscriptionJobAPI(
       body: JSON.stringify(job),
     });
 
+    console.log('Response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('API Error:', errorData);
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('API Response:', data);
 
     if (!data.success || !data.jobId) {
       throw new Error('Invalid API response');

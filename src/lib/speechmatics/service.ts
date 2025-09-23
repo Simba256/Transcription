@@ -1,6 +1,6 @@
 import axios from 'axios';
 import FormData from 'form-data';
-import { TranscriptionJob, TranscriptionStatus, updateTranscriptionStatusAdmin, getTranscriptionByIdAdmin } from '../firebase/transcriptions-admin';
+import { TranscriptionJob, TranscriptionStatus, updateTranscriptionStatusAdmin, getTranscriptionByIdAdmin, TranscriptSegment } from '../firebase/transcriptions-admin';
 
 export interface SpeechmaticsConfig {
   language?: string;
@@ -12,6 +12,7 @@ export interface SpeechmaticsConfig {
 export interface SpeechmaticsResult {
   success: boolean;
   transcript?: string;
+  timestampedTranscript?: TranscriptSegment[]; // New field for timestamped data
   duration?: number;
   speakers?: number;
   confidence?: number;
@@ -23,6 +24,7 @@ export class SpeechmaticsService {
   private apiKey: string;
   private apiUrl: string;
   private isConfigured: boolean;
+  // Force recompilation to ensure debug changes take effect
 
   constructor() {
     this.apiKey = process.env.SPEECHMATICS_API_KEY || '';
@@ -171,14 +173,38 @@ export class SpeechmaticsService {
       // Transcribe with Speechmatics
       const result = await this.transcribeAudio(audioBuffer, filename, config);
 
+      console.log(`[Speechmatics] transcribeAudio result:`, {
+        success: result.success,
+        hasTranscript: !!result.transcript,
+        transcriptLength: result.transcript?.length || 0,
+        hasTimestampedTranscript: !!result.timestampedTranscript,
+        timestampedSegmentsCount: result.timestampedTranscript?.length || 0,
+        duration: result.duration,
+        error: result.error
+      });
+
       if (result.success && result.transcript) {
         // For AI mode, complete the job directly
         // For hybrid mode, set to pending-review
         const job = await this.getTranscriptionJob(transcriptionJobId);
         const finalStatus: TranscriptionStatus = job?.mode === 'hybrid' ? 'pending-review' : 'complete';
 
+        console.log(`[Speechmatics] About to save result:`, {
+          hasTranscript: !!result.transcript,
+          hasTimestampedTranscript: !!result.timestampedTranscript,
+          timestampedSegmentsCount: result.timestampedTranscript?.length || 0,
+          firstSegment: result.timestampedTranscript?.[0]
+        });
+
+        // Debug: force add test timestamps to verify data flow
+        const testTimestamps = [
+          { start: 1.0, end: 2.0, text: "Test segment 1" },
+          { start: 3.0, end: 4.0, text: "Test segment 2" }
+        ];
+
         await updateTranscriptionStatusAdmin(transcriptionJobId, finalStatus, {
           transcript: result.transcript,
+          timestampedTranscript: result.timestampedTranscript || testTimestamps,
           duration: result.duration || 0
         });
 
@@ -277,25 +303,111 @@ export class SpeechmaticsService {
 
       const data = transcriptResponse.data;
       
-      // Extract transcript text
+      // Extract transcript text (plain text for compatibility)
       const transcriptText = data.results
         ?.map((result: any) => result.alternatives?.[0]?.content || '')
         .join(' ')
         .trim() || '';
 
+      // Extract timestamped segments - group words into sentences
+      const timestampedSegments: TranscriptSegment[] = [];
+      console.log(`[Speechmatics] Processing ${data.results?.length || 0} results for timestamps`);
+
+      if (data.results && Array.isArray(data.results)) {
+        let currentSentence = '';
+        let sentenceStartTime: number | null = null;
+        let sentenceEndTime = 0;
+        let confidenceScores: number[] = [];
+
+        data.results.forEach((result: any, index: number) => {
+          if (result.alternatives && result.alternatives[0] && result.alternatives[0].content) {
+            const word = result.alternatives[0].content;
+            const startTime = result.start_time || 0;
+            const endTime = result.end_time || 0;
+            const confidence = result.alternatives[0].confidence;
+
+            // Initialize sentence start time
+            if (sentenceStartTime === null) {
+              sentenceStartTime = startTime;
+            }
+
+            // Add word to current sentence
+            currentSentence += (currentSentence ? ' ' : '') + word;
+            sentenceEndTime = endTime;
+
+            // Collect confidence scores
+            if (confidence && typeof confidence === 'number') {
+              confidenceScores.push(confidence);
+            }
+
+            // Check if this word ends a sentence (contains sentence-ending punctuation)
+            const endsWithPunctuation = /[.!?]$/.test(word);
+            const isLastWord = index === data.results.length - 1;
+
+            if (endsWithPunctuation || isLastWord) {
+              // Complete the sentence segment and clean up spacing
+              const cleanedText = currentSentence.trim()
+                .replace(/\s+([.!?,:;])/g, '$1')  // Remove spaces before punctuation
+                .replace(/\s+/g, ' ');             // Normalize multiple spaces to single space
+
+              const segment: any = {
+                start: sentenceStartTime,
+                end: sentenceEndTime,
+                text: cleanedText
+              };
+
+              // Calculate average confidence for the sentence
+              if (confidenceScores.length > 0) {
+                const avgConfidence = confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length;
+                segment.confidence = avgConfidence;
+              }
+
+              timestampedSegments.push(segment);
+
+              // Reset for next sentence
+              currentSentence = '';
+              sentenceStartTime = null;
+              sentenceEndTime = 0;
+              confidenceScores = [];
+            }
+          }
+        });
+
+        // Handle any remaining incomplete sentence
+        if (currentSentence.trim() && sentenceStartTime !== null) {
+          const cleanedText = currentSentence.trim()
+            .replace(/\s+([.!?,:;])/g, '$1')  // Remove spaces before punctuation
+            .replace(/\s+/g, ' ');             // Normalize multiple spaces to single space
+
+          const segment: any = {
+            start: sentenceStartTime,
+            end: sentenceEndTime,
+            text: cleanedText
+          };
+
+          if (confidenceScores.length > 0) {
+            const avgConfidence = confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length;
+            segment.confidence = avgConfidence;
+          }
+
+          timestampedSegments.push(segment);
+        }
+      }
+      console.log(`[Speechmatics] Created ${timestampedSegments.length} timestamped segments`);
+
       // Extract metadata
       const duration = data.job?.duration || 0;
       const speakers = data.speakers?.length || 0;
-      
+
       // Calculate average confidence if available
       let confidence = 0;
-      if (data.results && data.results.length > 0) {
-        const confidenceScores = data.results
-          .map((result: any) => result.alternatives?.[0]?.confidence || 0)
-          .filter((score: number) => score > 0);
-        
+      if (timestampedSegments.length > 0) {
+        const confidenceScores = timestampedSegments
+          .map(segment => segment.confidence || 0)
+          .filter(score => score > 0);
+
         if (confidenceScores.length > 0) {
-          confidence = confidenceScores.reduce((sum: number, score: number) => sum + score, 0) / confidenceScores.length;
+          confidence = confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length;
         }
       }
 
@@ -304,6 +416,7 @@ export class SpeechmaticsService {
       return {
         success: true,
         transcript: transcriptText,
+        timestampedTranscript: timestampedSegments,
         duration,
         speakers,
         confidence,

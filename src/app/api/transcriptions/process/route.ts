@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse;
   }
 
+  // Force recompilation to ensure latest Speechmatics changes are loaded
+
   try {
     console.log('[API] Processing transcription request received');
 
@@ -190,12 +192,23 @@ async function processTranscriptionAsync(
       speechmaticsConfig
     );
 
+    console.log(`[API Route] transcribeAudio result for ${jobId}:`, {
+      success: result.success,
+      hasTranscript: !!result.transcript,
+      transcriptLength: result.transcript?.length || 0,
+      hasTimestampedTranscript: !!result.timestampedTranscript,
+      timestampedSegmentsCount: result.timestampedTranscript?.length || 0,
+      duration: result.duration,
+      error: result.error
+    });
+
     if (result.success && result.transcript) {
       // Determine final status based on transcription mode
       const finalStatus = mode === 'hybrid' ? 'pending-review' : 'complete';
 
       await updateTranscriptionStatusAdmin(jobId, finalStatus, {
         transcript: result.transcript,
+        timestampedTranscript: result.timestampedTranscript,
         duration: result.duration || 0
       });
 

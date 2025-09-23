@@ -5,6 +5,13 @@ import { FieldValue } from 'firebase-admin/firestore';
 export type TranscriptionStatus = 'processing' | 'pending-review' | 'pending-transcription' | 'complete' | 'failed';
 export type TranscriptionMode = 'ai' | 'hybrid' | 'human';
 
+export interface TranscriptSegment {
+  start: number; // Start time in seconds
+  end: number;   // End time in seconds
+  text: string;  // Text content
+  confidence?: number; // Optional confidence score
+}
+
 export interface TranscriptionJob {
   id?: string;
   userId: string;
@@ -18,6 +25,7 @@ export interface TranscriptionJob {
   creditsUsed: number;
   specialInstructions?: string;
   transcript?: string;
+  timestampedTranscript?: TranscriptSegment[]; // New field for timestamped data
   createdAt: FirebaseFirestore.Timestamp;
   updatedAt: FirebaseFirestore.Timestamp;
   completedAt?: FirebaseFirestore.Timestamp;
@@ -60,6 +68,34 @@ export const updateTranscriptionStatusAdmin = async (
     if (status === 'complete') {
       updateData.completedAt = FieldValue.serverTimestamp();
     }
+
+    // Add debug fingerprint to track data flow
+    const debugFingerprint = {
+      timestamp: Date.now(),
+      buildId: process.env.VERCEL_GIT_COMMIT_SHA ?? 'local',
+      runtime: process.env.NEXT_RUNTIME ?? 'node',
+      projectId: process.env.FIREBASE_PROJECT_ID ?? 'unknown'
+    };
+
+    console.log(`[Admin] Updating transcription ${id} with status: ${status}`);
+    console.log(`[Admin] Has timestampedTranscript: ${!!additionalData?.timestampedTranscript}`);
+    console.log(`[Admin] TimestampedSegments count: ${additionalData?.timestampedTranscript?.length || 0}`);
+    console.log(`[Admin] Additional data keys: ${additionalData ? Object.keys(additionalData).join(', ') : 'none'}`);
+    console.log(`[Admin] Fields being updated: ${Object.keys(updateData).join(', ')}`);
+
+    // Debug the actual timestampedTranscript field
+    if (additionalData?.timestampedTranscript) {
+      console.log(`[Admin] timestampedTranscript type: ${typeof additionalData.timestampedTranscript}`);
+      console.log(`[Admin] timestampedTranscript isArray: ${Array.isArray(additionalData.timestampedTranscript)}`);
+      if (Array.isArray(additionalData.timestampedTranscript) && additionalData.timestampedTranscript[0]) {
+        console.log(`[Admin] First segment: start=${additionalData.timestampedTranscript[0].start}, text="${additionalData.timestampedTranscript[0].text}"`);
+      }
+    } else {
+      console.log(`[Admin] timestampedTranscript is null/undefined`);
+    }
+
+    // Add debug fingerprint to the actual document
+    updateData._debugWriter = debugFingerprint;
 
     await docRef.update(updateData);
     console.log(`[Admin] Updated transcription ${id} status to ${status}`);

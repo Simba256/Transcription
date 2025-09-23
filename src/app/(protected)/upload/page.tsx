@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -34,10 +35,85 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
   const [processingFiles, setProcessingFiles] = useState<Set<string>>(new Set());
+
+  // Metadata fields for transcript template
+  const [projectName, setProjectName] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [location, setLocation] = useState('');
+  const [locationEnabled, setLocationEnabled] = useState(false);
   const { user, userData } = useAuth();
   const { addTransaction, consumeCredits } = useCredits();
   const { toast } = useToast();
   const router = useRouter();
+
+  // Function to get user's location
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Location not supported",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLocationEnabled(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          // Use reverse geocoding to get a readable address
+          const response = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`
+          );
+          const data = await response.json();
+
+          // Format a nice location string
+          const locationString = [
+            data.city,
+            data.principalSubdivision,
+            data.countryName
+          ].filter(Boolean).join(', ');
+
+          setLocation(locationString || `${position.coords.latitude}, ${position.coords.longitude}`);
+
+          toast({
+            title: "Location detected",
+            description: `Location set to: ${locationString}`,
+          });
+        } catch (error) {
+          // Fallback to coordinates if geocoding fails
+          const coords = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+          setLocation(coords);
+
+          toast({
+            title: "Location detected",
+            description: `Location set to coordinates: ${coords}`,
+          });
+        }
+      },
+      (error) => {
+        setLocationEnabled(false);
+
+        let message = "Unable to get your location.";
+        if (error.code === error.PERMISSION_DENIED) {
+          message = "Location access denied. Please enable location permissions.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = "Location information unavailable.";
+        }
+
+        toast({
+          title: "Location error",
+          description: message,
+          variant: "destructive"
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  };
 
   const transcriptionModes = [
     {
@@ -253,9 +329,13 @@ export default function UploadPage() {
           status: initialStatus,
           mode: transcriptionMode as TranscriptionMode,
           duration: uploadFile.duration, // Store duration in seconds
-          creditsUsed: creditsForFile
+          creditsUsed: creditsForFile,
+          // Add metadata fields for template
+          projectName: projectName.trim() || undefined,
+          patientName: patientName.trim() || undefined,
+          location: location.trim() || undefined
         };
-        
+
         // Only add specialInstructions if it has content
         const trimmedInstructions = specialInstructions.trim();
         if (trimmedInstructions) {
@@ -336,7 +416,7 @@ export default function UploadPage() {
       setUploadedFiles([]);
       setSpecialInstructions('');
       setUploadProgress({});
-      
+
       router.push('/transcriptions');
     } catch (error) {
       console.error('Upload error:', error);
@@ -526,6 +606,83 @@ export default function UploadPage() {
                   </Label>
                 ))}
               </RadioGroup>
+            </CardContent>
+          </Card>
+
+          {/* Transcript Metadata */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-[#003366]">
+                Transcript Information (Optional)
+              </CardTitle>
+              <p className="text-sm text-gray-600 mt-2">
+                This information will appear on your professional transcript template
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="projectName" className="text-sm font-medium text-gray-700 mb-2">
+                    Project Name
+                  </Label>
+                  <Input
+                    id="projectName"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="e.g., Discovery Interview"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="patientName" className="text-sm font-medium text-gray-700 mb-2">
+                    Patient/Subject Name
+                  </Label>
+                  <Input
+                    id="patientName"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    placeholder="e.g., John Doe"
+                    className="w-full"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-sm font-medium text-gray-700 mb-2">
+                    Location
+                  </Label>
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Input
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        placeholder="Enter location manually or use GPS"
+                        className="w-full"
+                        disabled={locationEnabled}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={requestLocation}
+                      disabled={locationEnabled}
+                      variant="outline"
+                      className="border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white"
+                    >
+                      {locationEnabled ? 'Getting Location...' : 'Use GPS'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Location will be auto-populated if you enable GPS, or you can enter it manually
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Automatic Fields</h4>
+                <div className="text-sm text-blue-800 space-y-1">
+                  <div><strong>Client Name:</strong> {userData?.name || 'Your account name'}</div>
+                  <div><strong>Provider Name:</strong> Talk to Text</div>
+                  <div><strong>Date & Time:</strong> Upload time will be used</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

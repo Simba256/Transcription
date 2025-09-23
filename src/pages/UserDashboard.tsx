@@ -20,7 +20,7 @@ import { Timestamp } from 'firebase/firestore';
 export function UserDashboard() {
   const { user, userData } = useAuth();
   const { transactions } = useCredits();
-  
+
   const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   
@@ -339,7 +339,7 @@ export function UserDashboard() {
                         {transaction.description}
                       </p>
                       <p className="text-sm text-gray-600">
-                        {transaction.date.toISOString().slice(0, 10)}
+                        {transaction.createdAt?.toISOString?.()?.slice(0, 10) || 'Unknown date'}
                       </p>
                     </div>
                     <div className={`font-medium ${

@@ -1,0 +1,263 @@
+
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Transcript Editor — Talk to Text Canada</title>
+  <style>
+    :root{
+      --navy:#003366;
+      --lavender:#b09bd6; /* light lavender accent */
+      --lavender-dark:#7e6ba8; /* darker lavender */
+      --bg:#f7f8fb;
+      --text:#1a1f2b;
+      --muted:#6b7280;
+      --chip:#eef2ff;
+      --border:#e5e7eb;
+      --danger:#b91c1c;
+      --success:#065f46;
+      --warning:#8a6d1a;
+    }
+    *{box-sizing:border-box;}
+    html,body{height:100%;}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      line-height:1.45;
+    }
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; background:var(--navy); color:white;
+      position:sticky; top:0; z-index:20;
+    }
+    header .title{display:flex; gap:12px; align-items:center;}
+    header .title h1{font-size:18px; margin:0;}
+    header .badge{background:var(--lavender-dark); padding:4px 10px; border-radius:999px; font-size:12px;}
+    header .actions{display:flex; gap:8px; align-items:center;}
+    .btn{
+      border:1px solid transparent; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+      background:white; color:var(--navy);
+    }
+    .btn.primary{background:var(--lavender); color:#111827;}
+    .btn.navy{background:var(--navy); color:white;}
+    .btn.ghost{background:transparent; border-color:#ffffff3d; color:white;}
+    .btn.small{padding:6px 10px; font-size:12px;}
+    .btn:disabled{opacity:.6; cursor:not-allowed;}
+    main{display:grid; grid-template-columns: 320px 1fr 360px; gap:14px; padding:14px; height:calc(100% - 56px);}
+    aside, .editor, .rightbar{background:white; border:1px solid var(--border); border-radius:14px;}
+    aside, .rightbar{padding:12px; overflow:auto;}
+    .editor{display:flex; flex-direction:column; min-width:0;}
+    .panel-title{font-weight:700; color:var(--navy); margin:6px 0 10px;}
+    .audio{
+      padding:12px; border-bottom:1px solid var(--border);
+      display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    }
+    .audio .controls{display:flex; gap:8px; align-items:center;}
+    .audio input[type="range"]{width:180px;}
+    #transcript{
+      flex:1; padding:16px; overflow:auto; outline:none;
+    }
+    #transcript[contenteditable="true"]{caret-color:var(--navy);}
+    #statusbar{
+      border-top:1px solid var(--border); padding:8px 12px; display:flex; gap:12px; justify-content:space-between; align-items:center;
+      color:var(--muted); font-size:12px; background:#fafafa; border-radius:0 0 14px 14px;
+    }
+    .chip{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; font-size:12px; border-radius:999px; background:var(--chip); color:var(--navy);}
+    .control{margin-bottom:14px; border-bottom:1px dashed var(--border); padding-bottom:12px;}
+    .control:last-child{border-bottom:none;}
+    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
+    select, input[type="text"], textarea{
+      width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:10px; font-size:14px; background:white; color:var(--text);
+    }
+    .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+    .toggle{display:flex; align-items:center; gap:8px; font-size:14px;}
+    .toggle input{transform:scale(1.2);}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:6px; padding:2px 6px; font-size:12px;}
+    .preview-highlight{background: #fff7ed; outline: 1px dashed #f59e0b;}
+    .speaker-chip{background:#e0e7ff; color:#1e3a8a; border-radius:8px; padding:2px 6px; margin-right:6px; font-weight:600;}
+    .modal-backdrop{
+      position:fixed; inset:0; background:#0006; display:none; align-items:center; justify-content:center; z-index:50;
+    }
+    .modal{
+      background:white; width:min(560px, 92vw); border-radius:12px; border:1px solid var(--border);
+      padding:16px; box-shadow:0 10px 40px #0002;
+    }
+    .modal header{background:transparent; color:var(--text); padding:0; margin-bottom:8px;}
+    .toolbar{display:flex; gap:8px; padding:8px; border-bottom:1px solid var(--border); background:#fafafa;}
+    .toolbar .btn{background:transparent; border-color:var(--border); color:var(--navy);}
+    .muted{color:var(--muted);}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <div class="chip">Talk to Text Canada</div>
+      <h1>Transcript Editor</h1>
+      <span class="badge" id="serviceBadge" title="Service Type">AI • Human • Hybrid • Legal</span>
+    </div>
+    <div class="actions">
+      <button class="btn ghost small" id="revertBtn" title="Revert to last saved">Revert</button>
+      <button class="btn ghost small" id="compareBtn" title="Compare versions">Compare</button>
+      <button class="btn primary small" id="saveBtn">Save</button>
+      <div class="muted" id="saveStatus">Unsaved</div>
+      <div style="width:1px;height:20px;background:#ffffff4d;margin:0 6px;"></div>
+      <div class="toolbar">
+        <button class="btn small" id="exportHtml">Export HTML</button>
+        <button class="btn small" id="exportTxt">Export TXT</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- LEFT PANE: Audio -->
+    <aside>
+      <h3 class="panel-title">Audio</h3>
+      <div class="audio">
+        <audio id="player" controls preload="metadata" style="width:100%"></audio>
+        <div class="controls">
+          <button class="btn small" id="back5">« 5s</button>
+          <button class="btn small" id="fwd5">5s »</button>
+          <label class="toggle">
+            <span>Speed</span>
+            <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1">
+          </label>
+        </div>
+        <div class="grid-2" style="width:100%">
+          <div>
+            <label>Load audio URL</label>
+            <input type="text" id="audioUrl" placeholder="https://... .mp3 .mp4 .wav"/>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px;">
+            <button class="btn small navy" id="loadAudio">Load</button>
+            <span class="muted">or drop a file</span>
+            <input type="file" id="audioFile" accept="audio/*,video/*"/>
+          </div>
+        </div>
+      </div>
+      <div style="padding:8px 0;">
+        <div class="chip">Words: <span id="wordCount">0</span></div>
+        <div class="chip">Speakers: <span id="speakerCount">0</span></div>
+        <div class="chip">Duration: <span id="duration">--:--</span></div>
+      </div>
+      <p class="muted">Tip: Click text to jump audio (when timecodes are present).</p>
+    </aside>
+
+    <!-- CENTER: Editor -->
+    <section class="editor">
+      <div class="toolbar">
+        <button class="btn small" data-cmd="bold"><b>B</b></button>
+        <button class="btn small" data-cmd="italic"><i>I</i></button>
+        <button class="btn small" data-cmd="underline"><u>U</u></button>
+        <button class="btn small" id="addParagraph">¶</button>
+        <span class="muted">Canadian spellcheck active</span>
+      </div>
+      <div id="transcript" contenteditable="true" spellcheck="true" lang="en-CA">
+        <p><span class="speaker-chip" data-speaker="SPEAKER_1">SPEAKER_1:</span> Good morning, um, thanks for joining us today. I mean, we’re basically going to cover the intake steps.</p>
+        <p><span class="speaker-chip" data-speaker="SPEAKER_2">SPEAKER_2:</span> Uh, sure. Like, I just wanted to know the turnaround time and, you know, pricing.</p>
+      </div>
+      <div id="statusbar">
+        <div>Service: <strong id="serviceType">AI</strong> • Style: <strong id="stylePreset">Intelligent Verbatim</strong></div>
+        <div id="autosaveStatus">Autosave: idle</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Controls -->
+    <aside class="rightbar">
+      <h3 class="panel-title">Editing Controls</h3>
+
+      <div class="control">
+        <label>Remove filler words</label>
+        <select id="fillerLevel">
+          <option value="none">None</option>
+          <option value="light">Light (uh, um, er)</option>
+          <option value="moderate">Moderate (+ like, you know)</option>
+          <option value="aggressive">Aggressive (+ well, I mean, basically, literally, actually, just)</option>
+        </select>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn small" id="previewFillers">Preview</button>
+          <button class="btn small navy" id="applyFillers">Apply</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Insert timecodes every</label>
+        <select id="timecodeCadence">
+          <option value="0">None</option>
+          <option value="30">30s</option>
+          <option value="60" selected>60s</option>
+          <option value="300">300s</option>
+          <option value="600">600s</option>
+        </select>
+        <button class="btn small" id="applyTimecodes" style="margin-top:8px;">Apply Timecodes</button>
+      </div>
+
+      <div class="control">
+        <div class="toggle">
+          <input type="checkbox" id="toggleLabels" checked>
+          <label for="toggleLabels">Show speaker labels</label>
+        </div>
+        <button class="btn small" id="mapSpeakers">Map speakers…</button>
+      </div>
+
+      <div class="control">
+        <label>Spelling & Grammar (en-CA)</label>
+        <div class="toggle"><input type="checkbox" id="checkSpelling" checked><span>Check spelling</span></div>
+        <div class="toggle"><input type="checkbox" id="checkGrammar" checked><span>Check grammar</span></div>
+        <div class="toggle"><input type="checkbox" id="medicalVocab"><span>Medical terms</span></div>
+        <div class="toggle"><input type="checkbox" id="legalVocab"><span>Legal terms</span></div>
+        <label style="margin-top:8px;">Custom terms (comma-separated)</label>
+        <input id="customTerms" type="text" placeholder="ankylosing, voir dire">
+        <button class="btn small" id="saveCustomTerms" style="margin-top:6px;">Save custom terms</button>
+      </div>
+
+      <div class="control">
+        <label>Formatting</label>
+        <div class="toggle"><input type="checkbox" id="autoNumerals" checked><span>Auto-format numerals</span></div>
+        <div class="toggle"><input type="checkbox" id="capitalize" checked><span>Capitalize sentences</span></div>
+        <div class="toggle"><input type="checkbox" id="bullets"><span>Standardize bullet points</span></div>
+        <label style="margin-top:8px;">Style preset</label>
+        <select id="styleSelect">
+          <option value="intelligent" selected>Intelligent Verbatim</option>
+          <option value="strict">Strict Verbatim</option>
+        </select>
+        <button class="btn small" id="applyStyle" style="margin-top:6px;">Apply style</button>
+      </div>
+
+      <div class="control">
+        <label>Sensitivity</label>
+        <div class="toggle"><input type="checkbox" id="maskProfanity"><span>Mask profanity</span></div>
+        <div class="toggle"><input type="checkbox" id="deidentify"><span>De-identify personal data</span></div>
+      </div>
+
+      <div class="control">
+        <label>Backend Actions</label>
+        <div class="grid-2">
+          <button class="btn small" id="sendSave">Save (API)</button>
+          <button class="btn small" id="lockPdf">Export Locked PDF (API)</button>
+        </div>
+        <p class="muted">Endpoints expected:<br>
+        <code>POST /editor/save/&lt;client_id&gt;/&lt;project_id&gt;</code><br>
+        <code>GET /download/pdf/&lt;client_id&gt;/&lt;project_id&gt;</code></p>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- Speaker Map Modal -->
+  <div class="modal-backdrop" id="mapModal">
+    <div class="modal">
+      <header><h3>Map Speakers</h3></header>
+      <div id="speakerList"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+        <button class="btn" id="cancelMap">Cancel</button>
+        <button class="btn navy" id="applyMap">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./editor.js"></script>
+</body>
+</html>

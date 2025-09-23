@@ -9,7 +9,7 @@ interface CreditTransaction {
   type: 'purchase' | 'consumption' | 'refund' | 'adjustment';
   amount: number;
   description: string;
-  date: Date;
+  createdAt: Date;
   jobId?: string;
   userId?: string;
   userEmail?: string;
@@ -23,7 +23,7 @@ interface CreditContextType {
   reserveCredits: (amount: number, jobId: string) => Promise<void>;
   consumeCredits: (amount: number, jobId: string, description?: string) => Promise<void>;
   refundCredits: (amount: number, jobId: string, targetUserId?: string) => Promise<void>;
-  addTransaction: (transaction: Omit<CreditTransaction, 'id' | 'date'>) => Promise<void>;
+  addTransaction: (transaction: Omit<CreditTransaction, 'id' | 'createdAt'>) => Promise<void>;
   refreshCredits: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
   getAllTransactions: () => Promise<CreditTransaction[]>;
@@ -51,14 +51,14 @@ const mockTransactions: CreditTransaction[] = [
     type: 'purchase',
     amount: 5000,
     description: 'Purchased professional package - 5000 credits for $45 CAD',
-    date: new Date('2024-08-28T10:30:00Z')
+    createdAt: new Date('2024-08-28T10:30:00Z')
   },
   {
     id: 'tx2',
     type: 'consumption',
     amount: -450,
     description: 'Credits consumed for meeting transcription (45 min)',
-    date: new Date('2024-08-27T15:20:00Z'),
+    createdAt: new Date('2024-08-27T15:20:00Z'),
     jobId: 'job-123'
   },
   {
@@ -66,7 +66,7 @@ const mockTransactions: CreditTransaction[] = [
     type: 'consumption',
     amount: -230,
     description: 'Credits consumed for interview transcription (23 min)',
-    date: new Date('2024-08-25T09:15:00Z'),
+    createdAt: new Date('2024-08-25T09:15:00Z'),
     jobId: 'job-124'
   },
   {
@@ -74,7 +74,7 @@ const mockTransactions: CreditTransaction[] = [
     type: 'purchase',
     amount: 1000,
     description: 'Purchased starter package - 1000 credits for $10 CAD',
-    date: new Date('2024-08-20T14:45:00Z')
+    createdAt: new Date('2024-08-20T14:45:00Z')
   }
 ];
 
@@ -94,7 +94,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
       const q = query(
         transactionsRef,
         where('userId', '==', user.uid),
-        orderBy('date', 'desc'),
+        orderBy('createdAt', 'desc'),
         limit(50)
       );
       
@@ -102,7 +102,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
       const firestoreTransactions: CreditTransaction[] = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        date: doc.data().date.toDate()
+        createdAt: doc.data().createdAt.toDate()
       } as CreditTransaction));
       
       setTransactions(firestoreTransactions);
@@ -126,14 +126,14 @@ export function CreditProvider({ children }: CreditProviderProps) {
     loadTransactions();
   }, [user, loadTransactions]);
 
-  const addTransaction = async (transaction: Omit<CreditTransaction, 'id' | 'date'>) => {
+  const addTransaction = async (transaction: Omit<CreditTransaction, 'id' | 'createdAt'>) => {
     if (!user) return;
 
     const newTransaction = {
       ...transaction,
       userId: user.uid,
       userEmail: user.email || userData?.email,
-      date: new Date()
+      createdAt: new Date()
     };
 
     try {
@@ -145,7 +145,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
       const transactionWithId: CreditTransaction = {
         id: docRef.id,
         ...transaction,
-        date: newTransaction.date
+        createdAt: newTransaction.createdAt
       };
       
       setTransactions(prev => [transactionWithId, ...prev]);
@@ -158,7 +158,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
       const transactionWithId: CreditTransaction = {
         id: newId,
         ...transaction,
-        date: newTransaction.date
+        createdAt: newTransaction.createdAt
       };
       setTransactions(prev => [transactionWithId, ...prev]);
     }
@@ -311,7 +311,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
       const transactionsRef = collection(db, 'transactions');
       const q = query(
         transactionsRef,
-        orderBy('date', 'desc'),
+        orderBy('createdAt', 'desc'),
         limit(100) // Limit to last 100 transactions for performance
       );
       
@@ -345,7 +345,7 @@ export function CreditProvider({ children }: CreditProviderProps) {
           type: transactionData.type,
           amount: transactionData.amount,
           description: transactionData.description,
-          date: transactionData.date.toDate(),
+          createdAt: transactionData.createdAt.toDate(),
           jobId: transactionData.jobId,
           userId: transactionData.userId,
           userEmail,
