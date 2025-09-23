@@ -1,6 +1,6 @@
 import axios from 'axios';
 import FormData from 'form-data';
-import { TranscriptionJob, TranscriptionStatus, updateTranscriptionStatus } from '../firebase/transcriptions';
+import { TranscriptionJob, TranscriptionStatus, updateTranscriptionStatusAdmin, getTranscriptionByIdAdmin } from '../firebase/transcriptions-admin';
 
 export interface SpeechmaticsConfig {
   language?: string;
@@ -166,7 +166,7 @@ export class SpeechmaticsService {
   ): Promise<void> {
     try {
       // Update job status to processing
-      await updateTranscriptionStatus(transcriptionJobId, 'processing');
+      await updateTranscriptionStatusAdmin(transcriptionJobId, 'processing');
 
       // Transcribe with Speechmatics
       const result = await this.transcribeAudio(audioBuffer, filename, config);
@@ -177,7 +177,7 @@ export class SpeechmaticsService {
         const job = await this.getTranscriptionJob(transcriptionJobId);
         const finalStatus: TranscriptionStatus = job?.mode === 'hybrid' ? 'pending-review' : 'complete';
 
-        await updateTranscriptionStatus(transcriptionJobId, finalStatus, {
+        await updateTranscriptionStatusAdmin(transcriptionJobId, finalStatus, {
           transcript: result.transcript,
           duration: result.duration || 0
         });
@@ -185,7 +185,7 @@ export class SpeechmaticsService {
         console.log(`[Speechmatics] Updated transcription job ${transcriptionJobId} to ${finalStatus}`);
       } else {
         // Mark job as failed
-        await updateTranscriptionStatus(transcriptionJobId, 'failed', {
+        await updateTranscriptionStatusAdmin(transcriptionJobId, 'failed', {
           specialInstructions: result.error || 'Transcription failed'
         });
         
@@ -196,7 +196,7 @@ export class SpeechmaticsService {
       console.error(`[Speechmatics] Error processing transcription job ${transcriptionJobId}:`, error);
       
       // Mark job as failed
-      await updateTranscriptionStatus(transcriptionJobId, 'failed', {
+      await updateTranscriptionStatusAdmin(transcriptionJobId, 'failed', {
         specialInstructions: 'Internal processing error'
       });
     }
@@ -346,9 +346,7 @@ export class SpeechmaticsService {
    */
   private async getTranscriptionJob(jobId: string): Promise<TranscriptionJob | null> {
     try {
-      // This would need to be imported from your transcriptions service
-      const { getTranscriptionById } = await import('../firebase/transcriptions');
-      return await getTranscriptionById(jobId);
+      return await getTranscriptionByIdAdmin(jobId);
     } catch (error) {
       console.error('Error fetching transcription job:', error);
       return null;

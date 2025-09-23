@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { speechmaticsService } from '@/lib/speechmatics/service';
-import { getTranscriptionById, updateTranscriptionStatus } from '@/lib/firebase/transcriptions';
+import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin } from '@/lib/firebase/transcriptions-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Admin API] Manual processing requested for job ${jobId} by admin ${userData.email}`);
 
     // Get the transcription job details
-    const transcriptionJob = await getTranscriptionById(jobId);
+    const transcriptionJob = await getTranscriptionByIdAdmin(jobId);
     
     if (!transcriptionJob) {
       return NextResponse.json(
@@ -70,14 +70,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Update status to processing
-    await updateTranscriptionStatus(jobId, 'processing');
+    await updateTranscriptionStatusAdmin(jobId, 'processing');
 
     // Download the audio file from Firebase Storage
     console.log(`[Admin API] Downloading audio file for job ${jobId}`);
     const audioBuffer = await downloadAudioFile(transcriptionJob.downloadURL);
     
     if (!audioBuffer) {
-      await updateTranscriptionStatus(jobId, 'failed', {
+      await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: 'Failed to download audio file for manual processing'
       });
       
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       // Determine final status based on transcription mode
       const finalStatus = transcriptionJob.mode === 'hybrid' ? 'pending-review' : 'complete';
       
-      await updateTranscriptionStatus(jobId, finalStatus, {
+      await updateTranscriptionStatusAdmin(jobId, finalStatus, {
         transcript: result.transcript,
         duration: result.duration || transcriptionJob.duration // Keep duration in seconds
       });
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       });
       
     } else {
-      await updateTranscriptionStatus(jobId, 'failed', {
+      await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: `Manual processing failed: ${result.error || 'Unknown error'}`
       });
       

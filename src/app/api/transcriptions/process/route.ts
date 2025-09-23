@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Ensure this route runs on Node.js runtime (Buffer, axios, Firebase SDK compatibility)
 export const runtime = 'nodejs';
 import { speechmaticsService } from '@/lib/speechmatics/service';
-import { getTranscriptionById, updateTranscriptionStatus, TranscriptionMode } from '@/lib/firebase/transcriptions';
+import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, TranscriptionMode } from '@/lib/firebase/transcriptions-admin';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase/config';
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       console.warn(`[API] Speechmatics not configured for job ${jobId}. Marking as pending.`);
       
       // Update job status to indicate manual processing needed
-      await updateTranscriptionStatus(jobId, 'pending-transcription', {
+      await updateTranscriptionStatusAdmin(jobId, 'pending-transcription', {
         specialInstructions: 'Speechmatics API not configured - requires manual processing'
       });
       
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     console.log(`[API] Speechmatics is ready, proceeding with job ${jobId}`);
 
     // Get the transcription job details
-    const transcriptionJob = await getTranscriptionById(jobId);
+    const transcriptionJob = await getTranscriptionByIdAdmin(jobId);
     
     if (!transcriptionJob) {
       return NextResponse.json(
@@ -81,14 +81,14 @@ export async function POST(request: NextRequest) {
 
     // Ensure status is processing (in case it was failed and we're retrying)
     if (transcriptionJob.status === 'failed') {
-      await updateTranscriptionStatus(jobId, 'processing');
+      await updateTranscriptionStatusAdmin(jobId, 'processing');
     }
 
     // Download the audio file from Firebase Storage
     const audioBuffer = await downloadAudioFile(transcriptionJob.downloadURL);
     
     if (!audioBuffer) {
-      await updateTranscriptionStatus(jobId, 'failed', {
+      await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: 'Failed to download audio file'
       });
       
@@ -171,8 +171,8 @@ async function processTranscriptionAsync(
     if (result.success && result.transcript) {
       // Determine final status based on transcription mode
       const finalStatus = mode === 'hybrid' ? 'pending-review' : 'complete';
-      
-      await updateTranscriptionStatus(jobId, finalStatus, {
+
+      await updateTranscriptionStatusAdmin(jobId, finalStatus, {
         transcript: result.transcript,
         duration: result.duration || 0
       });
@@ -180,7 +180,7 @@ async function processTranscriptionAsync(
       console.log(`[API] Successfully processed job ${jobId} - Status: ${finalStatus}`);
       
     } else {
-      await updateTranscriptionStatus(jobId, 'failed', {
+      await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: result.error || 'Speechmatics transcription failed'
       });
       
@@ -190,7 +190,7 @@ async function processTranscriptionAsync(
   } catch (error) {
     console.error(`[API] Error in async processing for job ${jobId}:`, error);
     
-    await updateTranscriptionStatus(jobId, 'failed', {
+    await updateTranscriptionStatusAdmin(jobId, 'failed', {
       specialInstructions: 'Internal processing error'
     });
   }

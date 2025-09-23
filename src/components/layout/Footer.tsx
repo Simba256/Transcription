@@ -117,7 +117,7 @@ export function Footer() {
         <div className={`border-t mt-8 pt-8 text-center ${
           isLightFooter ? 'border-gray-300 text-gray-600' : 'border-gray-400 text-gray-300'
         }`}>
-          <p>&copy; 2024 Talk To Text Canada. All rights reserved.</p>
+          <p>&copy; 2025 Talk To Text Canada. All rights reserved.</p>
         </div>
       </div>
     </footer>
