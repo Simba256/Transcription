@@ -15,7 +15,8 @@ import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
-import { getTranscriptionsByUser, TranscriptionJob, updateTranscriptionStatus } from '@/lib/firebase/transcriptions';
+import { getTranscriptionsByUser } from '@/lib/firebase/transcriptions';
+import { TranscriptionJob, updateTranscriptionStatus } from '@/lib/firebase/transcriptions';
 import { Timestamp } from 'firebase/firestore';
 import { formatDuration, formatTime } from '@/lib/utils';
 
@@ -479,7 +480,7 @@ export default function TranscriptionsPage() {
                           {transcription.completedAt ? 'Completed:' : 'Uploaded:'}
                         </span>
                         <p className="text-[#003366]">
-                          {transcription.completedAt 
+                          {transcription.completedAt
                             ? (transcription.completedAt as Timestamp).toDate().toLocaleDateString()
                             : (transcription.createdAt as Timestamp).toDate().toLocaleDateString()
                           }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { adminAuth } from '@/lib/firebase/admin';
 import { rateLimiters } from '@/lib/middleware/rate-limit';
+import { CreatePaymentIntentSchema, validateRequestBody } from '@/lib/validation/schemas';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-11-20.acacia',
@@ -36,14 +37,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { packageId, amount, credits } = await request.json();
+    // Validate request body using Zod schema
+    const validation = await validateRequestBody(request, CreatePaymentIntentSchema);
 
-    if (!packageId || !amount || !credits) {
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing required fields: packageId, amount, credits' },
+        {
+          error: 'Invalid request data',
+          details: validation.errors
+        },
         { status: 400 }
       );
     }
+
+    const { packageId, amount, credits } = validation.data;
 
     // Package validation
     const validPackages = {

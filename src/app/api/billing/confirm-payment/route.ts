@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { rateLimiters } from '@/lib/middleware/rate-limit';
+import { ConfirmPaymentSchema, validateRequestBody } from '@/lib/validation/schemas';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-11-20.acacia',
 });
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting first
+  const rateLimitResponse = await rateLimiters.billing(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -30,14 +38,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { paymentIntentId } = await request.json();
+    // Validate request body using Zod schema
+    const validation = await validateRequestBody(request, ConfirmPaymentSchema);
 
-    if (!paymentIntentId) {
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Missing paymentIntentId' },
+        {
+          error: 'Invalid request data',
+          details: validation.errors
+        },
         { status: 400 }
       );
     }
+
+    const { paymentIntentId } = validation.data;
 
     // Retrieve the payment intent from Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);

@@ -17,7 +17,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { generateFilePath } from '@/lib/firebase/storage';
-import { createTranscriptionJob, getModeDetails, TranscriptionMode } from '@/lib/firebase/transcriptions';
+import { createTranscriptionJobAPI, processTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
+import { TranscriptionMode } from '@/lib/firebase/transcriptions';
 import { formatDuration, getBillingMinutes } from '@/lib/utils';
 
 interface UploadFile {
@@ -261,7 +262,7 @@ export default function UploadPage() {
           jobData.specialInstructions = trimmedInstructions;
         }
         
-        const jobId = await createTranscriptionJob(jobData);
+        const jobId = await createTranscriptionJobAPI(jobData);
         
         // Consume credits and add transaction with custom description
         const modeDisplayName = modeDetails.name; // e.g., "AI Transcription", "Hybrid Review", "Human Transcription"

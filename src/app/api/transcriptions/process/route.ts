@@ -6,6 +6,7 @@ import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, Transcriptio
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase/config';
 import { rateLimiters } from '@/lib/middleware/rate-limit';
+import { ProcessTranscriptionJobSchema, validateData } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting first
@@ -16,19 +17,33 @@ export async function POST(request: NextRequest) {
 
   try {
     console.log('[API] Processing transcription request received');
-    
-    const body = await request.json();
-    const { jobId, language = 'en', operatingPoint = 'enhanced' } = body;
 
-    console.log(`[API] Processing request for job: ${jobId}, language: ${language}, operatingPoint: ${operatingPoint}`);
-
-    if (!jobId) {
-      console.error('[API] No job ID provided');
+    // Parse and validate request body
+    let body: any;
+    try {
+      body = await request.json();
+    } catch (error) {
       return NextResponse.json(
-        { error: 'Job ID is required' },
+        { error: 'Invalid JSON in request body' },
         { status: 400 }
       );
     }
+
+    const validation = validateData(body, ProcessTranscriptionJobSchema);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          error: 'Invalid request data',
+          details: validation.errors
+        },
+        { status: 400 }
+      );
+    }
+
+    const { jobId, language, operatingPoint } = validation.data;
+
+    console.log(`[API] Processing request for job: ${jobId}, language: ${language}, operatingPoint: ${operatingPoint}`);
 
     // Check if Speechmatics is configured
     console.log(`[API] Checking if Speechmatics is ready...`);
