@@ -23,7 +23,7 @@ interface OptionalEnvVars {
   SPEECHMATICS_API_KEY?: string;
   SPEECHMATICS_API_URL?: string;
   STRIPE_SECRET_KEY?: string;
-  STRIPE_PUBLISHABLE_KEY?: string;
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID?: string;
   NEXT_PUBLIC_APP_URL?: string;
@@ -94,7 +94,7 @@ export function getOptionalServiceStatus() {
       apiUrl: process.env.SPEECHMATICS_API_URL || 'https://asr.api.speechmatics.com/v2'
     },
     stripe: {
-      configured: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY),
+      configured: !!(process.env.STRIPE_SECRET_KEY && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY),
       webhookConfigured: !!process.env.STRIPE_WEBHOOK_SECRET
     },
     analytics: {

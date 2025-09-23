@@ -4,8 +4,10 @@ import React, { ReactNode } from 'react';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Initialize Stripe only if the key is available
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 interface StripeProviderProps {
   children: ReactNode;
@@ -13,6 +15,11 @@ interface StripeProviderProps {
 }
 
 export function StripeProvider({ children, clientSecret }: StripeProviderProps) {
+  // If Stripe is not configured, render children without Stripe context
+  if (!stripePromise) {
+    return <>{children}</>;
+  }
+
   const options = {
     clientSecret,
     appearance: {

@@ -56,13 +56,23 @@ export default function BillingPage() {
   ];
 
   const handlePurchase = async (pkg: typeof packages[0]) => {
+    // Check if Stripe is configured
+    if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+      toast({
+        title: 'Payment system unavailable',
+        description: 'Payment processing is not configured. Please contact support.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setPurchasingPackage(pkg.id);
     try {
       // Create payment intent via backend
-      const resp = await secureApiClient.post('/api/billing/create-payment-intent', { 
-        packageId: pkg.id, 
-        amount: pkg.price, 
-        credits: pkg.credits 
+      const resp = await secureApiClient.post('/api/billing/create-payment-intent', {
+        packageId: pkg.id,
+        amount: pkg.price,
+        credits: pkg.credits
       });
       setPaymentData({
         clientSecret: resp.clientSecret!,
