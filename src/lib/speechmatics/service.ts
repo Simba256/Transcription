@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 import { TranscriptionJob, TranscriptionStatus, updateTranscriptionStatus } from '../firebase/transcriptions';
 
 export interface SpeechmaticsConfig {
@@ -72,13 +73,15 @@ export class SpeechmaticsService {
 
       console.log(`[Speechmatics] Starting transcription for ${filename}`);
 
-      // Create form data for job creation with file upload (Speechmatics v2 API approach)
+      // Create FormData for Node.js (use form-data package)
       const formData = new FormData();
-      
-      // Add the audio file - convert Buffer to Uint8Array for better compatibility
-      const uint8Array = new Uint8Array(audioBuffer);
-      formData.append('data_file', new Blob([uint8Array]), filename);
-      
+
+      // Append the audio buffer directly; let form-data handle streams/boundaries
+      formData.append('data_file', audioBuffer, {
+        filename: filename || 'audiofile',
+        contentType: 'application/octet-stream',
+      } as any);
+
       // Add the configuration as JSON (using only valid Speechmatics properties)
       const jobConfig = {
         type: 'transcription',
@@ -98,9 +101,10 @@ export class SpeechmaticsService {
         formData,
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'multipart/form-data'
-          }
+            Authorization: `Bearer ${this.apiKey}`,
+            ...formData.getHeaders?.(),
+          },
+          // Axios in Node will stream form-data; no need to set maxContentLength unless very large files
         }
       );
 

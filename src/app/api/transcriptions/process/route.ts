@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+// Ensure this route runs on Node.js runtime (Buffer, axios, Firebase SDK compatibility)
+export const runtime = 'nodejs';
 import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionById, updateTranscriptionStatus, TranscriptionMode } from '@/lib/firebase/transcriptions';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
