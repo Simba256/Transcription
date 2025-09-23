@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     if (transcript && transcript.results && transcript.results.length > 0) {
       // Extract the transcript text from Speechmatics format
       const transcriptText = transcript.results
-        .map((result: any) => result.alternatives?.[0]?.content || '')
+        .map((result: { alternatives?: { content?: string }[] }) => result.alternatives?.[0]?.content || '')
         .join(' ')
         .trim();
 

@@ -287,3 +287,5 @@ export function SignUpPage() {
     </div>
   );
 }
+// Default export for Next.js pages compatibility
+export default SignUp;

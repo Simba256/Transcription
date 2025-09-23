@@ -550,3 +550,5 @@ export function AdminLedger() {
     </div>
   );
 }
+// Default export for Next.js pages compatibility
+export default AdminLedger;

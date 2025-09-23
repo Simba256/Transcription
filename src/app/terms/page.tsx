@@ -21,10 +21,10 @@ export default function TermsPage() {
               1. Definitions
             </h2>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li><strong>"Services"</strong> means all transcription and document-prep features of our platform.</li>
-              <li><strong>"Client Content"</strong> means all audio, video, templates, transcripts, and data you upload.</li>
-              <li><strong>"Dashboard"</strong> means your secure online account area.</li>
-              <li><strong>"User"</strong> means any person or entity accessing or using the Services.</li>
+              <li><strong>&quot;Services&quot;</strong> means all transcription and document-prep features of our platform.</li>
+              <li><strong>&quot;Client Content&quot;</strong> means all audio, video, templates, transcripts, and data you upload.</li>
+              <li><strong>&quot;Dashboard&quot;</strong> means your secure online account area.</li>
+              <li><strong>&quot;User&quot;</strong> means any person or entity accessing or using the Services.</li>
             </ul>
 
             <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
@@ -39,7 +39,7 @@ export default function TermsPage() {
             </h2>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
               <li>You must be at least 18 years old and capable of forming a binding contract.</li>
-              <li>You're responsible for maintaining the confidentiality of your account credentials.</li>
+              <li>You&apos;re responsible for maintaining the confidentiality of your account credentials.</li>
               <li>You are fully responsible for all activity under your account.</li>
             </ul>
 
@@ -120,7 +120,7 @@ export default function TermsPage() {
               13. Modification of Terms
             </h2>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>We may update these terms at any time. We'll post the revised version with a new effective date and notify registered users.</li>
+              <li>We may update these terms at any time. We&apos;ll post the revised version with a new effective date and notify registered users.</li>
               <li>Continued use after changes constitutes acceptance of the new terms.</li>
             </ul>
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Check environment variables
     const speechmaticsApiKey = process.env.SPEECHMATICS_API_KEY;
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const firebaseProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     
-    const diagnostics: any = {
+    const diagnostics = {
       timestamp: new Date().toISOString(),
       environment: {
         speechmatics: {
@@ -66,10 +66,10 @@ export async function GET(request: NextRequest) {
         } else {
           diagnostics.recommendations.push('Speechmatics API is working correctly');
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('[Test] Speechmatics API test failed:', error);
         diagnostics.speechmaticsConnection = {
-          error: error?.message || 'Unknown error',
+          error: (error instanceof Error ? error.message : String(error)) || 'Unknown error',
           isWorking: false
         };
         diagnostics.recommendations.push('Check network connectivity to Speechmatics API');
@@ -82,8 +82,8 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(diagnostics);
-    
-  } catch (error: any) {
+
+  } catch (error: unknown) {
     return NextResponse.json(
       { 
         error: 'Failed to run diagnostics',

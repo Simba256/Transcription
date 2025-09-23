@@ -18,14 +18,14 @@ export default function ConfidentialityPage() {
 
           <div className="prose prose-lg max-w-none">
             <p className="text-gray-700 mb-6">
-              This Confidentiality Agreement ("Agreement") is entered into between Talk to Text Canada and any individual or entity ("Client") using our services.
+              This Confidentiality Agreement (&quot;Agreement&quot;) is entered into between Talk to Text Canada and any individual or entity (&quot;Client&quot;) using our services.
             </p>
 
             <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
               1. Confidential Materials
             </h2>
             <p className="text-gray-700 mb-6">
-              Client files, templates, audio/video content, and resulting transcripts ("Confidential Information") are protected by this Agreement.
+              Client files, templates, audio/video content, and resulting transcripts (&quot;Confidential Information&quot;) are protected by this Agreement.
             </p>
 
             <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">

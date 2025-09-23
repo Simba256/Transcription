@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, TranscriptionMode } from '@/lib/firebase/transcriptions-admin';
-import { getStorage, ref, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase/config';
 import { rateLimiters } from '@/lib/middleware/rate-limit';
 import { ProcessTranscriptionJobSchema, validateData } from '@/lib/validation/schemas';
 
@@ -21,10 +19,10 @@ export async function POST(request: NextRequest) {
     console.log('[API] Processing transcription request received');
 
     // Parse and validate request body
-    let body: any;
+    let body: unknown;
     try {
       body = await request.json();
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid JSON in request body' },
         { status: 400 }
@@ -180,7 +178,7 @@ async function processTranscriptionAsync(
   jobId: string,
   audioBuffer: Buffer,
   filename: string,
-  speechmaticsConfig: any,
+  speechmaticsConfig: Record<string, unknown>,
   mode: TranscriptionMode
 ): Promise<void> {
   try {

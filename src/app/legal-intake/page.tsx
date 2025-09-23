@@ -13,7 +13,7 @@ export default function LegalIntakePage() {
             LegalScript Studio — Intake
           </h1>
           <p className="text-gray-600 mb-8">
-            Tell us what to produce. We'll use our template (or yours if you upload one). You'll upload audio after this step.
+            Tell us what to produce. We&apos;ll use our template (or yours if you upload one). You&apos;ll upload audio after this step.
           </p>
 
           <form>
@@ -129,7 +129,7 @@ export default function LegalIntakePage() {
                   >
                     <option value="use_firm_defaults">Use my firm defaults on file</option>
                     <option value="none">No letterhead</option>
-                    <option value="custom">I'll specify below</option>
+                    <option value="custom">I&apos;ll specify below</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
@@ -260,7 +260,7 @@ export default function LegalIntakePage() {
                 </div>
               </div>
               <p className="text-sm text-gray-600 mt-4">
-                AI‑only transcripts don't need this intake. If you choose "AI‑only," we'll auto‑transcribe right after you upload audio, then continue with your legal document.
+                AI‑only transcripts don&apos;t need this intake. If you choose &quot;AI‑only,&quot; we&apos;ll auto‑transcribe right after you upload audio, then continue with your legal document.
               </p>
             </fieldset>
 

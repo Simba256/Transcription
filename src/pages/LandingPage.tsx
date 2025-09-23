@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 
-export function LandingPage() {
+function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
       <Header />
@@ -297,3 +297,6 @@ export function LandingPage() {
     </div>
   );
 }
+
+export default LandingPage;
+export { LandingPage };

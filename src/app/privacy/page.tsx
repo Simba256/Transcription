@@ -21,7 +21,7 @@ export default function PrivacyPage() {
               1. Introduction
             </h2>
             <p className="text-gray-700 mb-6">
-              Talk to Text Canada ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your personal information in accordance with the Personal Information Protection and Electronic Documents Act (PIPEDA), applicable Ontario law, and other relevant regulations.
+              Talk to Text Canada (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your personal information in accordance with the Personal Information Protection and Electronic Documents Act (PIPEDA), applicable Ontario law, and other relevant regulations.
             </p>
 
             <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">

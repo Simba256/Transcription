@@ -59,7 +59,7 @@ export function ForgotPasswordPage() {
                 Check Your Email
               </h2>
               <p className="text-gray-600 mb-6">
-                We've sent a password reset link to <strong>{email}</strong>. 
+                We&apos;ve sent a password reset link to <strong>{email}</strong>. 
                 Please check your email and follow the instructions to reset your password.
               </p>
               <div className="space-y-4">
@@ -104,7 +104,7 @@ export function ForgotPasswordPage() {
               Reset Password
             </CardTitle>
             <p className="text-gray-600">
-              Enter your email address and we'll send you a link to reset your password.
+              Enter your email address and we&apos;ll send you a link to reset your password.
             </p>
           </CardHeader>
           <CardContent>
@@ -156,3 +156,5 @@ export function ForgotPasswordPage() {
     </div>
   );
 }
+// Default export for Next.js pages compatibility
+export default ForgotPassword;

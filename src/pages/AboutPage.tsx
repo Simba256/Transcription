@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 
-export function AboutPage() {
+function AboutPage() {
   return (
     <div className="min-h-screen bg-white">
       <Header />
@@ -31,7 +31,7 @@ export function AboutPage() {
               About Talk To Text Canada
             </h1>
             <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-              We're dedicated to providing the most accurate, secure, and reliable 
+              We&apos;re dedicated to providing the most accurate, secure, and reliable 
               transcription services for Canadian professionals and businesses.
             </p>
           </div>
@@ -47,12 +47,12 @@ export function AboutPage() {
                 Our Mission
               </h2>
               <p className="text-lg text-gray-600 mb-6">
-                At Talk To Text Canada, we believe that accurate transcription shouldn't 
+                At Talk To Text Canada, we believe that accurate transcription shouldn&apos;t 
                 be a luxury. Our mission is to democratize access to professional-grade 
                 transcription services through innovative technology and human expertise.
               </p>
               <p className="text-lg text-gray-600">
-                Whether you're a legal professional handling sensitive depositions, 
+                Whether you&apos;re a legal professional handling sensitive depositions, 
                 a business conducting important meetings, or an individual with personal 
                 recordings, we provide the tools and services you need to convert speech 
                 to text with confidence.
@@ -298,3 +298,6 @@ export function AboutPage() {
     </div>
   );
 }
+
+export default AboutPage;
+export { AboutPage };

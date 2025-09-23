@@ -27,11 +27,11 @@ export async function POST(request: NextRequest) {
     const userId = decodedToken.uid;
 
     // Parse and validate request body
-    let body: any;
+    let body: unknown;
     try {
       body = await request.json();
       console.log('[API] Received transcription job data:', JSON.stringify(body, null, 2));
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid JSON in request body' },
         { status: 400 }

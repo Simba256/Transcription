@@ -533,3 +533,5 @@ export function TranscriptionQueue() {
     </div>
   );
 }
+// Default export for Next.js pages compatibility
+export default TranscriptionQueue;

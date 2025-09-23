@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       uid: decodedToken.uid,
       email: decodedToken.email 
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 }

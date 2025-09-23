@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 
-export function ContactPage() {
+function ContactPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -75,7 +75,7 @@ export function ContactPage() {
               Get in Touch
             </h1>
             <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-              Have questions about our transcription services? We're here to help. 
+              Have questions about our transcription services? We&apos;re here to help. 
               Reach out to our team for personalized assistance.
             </p>
           </div>
@@ -322,3 +322,6 @@ export function ContactPage() {
     </div>
   );
 }
+
+export default ContactPage;
+export { ContactPage };
