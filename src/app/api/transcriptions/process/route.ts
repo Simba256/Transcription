@@ -120,19 +120,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process with Speechmatics in the background
-    // Note: In production, you'd want to use a queue system like Bull or similar
-    processTranscriptionAsync(jobId, audioBuffer, transcriptionJob.originalFilename, {
-      language,
-      operatingPoint,
-      enableDiarization: true,
-      enablePunctuation: true
-    }, transcriptionJob.mode);
+    // Submit job to Speechmatics with webhook callback
+    const result = await processTranscriptionWithWebhook(
+      jobId,
+      audioBuffer,
+      transcriptionJob.originalFilename,
+      {
+        language,
+        operatingPoint,
+        enableDiarization: true,
+        enablePunctuation: true
+      }
+    );
+
+    if (!result.success) {
+      await updateTranscriptionStatusAdmin(jobId, 'failed', {
+        specialInstructions: result.error || 'Failed to submit job to Speechmatics'
+      });
+
+      return NextResponse.json(
+        { error: result.error || 'Failed to submit job to Speechmatics' },
+        { status: 500 }
+      );
+    }
+
+    // Update job with Speechmatics job ID
+    await updateTranscriptionStatusAdmin(jobId, 'processing', {
+      speechmaticsJobId: result.speechmaticsJobId
+    });
 
     return NextResponse.json({
       success: true,
-      message: 'Transcription processing started',
+      message: 'Transcription job submitted successfully',
       jobId,
+      speechmaticsJobId: result.speechmaticsJobId,
       status: 'processing'
     });
 
@@ -172,59 +193,55 @@ async function downloadAudioFile(downloadURL: string): Promise<Buffer | null> {
 }
 
 /**
- * Process transcription asynchronously
+ * Process transcription with webhook callback
  */
-async function processTranscriptionAsync(
+async function processTranscriptionWithWebhook(
   jobId: string,
   audioBuffer: Buffer,
   filename: string,
-  speechmaticsConfig: Record<string, unknown>,
-  mode: TranscriptionMode
-): Promise<void> {
+  speechmaticsConfig: Record<string, unknown>
+): Promise<{ success: boolean; speechmaticsJobId?: string; error?: string }> {
   try {
-    console.log(`[API] Starting async processing for job ${jobId}`);
-    
-    const result = await speechmaticsService.transcribeAudio(
+    console.log(`[API] Starting webhook-based processing for job ${jobId}`);
+
+    // Create callback URL with job reference
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const webhookToken = process.env.SPEECHMATICS_WEBHOOK_TOKEN || 'default-webhook-secret';
+    const callbackUrl = `${baseUrl}/api/speechmatics/callback?token=${webhookToken}&jobId=${jobId}`;
+
+    // Submit job to Speechmatics with webhook
+    const result = await speechmaticsService.submitJobWithWebhook(
       audioBuffer,
       filename,
-      speechmaticsConfig
+      speechmaticsConfig,
+      callbackUrl
     );
 
-    console.log(`[API Route] transcribeAudio result for ${jobId}:`, {
+    console.log(`[API] submitJobWithWebhook result for ${jobId}:`, {
       success: result.success,
-      hasTranscript: !!result.transcript,
-      transcriptLength: result.transcript?.length || 0,
-      hasTimestampedTranscript: !!result.timestampedTranscript,
-      timestampedSegmentsCount: result.timestampedTranscript?.length || 0,
-      duration: result.duration,
+      speechmaticsJobId: result.jobId,
       error: result.error
     });
 
-    if (result.success && result.transcript) {
-      // Determine final status based on transcription mode
-      const finalStatus = mode === 'hybrid' ? 'pending-review' : 'complete';
-
-      await updateTranscriptionStatusAdmin(jobId, finalStatus, {
-        transcript: result.transcript,
-        timestampedTranscript: result.timestampedTranscript,
-        duration: result.duration || 0
-      });
-
-      console.log(`[API] Successfully processed job ${jobId} - Status: ${finalStatus}`);
-      
+    if (result.success && result.jobId) {
+      console.log(`[API] Job ${jobId} submitted to Speechmatics with ID: ${result.jobId}`);
+      return {
+        success: true,
+        speechmaticsJobId: result.jobId
+      };
     } else {
-      await updateTranscriptionStatusAdmin(jobId, 'failed', {
-        specialInstructions: result.error || 'Speechmatics transcription failed'
-      });
-      
-      console.error(`[API] Failed to process job ${jobId}:`, result.error);
+      console.error(`[API] Failed to submit job ${jobId} to Speechmatics:`, result.error);
+      return {
+        success: false,
+        error: result.error || 'Failed to submit job to Speechmatics'
+      };
     }
-    
+
   } catch (error) {
-    console.error(`[API] Error in async processing for job ${jobId}:`, error);
-    
-    await updateTranscriptionStatusAdmin(jobId, 'failed', {
-      specialInstructions: 'Internal processing error'
-    });
+    console.error(`[API] Error submitting transcription job ${jobId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal processing error'
+    };
   }
 }

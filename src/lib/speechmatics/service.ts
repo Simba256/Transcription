@@ -51,10 +51,98 @@ export class SpeechmaticsService {
   }
 
   /**
-   * Transcribe audio file using Speechmatics API
+   * Submit job with webhook callback (async)
+   */
+  async submitJobWithWebhook(
+    audioBuffer: Buffer,
+    filename: string,
+    config: SpeechmaticsConfig,
+    callbackUrl: string
+  ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+    try {
+      console.log(`[Speechmatics] Submitting job with webhook callback: ${callbackUrl}`);
+
+      // Create job configuration with webhook
+      const jobConfig = {
+        type: 'transcription',
+        transcription_config: {
+          language: config.language || 'en',
+          operating_point: config.operatingPoint || 'enhanced'
+        },
+        notification_config: [{
+          url: callbackUrl,
+          contents: ['transcript'],
+          auth_headers: []
+        }]
+      };
+
+      console.log(`[Speechmatics] Job config:`, JSON.stringify(jobConfig, null, 2));
+
+      // Create multipart form data manually for Node.js compatibility
+      const boundary = `----speechmatics${Date.now()}`;
+      const configJson = JSON.stringify(jobConfig);
+
+      const formParts = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="config"',
+        'Content-Type: application/json',
+        '',
+        configJson,
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="data_file"; filename="${filename}"`,
+        'Content-Type: audio/wav',
+        '',
+      ];
+
+      const formHeader = Buffer.from(formParts.join('\r\n') + '\r\n', 'utf8');
+      const formFooter = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+      const formData = Buffer.concat([formHeader, audioBuffer, formFooter]);
+
+      // Submit the job using fetch instead of axios for better Buffer support
+      const response = await fetch(`${this.apiUrl}/jobs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': formData.length.toString()
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      const speechmaticsJobId = responseData.id;
+      console.log(`[Speechmatics] Job submitted successfully with ID: ${speechmaticsJobId}`);
+
+      return {
+        success: true,
+        jobId: speechmaticsJobId
+      };
+
+    } catch (error: unknown) {
+      console.error('[Speechmatics] Job submission failed:', error);
+
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Transcribe audio file using Speechmatics API (legacy synchronous method)
    */
   async transcribeAudio(
-    audioBuffer: Buffer, 
+    audioBuffer: Buffer,
     filename: string,
     config: SpeechmaticsConfig = {}
   ): Promise<SpeechmaticsResult> {

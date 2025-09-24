@@ -106,7 +106,52 @@ export default function TranscriptViewerPage() {
     });
   };
 
-  const getWordCount = (text: string) => {
+  // Helper function to extract plain text from transcript data
+  const extractPlainText = (transcript: any): string => {
+    if (!transcript) return '';
+
+    // If it's already a string, return it
+    if (typeof transcript === 'string') {
+      return transcript;
+    }
+
+    // If it's a Speechmatics format with results array
+    if (transcript.results && Array.isArray(transcript.results)) {
+      const tokens = transcript.results
+        .filter((result: any) => result.type === 'word' || result.type === 'punctuation')
+        .map((result: any) => {
+          const content = result.alternatives?.[0]?.content || '';
+          return {
+            content,
+            type: result.type,
+            attachesToPrevious: result.attaches_to === 'previous'
+          };
+        });
+
+      let text = '';
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        if (token.type === 'punctuation' && token.attachesToPrevious) {
+          // Attach punctuation directly to previous word
+          text += token.content;
+        } else {
+          // Add space before word (except for first word)
+          if (text && token.type === 'word') {
+            text += ' ';
+          }
+          text += token.content;
+        }
+      }
+
+      return text.trim();
+    }
+
+    // Fallback: try to convert to string
+    return String(transcript);
+  };
+
+  const getWordCount = (transcript: any) => {
+    const text = extractPlainText(transcript);
     return text ? text.trim().split(/\s+/).filter(word => word.length > 0).length : 0;
   };
 
@@ -233,7 +278,7 @@ export default function TranscriptViewerPage() {
     if (!transcription?.timestampedTranscript || transcription.timestampedTranscript.length === 0) {
       return (
         <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-          {formatTranscriptText(transcription?.transcript || '') || 'No transcript content available.'}
+          {formatTranscriptText(extractPlainText(transcription?.transcript)) || 'No transcript content available.'}
         </div>
       );
     }
@@ -363,7 +408,7 @@ export default function TranscriptViewerPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <FileText className="h-4 w-4" />
-                  {getWordCount(transcription.transcript || '')} words
+                  {getWordCount(transcription.transcript)} words
                 </div>
                 <CreditDisplay amount={transcription.creditsUsed} size="sm" />
                 <span>Completed: {formatDate(transcription.completedAt || transcription.updatedAt)}</span>
