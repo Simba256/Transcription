@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!result.success) {
-      let errorMessage = result.error || 'Failed to submit job to Speechmatics';
+      const errorMessage = result.error || 'Failed to submit job to Speechmatics';
       let userFriendlyMessage = errorMessage;
 
       // Check for quota exceeded errors and provide user-friendly message

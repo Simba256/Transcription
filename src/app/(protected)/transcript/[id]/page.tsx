@@ -30,6 +30,26 @@ import { getTranscriptionById, updateTranscriptionStatus, TranscriptionJob } fro
 import { Timestamp } from 'firebase/firestore';
 import { formatTime, formatDuration } from '@/lib/utils';
 
+// Types for Speechmatics transcript data
+interface SpeechmaticsAlternative {
+  content: string;
+  confidence?: number;
+}
+
+interface SpeechmaticsResult {
+  type: 'word' | 'punctuation';
+  alternatives: SpeechmaticsAlternative[];
+  attaches_to?: 'previous' | 'next';
+  start_time?: number;
+  end_time?: number;
+}
+
+interface SpeechmaticsTranscript {
+  results: SpeechmaticsResult[];
+}
+
+type TranscriptData = string | SpeechmaticsTranscript | unknown;
+
 export default function TranscriptViewerPage() {
   const params = useParams();
   const id = params?.id as string;
@@ -107,7 +127,7 @@ export default function TranscriptViewerPage() {
   };
 
   // Helper function to extract plain text from transcript data
-  const extractPlainText = (transcript: any): string => {
+  const extractPlainText = (transcript: TranscriptData): string => {
     if (!transcript) return '';
 
     // If it's already a string, return it
@@ -116,10 +136,11 @@ export default function TranscriptViewerPage() {
     }
 
     // If it's a Speechmatics format with results array
-    if (transcript.results && Array.isArray(transcript.results)) {
-      const tokens = transcript.results
-        .filter((result: any) => result.type === 'word' || result.type === 'punctuation')
-        .map((result: any) => {
+    if (typeof transcript === 'object' && transcript !== null && 'results' in transcript) {
+      const speechmaticsData = transcript as SpeechmaticsTranscript;
+      const tokens = speechmaticsData.results
+        .filter((result) => result.type === 'word' || result.type === 'punctuation')
+        .map((result) => {
           const content = result.alternatives?.[0]?.content || '';
           return {
             content,
@@ -150,7 +171,7 @@ export default function TranscriptViewerPage() {
     return String(transcript);
   };
 
-  const getWordCount = (transcript: any) => {
+  const getWordCount = (transcript: TranscriptData) => {
     const text = extractPlainText(transcript);
     return text ? text.trim().split(/\s+/).filter(word => word.length > 0).length : 0;
   };

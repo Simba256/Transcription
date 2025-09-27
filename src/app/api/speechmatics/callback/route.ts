@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         console.log(`[Speechmatics Webhook] Retrieved transcript for job ${jobId}`);
 
         // Create timestamped segments from Speechmatics results
-        let timestampedSegments = [];
+        const timestampedSegments = [];
         console.log(`[Speechmatics Webhook] Processing results for timestamped segments. Results count: ${transcriptData.results?.length || 0}`);
 
         if (transcriptData.results && Array.isArray(transcriptData.results)) {

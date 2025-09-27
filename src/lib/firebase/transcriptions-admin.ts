@@ -59,7 +59,7 @@ export const updateTranscriptionStatusAdmin = async (
 ): Promise<void> => {
   try {
     const docRef = adminDb.collection(TRANSCRIPTIONS_COLLECTION).doc(id);
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       status,
       updatedAt: FieldValue.serverTimestamp(),
       ...additionalData

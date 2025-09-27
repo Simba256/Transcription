@@ -13,16 +13,16 @@ interface TestResult {
   name: string;
   status: 'pending' | 'success' | 'error' | 'running';
   message: string;
-  details?: any;
+  details?: unknown;
 }
 
 export default function TestRulesPage() {
   const { user, userData } = useAuth();
   const [tests, setTests] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [configData, setConfigData] = useState<any>(null);
+  const [configData, setConfigData] = useState<unknown>(null);
 
-  const updateTest = (testName: string, status: TestResult['status'], message: string, details?: any) => {
+  const updateTest = (testName: string, status: TestResult['status'], message: string, details?: unknown) => {
     setTests(prev => prev.map(test => 
       test.name === testName 
         ? { ...test, status, message, details }
@@ -93,7 +93,7 @@ export default function TestRulesPage() {
       } else {
         updateTest('Read Own Data', 'error', 'User profile not found');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       updateTest('Read Own Data', 'error', `Failed to read own data: ${error.message}`);
     }
   };
@@ -125,7 +125,7 @@ export default function TestRulesPage() {
       await deleteDoc(doc(db, 'transcriptions', docRef.id));
       
       updateTest('Write Own Data', 'success', 'Successfully created and deleted test transcription');
-    } catch (error: any) {
+    } catch (error: unknown) {
       updateTest('Write Own Data', 'error', `Failed to write own data: ${error.message}`);
     }
   };
@@ -155,7 +155,7 @@ export default function TestRulesPage() {
       
       // If we get here, the rules failed
       updateTest('Cross-User Access', 'error', 'Security rules failed - was able to create data for another user');
-    } catch (error: any) {
+    } catch (error: unknown) {
       // This is expected - the rules should prevent this
       updateTest('Cross-User Access', 'success', `Correctly blocked cross-user access: ${error.message}`);
     }
@@ -176,7 +176,7 @@ export default function TestRulesPage() {
         const snapshot = await getDocs(transcriptionsRef);
         
         updateTest('Admin Access', 'success', `Admin can access all transcriptions (${snapshot.size} documents)`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         updateTest('Admin Access', 'error', `Admin access failed: ${error.message}`);
       }
     } else {
