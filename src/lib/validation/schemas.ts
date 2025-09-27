@@ -103,7 +103,7 @@ export const ProcessTranscriptionJobSchema = z.object({
     .default('en'),
   operatingPoint: z.enum(['standard', 'enhanced'], {
     errorMap: () => ({ message: 'Operating point must be standard or enhanced' }),
-  }).default('enhanced'),
+  }).default('standard'),
 });
 
 // =============================================================================
@@ -191,7 +191,7 @@ export const AdminProcessJobSchema = z.object({
   language: z.string()
     .regex(/^[a-z]{2}(-[A-Z]{2})?$/, 'Invalid language code')
     .default('en'),
-  operatingPoint: z.enum(['standard', 'enhanced']).default('enhanced'),
+  operatingPoint: z.enum(['standard', 'enhanced']).default('standard'),
   priority: z.enum(['low', 'normal', 'high']).default('normal'),
 });
 

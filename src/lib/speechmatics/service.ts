@@ -67,7 +67,7 @@ export class SpeechmaticsService {
         type: 'transcription',
         transcription_config: {
           language: config.language || 'en',
-          operating_point: config.operatingPoint || 'enhanced'
+          operating_point: config.operatingPoint || 'standard'
         },
         notification_config: [{
           url: callbackUrl,
@@ -111,6 +111,63 @@ export class SpeechmaticsService {
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        // Check if this is an enhanced model quota limit error
+        if (response.status === 403 && errorText.includes('Enhanced Model transcription')) {
+          console.log('[Speechmatics] Enhanced model quota exceeded, retrying with standard model...');
+
+          // Retry with standard operating point
+          const fallbackConfig = {
+            ...jobConfig,
+            transcription_config: {
+              ...jobConfig.transcription_config,
+              operating_point: 'standard'
+            }
+          };
+
+          const fallbackConfigJson = JSON.stringify(fallbackConfig);
+          const fallbackFormParts = [
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="config"',
+            'Content-Type: application/json',
+            '',
+            fallbackConfigJson,
+            `--${boundary}`,
+            `Content-Disposition: form-data; name="data_file"; filename="${filename}"`,
+            'Content-Type: audio/wav',
+            '',
+          ];
+
+          const fallbackFormHeader = Buffer.from(fallbackFormParts.join('\r\n') + '\r\n', 'utf8');
+          const fallbackFormData = Buffer.concat([fallbackFormHeader, audioBuffer, formFooter]);
+
+          console.log('[Speechmatics] Retrying with standard model config:', JSON.stringify(fallbackConfig, null, 2));
+
+          const fallbackResponse = await fetch(`${this.apiUrl}/jobs`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+              'Content-Length': fallbackFormData.length.toString()
+            },
+            body: fallbackFormData
+          });
+
+          if (!fallbackResponse.ok) {
+            const fallbackErrorText = await fallbackResponse.text();
+            throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackErrorText}`);
+          }
+
+          const fallbackResponseData = await fallbackResponse.json();
+          const speechmaticsJobId = fallbackResponseData.id;
+          console.log(`[Speechmatics] Fallback job submitted successfully with ID: ${speechmaticsJobId}`);
+
+          return {
+            success: true,
+            jobId: speechmaticsJobId
+          };
+        }
+
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
@@ -156,7 +213,7 @@ export class SpeechmaticsService {
 
       const {
         language = 'en',
-        operatingPoint = 'enhanced',
+        operatingPoint = 'standard',
         enableDiarization = true,
         enablePunctuation = true
       } = config;
@@ -229,6 +286,59 @@ export class SpeechmaticsService {
           errorMessage = 'Invalid Speechmatics API credentials';
         } else if (error.response?.status === 429) {
           errorMessage = 'Speechmatics rate limit exceeded';
+        } else if (error.response?.status === 403 &&
+                   (error.response?.data?.detail?.includes('Enhanced Model transcription') ||
+                    error.response?.data?.error?.includes('Enhanced Model transcription'))) {
+
+          // Enhanced model quota exceeded - retry with standard model
+          console.log('[Speechmatics] Enhanced model quota exceeded, retrying with standard model...');
+
+          try {
+            const fallbackConfig = {
+              type: 'transcription',
+              transcription_config: {
+                language,
+                operating_point: 'standard'
+              }
+            };
+
+            // Create new FormData with standard model
+            const fallbackFormData = new FormData();
+            fallbackFormData.append('data_file', audioBuffer, {
+              filename: filename || 'audiofile',
+              contentType: 'application/octet-stream',
+            } as any);
+            fallbackFormData.append('config', JSON.stringify(fallbackConfig));
+
+            console.log(`[Speechmatics] Retrying with standard model config:`, JSON.stringify(fallbackConfig, null, 2));
+
+            const fallbackResponse = await axios.post(
+              `${this.apiUrl}/jobs`,
+              fallbackFormData,
+              {
+                headers: {
+                  Authorization: `Bearer ${this.apiKey}`,
+                  ...fallbackFormData.getHeaders?.(),
+                },
+              }
+            );
+
+            const fallbackJobId = fallbackResponse.data.id;
+            console.log(`[Speechmatics] Fallback job created: ${fallbackJobId}`);
+
+            // Wait for completion with standard model
+            const fallbackResult = await this.waitForCompletion(fallbackJobId);
+
+            if (fallbackResult.success) {
+              console.log(`[Speechmatics] Successfully completed fallback transcription for job: ${fallbackJobId}`);
+            }
+
+            return fallbackResult;
+
+          } catch (fallbackError) {
+            console.error('[Speechmatics] Fallback with standard model also failed:', fallbackError);
+            errorMessage = 'Enhanced model quota exceeded and standard model fallback failed';
+          }
         } else if (error.response?.data?.error) {
           errorMessage = error.response.data.error;
         } else if (error.response?.data?.message) {
@@ -320,7 +430,7 @@ export class SpeechmaticsService {
    * Wait for Speechmatics job completion
    */
   private async waitForCompletion(jobId: string): Promise<SpeechmaticsResult> {
-    const maxAttempts = 120; // 10 minutes max (5s intervals)
+    const maxAttempts = 720; // 60 minutes max (5s intervals) - increased for longer files
     let attempts = 0;
     let jobStatus = 'running';
 

@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large audio/video files and test data
+*.mp3
+*.mp4
+*.wav
+*.m4a
+*.avi
+*.mov
+*.zip
+*.rar
+*.7z
+
+# Client test files and transcripts
+client/signofthecross_*
+client/*_transcript*
+client/*.zip

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { jobId, language = 'en', operatingPoint = 'enhanced' } = body;
+    const { jobId, language = 'en', operatingPoint = 'standard' } = body;
 
     if (!jobId) {
       return NextResponse.json(

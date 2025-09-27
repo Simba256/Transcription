@@ -93,7 +93,7 @@ export function TranscriptionQueue() {
         body: JSON.stringify({
           jobId: jobId,
           language: 'en',
-          operatingPoint: 'enhanced'
+          operatingPoint: 'standard'
         })
       });
 

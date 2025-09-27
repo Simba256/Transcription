@@ -120,26 +120,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Submit job to Speechmatics with webhook callback
-    const result = await processTranscriptionWithWebhook(
-      jobId,
-      audioBuffer,
-      transcriptionJob.originalFilename,
-      {
-        language,
-        operatingPoint,
-        enableDiarization: true,
-        enablePunctuation: true
-      }
-    );
+    // Choose processing method based on file duration
+    // For files longer than 5 minutes, use webhook-based processing to avoid timeouts
+    const useWebhook = transcriptionJob.duration > 300; // 5 minutes
+
+    console.log(`[API] File duration: ${transcriptionJob.duration}s, using ${useWebhook ? 'webhook' : 'synchronous'} processing`);
+
+    let result;
+    if (useWebhook) {
+      // Use webhook-based processing for longer files
+      result = await processTranscriptionWithWebhook(
+        jobId,
+        audioBuffer,
+        transcriptionJob.originalFilename,
+        {
+          language,
+          operatingPoint,
+          enableDiarization: true,
+          enablePunctuation: true
+        }
+      );
+    } else {
+      // Use synchronous processing for shorter files
+      result = await processTranscriptionSynchronous(
+        jobId,
+        audioBuffer,
+        transcriptionJob.originalFilename,
+        {
+          language,
+          operatingPoint,
+          enableDiarization: true,
+          enablePunctuation: true
+        }
+      );
+    }
 
     if (!result.success) {
+      let errorMessage = result.error || 'Failed to submit job to Speechmatics';
+      let userFriendlyMessage = errorMessage;
+
+      // Check for quota exceeded errors and provide user-friendly message
+      if (errorMessage.includes('Enhanced Model transcription') && errorMessage.includes('limit')) {
+        userFriendlyMessage = 'Enhanced model quota exceeded. Using standard model automatically.';
+      } else if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
+        userFriendlyMessage = 'Monthly transcription quota exceeded. Please contact support or wait for next month.';
+      }
+
       await updateTranscriptionStatusAdmin(jobId, 'failed', {
-        specialInstructions: result.error || 'Failed to submit job to Speechmatics'
+        specialInstructions: userFriendlyMessage
       });
 
       return NextResponse.json(
-        { error: result.error || 'Failed to submit job to Speechmatics' },
+        {
+          error: userFriendlyMessage,
+          technicalError: errorMessage // Keep technical details for debugging
+        },
         { status: 500 }
       );
     }
@@ -189,6 +224,38 @@ async function downloadAudioFile(downloadURL: string): Promise<Buffer | null> {
   } catch (error) {
     console.error('[API] Error downloading audio file:', error);
     return null;
+  }
+}
+
+/**
+ * Process transcription synchronously (for shorter files)
+ */
+async function processTranscriptionSynchronous(
+  jobId: string,
+  audioBuffer: Buffer,
+  filename: string,
+  speechmaticsConfig: Record<string, unknown>
+): Promise<{ success: boolean; speechmaticsJobId?: string; error?: string }> {
+  try {
+    console.log(`[API] Starting synchronous processing for job ${jobId}`);
+
+    // Use the existing synchronous transcription method
+    const result = await speechmaticsService.processTranscriptionJob(
+      jobId,
+      audioBuffer,
+      filename,
+      speechmaticsConfig
+    );
+
+    console.log(`[API] Synchronous processing completed for job ${jobId}`);
+    return { success: true };
+
+  } catch (error) {
+    console.error(`[API] Error in synchronous processing for job ${jobId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Synchronous processing failed'
+    };
   }
 }
 

@@ -361,7 +361,7 @@ export default function UploadPage() {
               body: JSON.stringify({
                 jobId: jobId,
                 language: 'en', // You could make this configurable
-                operatingPoint: 'enhanced'
+                operatingPoint: 'standard'
               })
             });
 

@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File;
     const language = (formData.get('language') as string) || 'en';
-    const operatingPoint = (formData.get('operatingPoint') as string) || 'enhanced';
+    const operatingPoint = (formData.get('operatingPoint') as string) || 'standard';
     
     if (!audioFile) {
       return NextResponse.json(
