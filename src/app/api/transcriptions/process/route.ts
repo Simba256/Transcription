@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 // Ensure this route runs on Node.js runtime (Buffer, axios, Firebase SDK compatibility)
 export const runtime = 'nodejs';
+// Set maxDuration to 5 minutes (300s) for Vercel deployment
+export const maxDuration = 300;
 import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, TranscriptionMode } from '@/lib/firebase/transcriptions-admin';
 import { rateLimiters } from '@/lib/middleware/rate-limit';

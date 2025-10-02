@@ -703,7 +703,7 @@ export class SpeechmaticsService {
    * Wait for Speechmatics job completion
    */
   private async waitForCompletion(jobId: string): Promise<SpeechmaticsResult> {
-    const maxAttempts = 720; // 60 minutes max (5s intervals) - increased for longer files
+    const maxAttempts = 50; // 4 minutes max (5s intervals) - fits within Vercel's 5-minute limit
     let attempts = 0;
     let jobStatus = 'running';
 

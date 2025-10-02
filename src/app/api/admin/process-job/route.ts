@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+
+// Set maxDuration to 5 minutes for Vercel deployment
+export const maxDuration = 300;
 import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin } from '@/lib/firebase/transcriptions-admin';
 

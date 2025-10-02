@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateTranscriptionStatusAdmin } from '@/lib/firebase/transcriptions-admin';
 
+// Set maxDuration to 5 minutes for Vercel deployment
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   try {
     const { speechmaticsJobId, transcriptionJobId } = await request.json();

@@ -1,10 +1,16 @@
 {
   "functions": {
     "src/app/api/transcriptions/process/route.ts": {
-      "maxDuration": 900
+      "maxDuration": 300
     },
     "src/app/api/speechmatics/callback/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/admin/process-job/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/debug/manual-retrieve/route.ts": {
+      "maxDuration": 300
     }
   },
   "regions": ["iad1"],
