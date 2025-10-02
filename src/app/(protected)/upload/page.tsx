@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { generateFilePath } from '@/lib/firebase/storage';
 import { createTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
-import { TranscriptionMode, TranscriptionJob } from '@/lib/firebase/transcriptions';
+import { TranscriptionMode, TranscriptionJob, TranscriptionDomain } from '@/lib/firebase/transcriptions';
 import { formatDuration, getBillingMinutes } from '@/lib/utils';
 
 interface UploadFile {
@@ -30,6 +30,7 @@ interface UploadFile {
 export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadFile[]>([]);
   const [transcriptionMode, setTranscriptionMode] = useState('ai');
+  const [transcriptionDomain, setTranscriptionDomain] = useState<TranscriptionDomain>('general');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -328,6 +329,7 @@ export default function UploadPage() {
           downloadURL: result.downloadURL,
           status: initialStatus,
           mode: transcriptionMode as TranscriptionMode,
+          domain: transcriptionDomain, // Include domain for specialized vocabulary
           duration: uploadFile.duration, // Store duration in seconds
           creditsUsed: creditsForFile,
           // Add metadata fields for template
@@ -606,6 +608,98 @@ export default function UploadPage() {
                   </Label>
                 ))}
               </RadioGroup>
+            </CardContent>
+          </Card>
+
+          {/* Domain Selection for Medical/Legal Terminology */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-[#003366]">
+                🎯 Domain-Specific Terminology
+              </CardTitle>
+              <p className="text-sm text-gray-600 mt-2">
+                Select your domain to improve accuracy for specialized vocabulary
+              </p>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup value={transcriptionDomain} onValueChange={(value) => setTranscriptionDomain(value as TranscriptionDomain)} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Label
+                  htmlFor="general"
+                  className={`cursor-pointer border rounded-lg p-4 flex flex-col transition-colors ${
+                    transcriptionDomain === 'general'
+                      ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
+                      : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="text-2xl">🌐</div>
+                    <h3 className="font-medium text-gray-900 flex-1">General</h3>
+                    <RadioGroupItem value="general" id="general" />
+                  </div>
+                  <p className="text-sm text-gray-600">Standard vocabulary for everyday conversations and business meetings</p>
+                </Label>
+
+                <Label
+                  htmlFor="medical"
+                  className={`cursor-pointer border rounded-lg p-4 flex flex-col transition-colors ${
+                    transcriptionDomain === 'medical'
+                      ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
+                      : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="text-2xl">🏥</div>
+                    <h3 className="font-medium text-gray-900 flex-1">Medical</h3>
+                    <RadioGroupItem value="medical" id="medical" />
+                  </div>
+                  <p className="text-sm text-gray-600">Enhanced accuracy for medical terminology, procedures, and pharmaceutical names</p>
+                </Label>
+
+                <Label
+                  htmlFor="legal"
+                  className={`cursor-pointer border rounded-lg p-4 flex flex-col transition-colors ${
+                    transcriptionDomain === 'legal'
+                      ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
+                      : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="text-2xl">⚖️</div>
+                    <h3 className="font-medium text-gray-900 flex-1">Legal</h3>
+                    <RadioGroupItem value="legal" id="legal" />
+                  </div>
+                  <p className="text-sm text-gray-600">Optimized for legal terminology, court proceedings, and judicial language</p>
+                </Label>
+              </RadioGroup>
+
+              {/* Domain-specific information */}
+              {transcriptionDomain === 'medical' && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <div className="text-blue-600 mt-0.5">ℹ️</div>
+                    <div>
+                      <p className="text-sm text-blue-800 font-medium">Medical Domain Active</p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Enhanced recognition for medical procedures, pharmaceutical names, anatomical terms, and clinical vocabulary.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {transcriptionDomain === 'legal' && (
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <div className="text-amber-600 mt-0.5">ℹ️</div>
+                    <div>
+                      <p className="text-sm text-amber-800 font-medium">Legal Domain Active</p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        Improved accuracy for legal terminology, Latin phrases, court procedures, and judicial language.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

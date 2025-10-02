@@ -7,6 +7,9 @@ export interface SpeechmaticsConfig {
   operatingPoint?: 'standard' | 'enhanced';
   enableDiarization?: boolean;
   enablePunctuation?: boolean;
+  maxSpeakers?: number; // Only available for real-time API (not batch API)
+  speakerSensitivity?: number; // Speaker sensitivity (0-1, default 0.5) - available for batch API
+  domain?: 'general' | 'medical' | 'legal'; // Domain-specific vocabulary
 }
 
 export interface SpeechmaticsResult {
@@ -19,6 +22,241 @@ export interface SpeechmaticsResult {
   jobId?: string;
   error?: string;
 }
+
+// Domain-specific vocabulary for improved accuracy
+const MEDICAL_VOCABULARY = [
+  // Common medical terms
+  { content: "hypertension" },
+  { content: "myocardial infarction" },
+  { content: "electrocardiogram", sounds_like: ["ECG", "EKG"] },
+  { content: "sphygmomanometer" },
+  { content: "stethoscope" },
+  { content: "auscultation" },
+  { content: "palpitation" },
+  { content: "bradycardia" },
+  { content: "tachycardia" },
+  { content: "arrhythmia" },
+  { content: "systolic" },
+  { content: "diastolic" },
+  { content: "hemoglobin" },
+  { content: "hematocrit" },
+  { content: "leukocytes" },
+  { content: "erythrocytes" },
+  { content: "thrombocytes" },
+  { content: "lymphocytes" },
+  { content: "neutrophils" },
+  { content: "eosinophils" },
+  { content: "basophils" },
+  { content: "platelets" },
+  { content: "fibrinogen" },
+  { content: "prothrombin" },
+  { content: "creatinine" },
+  { content: "creatine kinase" },
+  { content: "troponin" },
+  { content: "cholesterol" },
+  { content: "triglycerides" },
+  { content: "glucose" },
+  { content: "insulin" },
+  { content: "diabetes mellitus" },
+  { content: "hyperglycemia" },
+  { content: "hypoglycemia" },
+  { content: "pneumonia" },
+  { content: "bronchitis" },
+  { content: "asthma" },
+  { content: "emphysema" },
+  { content: "fibrosis" },
+  { content: "pneumothorax" },
+  { content: "pleurisy" },
+  { content: "dyspnea" },
+  { content: "orthopnea" },
+  { content: "cyanosis" },
+  { content: "anemia" },
+  { content: "leukemia" },
+  { content: "lymphoma" },
+  { content: "carcinoma" },
+  { content: "metastasis" },
+  { content: "biopsy" },
+  { content: "chemotherapy" },
+  { content: "radiotherapy" },
+  { content: "oncology" },
+  { content: "cardiology" },
+  { content: "neurology" },
+  { content: "gastroenterology" },
+  { content: "endocrinology" },
+  { content: "nephrology" },
+  { content: "rheumatology" },
+  { content: "dermatology" },
+  { content: "ophthalmology" },
+  { content: "otolaryngology" },
+  { content: "psychiatry" },
+  { content: "anesthesiology" },
+  { content: "pathology" },
+  { content: "radiology" },
+  { content: "surgery" },
+  { content: "laparoscopy" },
+  { content: "endoscopy" },
+  { content: "arthroscopy" },
+  { content: "catheterization" },
+  { content: "intubation" },
+  { content: "ventilation" },
+  { content: "defibrillation" },
+  { content: "resuscitation" },
+  { content: "epidural" },
+  { content: "spinal anesthesia" },
+  { content: "general anesthesia" },
+  { content: "sedation" },
+  { content: "analgesic" },
+  { content: "antibiotic" },
+  { content: "antiviral" },
+  { content: "antifungal" },
+  { content: "immunosuppressant" },
+  { content: "corticosteroid" },
+  { content: "beta blocker" },
+  { content: "ACE inhibitor" },
+  { content: "diuretic" },
+  { content: "anticoagulant" },
+  { content: "antiplatelet" },
+  { content: "statin" },
+  { content: "metformin" },
+  { content: "levothyroxine" },
+  { content: "prednisone" },
+  { content: "ibuprofen" },
+  { content: "acetaminophen" },
+  { content: "morphine" },
+  { content: "fentanyl" },
+  { content: "midazolam" },
+  { content: "propofol" },
+  { content: "lidocaine" },
+  { content: "epinephrine" },
+  { content: "norepinephrine" },
+  { content: "dopamine" },
+  { content: "vasopressin" }
+];
+
+const LEGAL_VOCABULARY = [
+  // Common legal terms
+  { content: "plaintiff" },
+  { content: "defendant" },
+  { content: "appellant" },
+  { content: "appellee" },
+  { content: "petitioner" },
+  { content: "respondent" },
+  { content: "deposition" },
+  { content: "interrogatory" },
+  { content: "subpoena" },
+  { content: "voir dire" },
+  { content: "habeas corpus" },
+  { content: "res ipsa loquitur" },
+  { content: "prima facie" },
+  { content: "in camera" },
+  { content: "ex parte" },
+  { content: "amicus curiae" },
+  { content: "certiorari" },
+  { content: "mandamus" },
+  { content: "injunction" },
+  { content: "restraining order" },
+  { content: "summary judgment" },
+  { content: "motion to dismiss" },
+  { content: "motion for summary judgment" },
+  { content: "motion in limine" },
+  { content: "directed verdict" },
+  { content: "judgment notwithstanding the verdict" },
+  { content: "res judicata" },
+  { content: "collateral estoppel" },
+  { content: "statute of limitations" },
+  { content: "statute of frauds" },
+  { content: "parol evidence rule" },
+  { content: "breach of contract" },
+  { content: "specific performance" },
+  { content: "liquidated damages" },
+  { content: "punitive damages" },
+  { content: "compensatory damages" },
+  { content: "consequential damages" },
+  { content: "incidental damages" },
+  { content: "mitigation of damages" },
+  { content: "negligence" },
+  { content: "gross negligence" },
+  { content: "strict liability" },
+  { content: "proximate cause" },
+  { content: "assumption of risk" },
+  { content: "comparative negligence" },
+  { content: "contributory negligence" },
+  { content: "vicarious liability" },
+  { content: "respondeat superior" },
+  { content: "joint and several liability" },
+  { content: "indemnification" },
+  { content: "tort" },
+  { content: "battery" },
+  { content: "assault" },
+  { content: "false imprisonment" },
+  { content: "intentional infliction of emotional distress" },
+  { content: "defamation" },
+  { content: "libel" },
+  { content: "slander" },
+  { content: "invasion of privacy" },
+  { content: "trespass" },
+  { content: "conversion" },
+  { content: "nuisance" },
+  { content: "easement" },
+  { content: "covenant" },
+  { content: "lien" },
+  { content: "mortgage" },
+  { content: "deed" },
+  { content: "title" },
+  { content: "escrow" },
+  { content: "consideration" },
+  { content: "offer" },
+  { content: "acceptance" },
+  { content: "counteroffer" },
+  { content: "revocation" },
+  { content: "capacity" },
+  { content: "duress" },
+  { content: "undue influence" },
+  { content: "misrepresentation" },
+  { content: "fraud" },
+  { content: "mistake" },
+  { content: "impossibility" },
+  { content: "frustration of purpose" },
+  { content: "force majeure" },
+  { content: "arbitration" },
+  { content: "mediation" },
+  { content: "litigation" },
+  { content: "discovery" },
+  { content: "due process" },
+  { content: "equal protection" },
+  { content: "probable cause" },
+  { content: "reasonable suspicion" },
+  { content: "Miranda rights" },
+  { content: "Fifth Amendment" },
+  { content: "Sixth Amendment" },
+  { content: "Fourteenth Amendment" },
+  { content: "search and seizure" },
+  { content: "warrant" },
+  { content: "affidavit" },
+  { content: "indictment" },
+  { content: "arraignment" },
+  { content: "plea bargain" },
+  { content: "nolo contendere" },
+  { content: "allocution" },
+  { content: "sentencing" },
+  { content: "probation" },
+  { content: "parole" },
+  { content: "restitution" },
+  { content: "expungement" },
+  { content: "felony" },
+  { content: "misdemeanor" },
+  { content: "infraction" },
+  { content: "jurisdiction" },
+  { content: "venue" },
+  { content: "standing" },
+  { content: "justiciability" },
+  { content: "ripeness" },
+  { content: "mootness" },
+  { content: "precedent" },
+  { content: "stare decisis" },
+  { content: "dicta" },
+  { content: "holding" }
+];
 
 export class SpeechmaticsService {
   private apiKey: string;
@@ -62,13 +300,47 @@ export class SpeechmaticsService {
     try {
       console.log(`[Speechmatics] Submitting job with webhook callback: ${callbackUrl}`);
 
-      // Create job configuration with webhook
+      // Create job configuration with webhook and diarization
+      const transcriptionConfig: any = {
+        language: config.language || 'en',
+        operating_point: config.operatingPoint || 'standard'
+      };
+
+      // Add speaker diarization if enabled
+      if (config.enableDiarization) {
+        transcriptionConfig.diarization = 'speaker';
+
+        // Add speaker diarization configuration (batch API only supports speaker_sensitivity)
+        if (config.speakerSensitivity !== undefined) {
+          transcriptionConfig.speaker_diarization_config = {
+            speaker_sensitivity: Math.min(Math.max(config.speakerSensitivity, 0), 1)
+          };
+        }
+      }
+
+      // Add domain-specific vocabulary based on the selected domain
+      if (config.domain === 'medical' || config.domain === 'legal') {
+        let domainVocabulary = [];
+        if (config.domain === 'medical') {
+          domainVocabulary = MEDICAL_VOCABULARY;
+          console.log(`[Speechmatics] Using medical vocabulary (${MEDICAL_VOCABULARY.length} terms)`);
+        } else if (config.domain === 'legal') {
+          domainVocabulary = LEGAL_VOCABULARY;
+          console.log(`[Speechmatics] Using legal vocabulary (${LEGAL_VOCABULARY.length} terms)`);
+        }
+
+        // Only add additional_vocab if we have vocabulary to add
+        if (domainVocabulary.length > 0) {
+          transcriptionConfig.additional_vocab = domainVocabulary;
+        }
+      } else {
+        console.log(`[Speechmatics] Using general vocabulary (no additional_vocab)`);
+      }
+      // Note: remove_disfluencies is not available in Batch API v2
+
       const jobConfig = {
         type: 'transcription',
-        transcription_config: {
-          language: config.language || 'en',
-          operating_point: config.operatingPoint || 'standard'
-        },
+        transcription_config: transcriptionConfig,
         notification_config: [{
           url: callbackUrl,
           contents: ['transcript'],
@@ -77,6 +349,7 @@ export class SpeechmaticsService {
       };
 
       console.log(`[Speechmatics] Job config:`, JSON.stringify(jobConfig, null, 2));
+      console.log(`[Speechmatics] transcriptionConfig object:`, JSON.stringify(transcriptionConfig, null, 2));
 
       // Create multipart form data manually for Node.js compatibility
       const boundary = `----speechmatics${Date.now()}`;

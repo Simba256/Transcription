@@ -137,7 +137,9 @@ export async function POST(request: NextRequest) {
           language,
           operatingPoint,
           enableDiarization: true,
-          enablePunctuation: true
+          enablePunctuation: true,
+          speakerSensitivity: 0.6, // Higher sensitivity for better speaker detection
+          domain: transcriptionJob.domain || 'general' // Use domain for specialized vocabulary
         }
       );
     } else {
@@ -150,7 +152,9 @@ export async function POST(request: NextRequest) {
           language,
           operatingPoint,
           enableDiarization: true,
-          enablePunctuation: true
+          enablePunctuation: true,
+          speakerSensitivity: 0.6, // Higher sensitivity for better speaker detection
+          domain: transcriptionJob.domain || 'general' // Use domain for specialized vocabulary
         }
       );
     }

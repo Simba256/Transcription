@@ -89,6 +89,10 @@ export async function POST(request: NextRequest) {
 
         console.log(`[Speechmatics Webhook] Retrieved transcript for job ${jobId}`);
 
+        // Debug: Log the overall transcript structure
+        console.log(`[Speechmatics Webhook] Transcript metadata:`, JSON.stringify(transcriptData.metadata, null, 2));
+        console.log(`[Speechmatics Webhook] First 3 results sample:`, JSON.stringify(transcriptData.results?.slice(0, 3), null, 2));
+
         // Create timestamped segments from Speechmatics results
         const timestampedSegments = [];
         console.log(`[Speechmatics Webhook] Processing results for timestamped segments. Results count: ${transcriptData.results?.length || 0}`);
@@ -97,6 +101,7 @@ export async function POST(request: NextRequest) {
           let currentSentence = '';
           let sentenceStartTime = null;
           let sentenceEndTime = 0;
+          let currentSpeaker = null; // Track current speaker
 
           for (const result of transcriptData.results) {
             if (result.alternatives && result.alternatives[0] && result.alternatives[0].content) {
@@ -104,19 +109,47 @@ export async function POST(request: NextRequest) {
               const startTime = result.start_time || 0;
               const endTime = result.end_time || 0;
 
-              // Initialize sentence start time
+              // Check both possible speaker field locations
+              const speakerId = result.speaker || result.alternatives[0].speaker || 'UU';
+
+              // Debug log to see the actual structure
+              if (result.type === 'word') {
+                console.log(`[Speechmatics Webhook] Word: "${word}", Speaker from result: ${result.speaker}, Speaker from alternative: ${result.alternatives[0].speaker}, Final speakerId: ${speakerId}`);
+              }
+
+              // Initialize sentence start time and speaker
               if (sentenceStartTime === null && result.type === 'word') {
                 sentenceStartTime = startTime;
+                currentSpeaker = speakerId;
               }
 
-              // Add word or punctuation to current sentence
-              if (result.type === 'punctuation' && result.attaches_to === 'previous') {
-                currentSentence += word; // Attach punctuation directly
-              } else if (result.type === 'word') {
-                currentSentence += (currentSentence ? ' ' : '') + word;
-              }
+              // Check if speaker changed - if so, end current sentence and start new one
+              const speakerChanged = currentSpeaker && currentSpeaker !== speakerId && result.type === 'word';
 
-              sentenceEndTime = endTime;
+              if (speakerChanged && currentSentence.trim()) {
+                // Complete the current sentence before speaker change
+                timestampedSegments.push({
+                  start: sentenceStartTime,
+                  end: sentenceEndTime,
+                  text: currentSentence.trim(),
+                  speaker: currentSpeaker
+                });
+
+                // Start new sentence with new speaker
+                currentSentence = word;
+                sentenceStartTime = startTime;
+                currentSpeaker = speakerId;
+                sentenceEndTime = endTime;
+              } else {
+                // Add word or punctuation to current sentence
+                if (result.type === 'punctuation' && result.attaches_to === 'previous') {
+                  currentSentence += word; // Attach punctuation directly
+                } else if (result.type === 'word') {
+                  currentSentence += (currentSentence ? ' ' : '') + word;
+                  if (!currentSpeaker) currentSpeaker = speakerId; // Set speaker if not set
+                }
+                sentenceEndTime = endTime;
+              }
 
               // Check if this ends a sentence
               const endsWithPunctuation = result.type === 'punctuation' && result.is_eos;
@@ -126,12 +159,14 @@ export async function POST(request: NextRequest) {
                 timestampedSegments.push({
                   start: sentenceStartTime,
                   end: sentenceEndTime,
-                  text: currentSentence.trim()
+                  text: currentSentence.trim(),
+                  speaker: currentSpeaker
                 });
 
                 // Reset for next sentence
                 currentSentence = '';
                 sentenceStartTime = null;
+                currentSpeaker = null;
                 sentenceEndTime = 0;
               }
             }
@@ -142,7 +177,8 @@ export async function POST(request: NextRequest) {
             timestampedSegments.push({
               start: sentenceStartTime,
               end: sentenceEndTime,
-              text: currentSentence.trim()
+              text: currentSentence.trim(),
+              speaker: currentSpeaker
             });
           }
         }

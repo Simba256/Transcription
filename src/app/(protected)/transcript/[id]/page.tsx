@@ -66,7 +66,8 @@ export default function TranscriptViewerPage() {
   const [editedTranscript, setEditedTranscript] = useState('');
   const [saving, setSaving] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'txt' | 'pdf' | 'docx'>('txt');
-  
+  const [timestampFrequency, setTimestampFrequency] = useState<30 | 60 | 300>(60); // 30s, 60s, 5min (300s)
+
   const audioRef = useRef<HTMLAudioElement>(null);
   
   useEffect(() => {
@@ -295,6 +296,34 @@ export default function TranscriptViewerPage() {
     }
   };
 
+  // Speaker color mapping for visual differentiation
+  const getSpeakerColor = (speaker: string | undefined): string => {
+    if (!speaker || speaker === 'UU') return 'text-gray-600 bg-gray-100 border border-gray-300';
+
+    const colors = [
+      'text-blue-700 bg-blue-100 border border-blue-200',      // Speaker 1 - Blue
+      'text-green-700 bg-green-100 border border-green-200',    // Speaker 2 - Green
+      'text-purple-700 bg-purple-100 border border-purple-200',  // Speaker 3 - Purple
+      'text-orange-700 bg-orange-100 border border-orange-200',  // Speaker 4 - Orange
+      'text-red-700 bg-red-100 border border-red-200',        // Speaker 5 - Red
+      'text-indigo-700 bg-indigo-100 border border-indigo-200',  // Speaker 6 - Indigo
+      'text-pink-700 bg-pink-100 border border-pink-200',      // Speaker 7 - Pink
+      'text-teal-700 bg-teal-100 border border-teal-200',      // Speaker 8 - Teal
+      'text-yellow-700 bg-yellow-100 border border-yellow-200',  // Speaker 9 - Yellow
+      'text-cyan-700 bg-cyan-100 border border-cyan-200',      // Speaker 10 - Cyan
+    ];
+
+    // Extract speaker number (e.g., "S1" -> 1, "S2" -> 2)
+    const speakerNum = parseInt(speaker.replace('S', '')) || 1;
+    return colors[(speakerNum - 1) % colors.length];
+  };
+
+  // Format speaker display name
+  const getSpeakerDisplayName = (speaker: string | undefined): string => {
+    if (!speaker || speaker === 'UU') return 'Speaker';
+    return `Speaker ${speaker.replace('S', '')}`;
+  };
+
   const renderTimestampedTranscript = () => {
     if (!transcription?.timestampedTranscript || transcription.timestampedTranscript.length === 0) {
       return (
@@ -304,22 +333,226 @@ export default function TranscriptViewerPage() {
       );
     }
 
+    // Get unique speakers from the transcript
+    const allSpeakers = [...new Set(
+      transcription.timestampedTranscript
+        .map(segment => segment.speaker)
+        .filter(speaker => speaker)
+    )];
+
+    const identifiedSpeakers = allSpeakers.filter(speaker => speaker !== 'UU').sort();
+    const hasUnknownSpeakers = allSpeakers.includes('UU');
+
+    // Helper function to detect paragraph breaks based on context
+    const shouldBreakParagraph = (text: string, nextText?: string): boolean => {
+      if (!text) return false;
+
+      // Break after questions
+      if (/[?!]$/.test(text.trim())) return true;
+
+      // Break after long pauses (if we had pause data)
+      // Break after certain phrases that indicate topic changes
+      const topicChangeIndicators = [
+        /\b(now|so|anyway|well|alright|okay)\b[.,]?\s*$/i,
+        /\b(moving on|next|let me)\b/i,
+        /\b(in conclusion|to summarize|finally)\b/i,
+        /\b(first|second|third|meanwhile|however|therefore)\b[.,]?\s*$/i
+      ];
+
+      if (topicChangeIndicators.some(pattern => pattern.test(text))) return true;
+
+      // Break if text is getting quite long (> 150 words approximately)
+      const wordCount = text.split(/\s+/).length;
+      if (wordCount > 30 && /[.!]$/.test(text.trim())) return true;
+
+      return false;
+    };
+
+    // Process segments to create continuous text flow with intelligent paragraph breaks
+    const processedSpeakerSegments = [];
+    let currentSpeaker = null;
+    let accumulatedText = '';
+    let nextTimestampTarget = timestampFrequency; // First target at the frequency interval
+    let pendingTimestamp = null; // Store timestamp to be inserted at next sentence end
+    let textParts = [];
+    let paragraphParts = [];
+
+    const addCurrentParagraph = () => {
+      if (accumulatedText.trim()) {
+        textParts.push({ type: 'text', content: accumulatedText.trim() });
+        accumulatedText = '';
+      }
+
+      if (textParts.length > 0) {
+        paragraphParts.push([...textParts]);
+        textParts = [];
+      }
+    };
+
+    const addCurrentSegment = () => {
+      // Add any remaining text as final paragraph
+      addCurrentParagraph();
+
+      // Only add segments that have actual content
+      if (paragraphParts.length > 0) {
+        processedSpeakerSegments.push({
+          speaker: currentSpeaker,
+          paragraphs: [...paragraphParts]
+        });
+      }
+
+      // Reset for next segment - but DON'T reset timestamp target, keep global timeline
+      paragraphParts = [];
+      // nextTimestampTarget stays the same to maintain continuous timeline
+      // pendingTimestamp also stays the same if there's one waiting
+    };
+
+    // Helper to check if text ends a sentence
+    const endsWithSentence = (text: string): boolean => {
+      return /[.!?]$/.test(text.trim());
+    };
+
+    for (let i = 0; i < transcription.timestampedTranscript.length; i++) {
+      const segment = transcription.timestampedTranscript[i];
+      const speakerChanged = currentSpeaker !== null && currentSpeaker !== segment.speaker;
+
+      // If speaker changed, finalize current segment and start new one
+      if (speakerChanged) {
+        addCurrentSegment();
+        currentSpeaker = segment.speaker;
+      } else if (currentSpeaker === null) {
+        // First segment
+        currentSpeaker = segment.speaker;
+      }
+
+      // Check if we've passed a timestamp target and need to mark for insertion
+      if (segment.start >= nextTimestampTarget && !pendingTimestamp) {
+        pendingTimestamp = {
+          time: nextTimestampTarget,
+          content: formatTimestamp(nextTimestampTarget)
+        };
+        // Move to next target interval
+        nextTimestampTarget += timestampFrequency;
+      }
+
+      // Add the current segment text
+      const newText = (accumulatedText ? ' ' : '') + segment.text;
+
+      // Check if we should insert the pending timestamp at this sentence end
+      if (pendingTimestamp && endsWithSentence(newText)) {
+        // Add accumulated text before timestamp
+        if (accumulatedText.trim()) {
+          textParts.push({ type: 'text', content: accumulatedText.trim() });
+          accumulatedText = '';
+        }
+
+        // Add the exact interval timestamp
+        textParts.push({
+          type: 'timestamp',
+          time: pendingTimestamp.time,
+          content: pendingTimestamp.content
+        });
+
+        // Clear pending timestamp
+        pendingTimestamp = null;
+      }
+
+      // Check if we should break into a new paragraph
+      if (accumulatedText && shouldBreakParagraph(accumulatedText + newText)) {
+        // Complete current paragraph
+        addCurrentParagraph();
+      }
+
+      accumulatedText += newText;
+    }
+
+    // Add the final segment
+    addCurrentSegment();
+
     return (
       <div className="space-y-4">
-        {transcription.timestampedTranscript.map((segment, index) => (
-          <div key={index} className="flex gap-4 group">
-            <button
-              onClick={() => jumpToTime(segment.start)}
-              className="flex-shrink-0 text-[#003366] hover:text-[#004080] font-mono text-sm bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors cursor-pointer"
-              title={`Jump to ${formatTimestamp(segment.start)}`}
-            >
-              [{formatTimestamp(segment.start)}]
-            </button>
-            <div className="flex-1 text-gray-800 leading-relaxed">
-              {segment.text}
-            </div>
+        {/* Timestamp Frequency Control */}
+        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-800">Timestamp Frequency:</span>
           </div>
-        ))}
+          <select
+            value={timestampFrequency}
+            onChange={(e) => setTimestampFrequency(Number(e.target.value) as 30 | 60 | 300)}
+            className="border border-blue-300 rounded-md px-3 py-1 text-sm bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value={30}>Every 30 seconds</option>
+            <option value={60}>Every 60 seconds</option>
+            <option value={300}>Every 5 minutes</option>
+          </select>
+        </div>
+
+        {/* Speaker Legend */}
+        {(identifiedSpeakers.length > 0 || hasUnknownSpeakers) && (
+          <div className="bg-gray-50 rounded-lg p-4 border">
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">
+              🎤 Speaker Detection Results
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {identifiedSpeakers.map(speaker => (
+                <div key={speaker} className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)}`}>
+                  {getSpeakerDisplayName(speaker)}
+                </div>
+              ))}
+              {hasUnknownSpeakers && (
+                <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor('UU')}`}>
+                  Unidentified Speech
+                </div>
+              )}
+            </div>
+            {identifiedSpeakers.length === 0 && hasUnknownSpeakers && (
+              <p className="text-xs text-gray-600 mt-2">
+                ℹ️ Speaker identification was not possible for this audio. This may be due to audio quality, single speaker, or processing limitations.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Transcript with Intelligent Paragraphs and Inline Timestamps */}
+        <div className="space-y-6">
+          {processedSpeakerSegments.map((speakerSegment, index) => (
+            <div key={index} className="group">
+              {/* Speaker Label */}
+              {speakerSegment.speaker && (
+                <div className="flex items-center mb-4">
+                  <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speakerSegment.speaker)}`}>
+                    {getSpeakerDisplayName(speakerSegment.speaker)}
+                  </div>
+                </div>
+              )}
+
+              {/* Paragraphs with Inline Timestamps */}
+              <div className="pl-4 border-l-2 border-gray-200 space-y-4">
+                {speakerSegment.paragraphs.map((paragraph, paragraphIndex) => (
+                  <div key={paragraphIndex} className="text-gray-800 leading-relaxed">
+                    {paragraph.map((part, partIndex) => (
+                      <span key={partIndex}>
+                        {part.type === 'text' ? (
+                          part.content
+                        ) : (
+                          <button
+                            onClick={() => jumpToTime(part.time)}
+                            className="inline-flex items-center mx-2 text-[#003366] hover:text-[#004080] font-mono text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors cursor-pointer"
+                            title={`Jump to ${part.content}`}
+                          >
+                            [{part.content}]
+                          </button>
+                        )}
+                        {part.type === 'timestamp' && partIndex < paragraph.length - 1 && ' '}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };

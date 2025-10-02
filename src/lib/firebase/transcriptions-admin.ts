@@ -4,12 +4,14 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export type TranscriptionStatus = 'processing' | 'pending-review' | 'pending-transcription' | 'complete' | 'failed';
 export type TranscriptionMode = 'ai' | 'hybrid' | 'human';
+export type TranscriptionDomain = 'general' | 'medical' | 'legal';
 
 export interface TranscriptSegment {
   start: number; // Start time in seconds
   end: number;   // End time in seconds
   text: string;  // Text content
   confidence?: number; // Optional confidence score
+  speaker?: string; // Speaker ID (e.g., "S1", "S2", "UU" for unknown)
 }
 
 export interface TranscriptionJob {
@@ -21,6 +23,7 @@ export interface TranscriptionJob {
   downloadURL: string;
   status: TranscriptionStatus;
   mode: TranscriptionMode;
+  domain?: TranscriptionDomain; // Domain for specialized vocabulary
   duration: number; // in seconds (exact duration)
   creditsUsed: number;
   specialInstructions?: string;
