@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+.next
+.out
+.env*.local
+.DS_Store
+*.tsbuildinfo
+client/
+harvard.wav
+test-audio.wav
+*.md
+!README.md
