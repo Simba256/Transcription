@@ -483,6 +483,8 @@ export async function createSubscriptionFromStripe(
       currentPeriodStart,
       currentPeriodEnd,
       currentPeriodMinutesUsed: 0,
+      minutesUsedThisMonth: 0, // For upload page compatibility
+      includedMinutesPerMonth: plan.minutesIncluded, // Set included minutes for the plan
       trialUsed: true, // Mark trial as used when subscribing
       trialMinutesRemaining: 0, // Trial ends when subscription starts
       updatedAt: Timestamp.now(),
