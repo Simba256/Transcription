@@ -125,6 +125,61 @@ export function UserDashboard() {
           </p>
         </div>
 
+        {/* Subscription Status (if active) */}
+        {userData?.subscriptionStatus === 'active' ? (
+          <Card className="border-0 shadow-sm mb-6 bg-gradient-to-r from-[#003366] to-[#004488]">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
+                <div>
+                  <p className="text-sm font-medium text-white/80">Active Plan</p>
+                  <p className="text-xl font-bold capitalize">
+                    {userData.subscriptionPlan?.replace('-', ' ')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white/80">Minutes Remaining</p>
+                  <p className="text-xl font-bold">
+                    {(userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0)} / {userData.includedMinutesPerMonth || 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white/80">Billing Cycle Ends</p>
+                  <p className="text-xl font-bold">
+                    {userData.currentPeriodEnd
+                      ? new Date(userData.currentPeriodEnd.toMillis()).toLocaleDateString()
+                      : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : userData?.trialMinutesRemaining && userData.trialMinutesRemaining > 0 ? (
+          <Card className="border-0 shadow-sm mb-6 bg-gradient-to-r from-green-500 to-green-600">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-white">
+                <div>
+                  <p className="text-sm font-medium text-white/80">Free Trial</p>
+                  <p className="text-xl font-bold">
+                    {userData.trialMinutesRemaining} Minutes Remaining
+                  </p>
+                </div>
+                <div className="flex items-center">
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="bg-white text-green-600 hover:bg-white/90"
+                  >
+                    <Link href="/billing">
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      Subscribe Now
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {/* Quick Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
           <Card className="border-0 shadow-sm">

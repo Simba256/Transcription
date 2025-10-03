@@ -384,11 +384,25 @@ export default function UploadPage() {
         }
         
         const jobId = await createTranscriptionJobAPI(jobData);
-        
-        // Consume credits and add transaction with custom description
-        const modeDisplayName = modeDetails.name; // e.g., "AI Transcription", "Hybrid Review", "Human Transcription"
-        const description = `${modeDisplayName}: ${uploadFile.file.name}`;
-        await consumeCredits(creditsForFile, jobId, description);
+
+        // Update subscription minutes if used
+        if (minutesFromSubscription > 0) {
+          const { updateDoc, doc } = await import('firebase/firestore');
+          const { db } = await import('@/lib/firebase/config');
+          const { increment } = await import('firebase/firestore');
+
+          await updateDoc(doc(db, 'users', user.uid), {
+            minutesUsedThisMonth: increment(minutesFromSubscription),
+            currentPeriodMinutesUsed: increment(minutesFromSubscription)
+          });
+        }
+
+        // Consume credits only if needed
+        if (creditsForFile > 0) {
+          const modeDisplayName = modeDetails.name;
+          const description = `${modeDisplayName}: ${uploadFile.file.name} (${minutesNeedingCreditsForFile} min)`;
+          await consumeCredits(creditsForFile, jobId, description);
+        }
 
         // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
         if (transcriptionMode === 'ai' || transcriptionMode === 'hybrid') {
