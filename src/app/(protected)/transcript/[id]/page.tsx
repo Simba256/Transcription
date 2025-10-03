@@ -67,6 +67,8 @@ export default function TranscriptViewerPage() {
   const [saving, setSaving] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'txt' | 'pdf' | 'docx'>('txt');
   const [timestampFrequency, setTimestampFrequency] = useState<30 | 60 | 300>(60); // 30s, 60s, 5min (300s)
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+  const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   
@@ -341,7 +343,20 @@ export default function TranscriptViewerPage() {
   // Format speaker display name
   const getSpeakerDisplayName = (speaker: string | undefined): string => {
     if (!speaker || speaker === 'UU') return 'Speaker';
+    // Check if there's a custom name for this speaker
+    if (speakerNames[speaker]) {
+      return speakerNames[speaker];
+    }
     return `Speaker ${speaker.replace('S', '')}`;
+  };
+
+  // Update speaker name
+  const updateSpeakerName = (speaker: string, newName: string) => {
+    setSpeakerNames(prev => ({
+      ...prev,
+      [speaker]: newName
+    }));
+    setEditingSpeaker(null);
   };
 
   const renderTimestampedTranscript = () => {
@@ -511,13 +526,54 @@ export default function TranscriptViewerPage() {
         {/* Speaker Legend */}
         {(identifiedSpeakers.length > 0 || hasUnknownSpeakers) && (
           <div className="bg-gray-50 rounded-lg p-4 border">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">
-              🎤 Speaker Detection Results
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-gray-700">
+                🎤 Speaker Detection Results
+              </h4>
+              <p className="text-xs text-gray-500 italic">
+                Click speaker names to edit
+              </p>
+            </div>
             <div className="flex flex-wrap gap-2">
               {identifiedSpeakers.map(speaker => (
-                <div key={speaker} className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)}`}>
-                  {getSpeakerDisplayName(speaker)}
+                <div key={speaker} className="relative group">
+                  {editingSpeaker === speaker ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      defaultValue={getSpeakerDisplayName(speaker)}
+                      onBlur={(e) => {
+                        const newName = e.target.value.trim();
+                        if (newName) {
+                          updateSpeakerName(speaker, newName);
+                        } else {
+                          setEditingSpeaker(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const newName = e.currentTarget.value.trim();
+                          if (newName) {
+                            updateSpeakerName(speaker, newName);
+                          } else {
+                            setEditingSpeaker(null);
+                          }
+                        } else if (e.key === 'Escape') {
+                          setEditingSpeaker(null);
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)} border-2 border-blue-500 outline-none min-w-[100px]`}
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditingSpeaker(speaker)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)} hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer`}
+                      title="Click to edit speaker name"
+                    >
+                      {getSpeakerDisplayName(speaker)}
+                      <Edit3 className="inline-block ml-1 h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  )}
                 </div>
               ))}
               {hasUnknownSpeakers && (
