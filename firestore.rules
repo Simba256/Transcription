@@ -150,6 +150,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Usage records collection (detailed subscription usage tracking)
+    match /usageRecords/{recordId} {
+      // Users can read their own usage records, admins can read all
+      allow read: if isSignedIn() &&
+                     (resource.data.userId == request.auth.uid || isAdmin());
+
+      // System can create usage records during transcription
+      allow create: if isSignedIn() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.keys().hasAll([
+                         'userId', 'transcriptionId', 'mode', 'minutesUsed',
+                         'creditsUsed', 'source', 'timestamp', 'billingCycleStart', 'billingCycleEnd'
+                       ]);
+
+      // Only admins can update usage records (immutable after creation)
+      allow update: if isAdmin();
+
+      // Only admins can delete usage records
+      allow delete: if isAdmin();
+    }
+
     // Subscriptions collection
     match /subscriptions/{subscriptionId} {
       // Users can read their own subscription, admins can read all subscriptions
