@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX, exportTranscriptTXT } from '@/lib/utils/transcriptTemplate';
+import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX } from '@/lib/utils/transcriptTemplate';
 import { FileText, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,7 +107,7 @@ export default function TranscriptionsPage() {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, modeFilter]);
 
-  const handleDownload = async (transcription: TranscriptionJob, format: 'txt' | 'pdf' | 'docx' = 'txt') => {
+  const handleDownload = async (transcription: TranscriptionJob, format: 'pdf' | 'docx' = 'pdf') => {
     try {
       console.log('Transcriptions page download - transcription data:', {
         id: transcription.id,
@@ -129,9 +129,7 @@ export default function TranscriptionsPage() {
         fileName: templateData.fileName
       });
 
-      if (format === 'txt') {
-        exportTranscriptTXT(templateData);
-      } else if (format === 'pdf') {
+      if (format === 'pdf') {
         await exportTranscriptPDF(templateData);
       } else if (format === 'docx') {
         await exportTranscriptDOCX(templateData);
@@ -337,14 +335,6 @@ export default function TranscriptionsPage() {
                     {transcription.status === 'complete' && (
                       <>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownload(transcription, 'txt')}
-                            className="border-[#b29dd9] text-[#b29dd9] hover:bg-[#b29dd9] hover:text-white"
-                          >
-                            TXT
-                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
