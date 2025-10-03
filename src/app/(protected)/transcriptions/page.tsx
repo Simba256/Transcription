@@ -179,7 +179,7 @@ export default function TranscriptionsPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
 
-      <div className="w-full max-w-sm sm:max-w-lg md:max-w-4xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-6 sm:px-12 md:px-16 lg:px-20 xl:px-24 2xl:px-32 py-8 flex-1">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -295,14 +295,14 @@ export default function TranscriptionsPage() {
                 >
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-3">
-                      <FileText className="h-5 w-5 text-[#b29dd9]" />
-                      <h3 className="font-semibold text-[#003366] text-lg">
+                      <FileText className="h-5 w-5 text-[#b29dd9] flex-shrink-0" />
+                      <h3 className="font-semibold text-[#003366] text-lg truncate flex-1" title={transcription.originalFilename}>
                         {transcription.originalFilename}
                       </h3>
-                      <StatusBadge status={transcription.status} />
+                      <StatusBadge status={transcription.status} className="flex-shrink-0" />
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div>
                         <span className="text-gray-600 font-medium">Mode:</span>
                         <p className="text-[#003366]">

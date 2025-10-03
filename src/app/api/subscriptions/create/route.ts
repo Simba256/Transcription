@@ -6,11 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { validateRequestBody } from '@/lib/validation/schemas';
 import { CreateSubscriptionSchema } from '@/lib/validation/schemas';
 import { createSubscription } from '@/lib/services/subscription.service';
-import { getUserData } from '@/lib/firebase/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,10 +43,15 @@ export async function POST(request: NextRequest) {
 
     const { planId, paymentMethodId } = validation.data;
 
-    // Get user data for email
-    const userData = await getUserData(userId);
-    if (!userData) {
+    // Get user data from Firestore using Admin SDK
+    const userDoc = await adminDb.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const userData = userDoc.data();
+    if (!userData?.email) {
+      return NextResponse.json({ error: 'User email not found' }, { status: 404 });
     }
 
     // Create subscription

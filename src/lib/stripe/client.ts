@@ -52,15 +52,35 @@ export async function createStripeSubscription(
   priceId: string,
   trialPeriodDays?: number
 ): Promise<Stripe.Subscription> {
-  const subscription = await stripe.subscriptions.create({
+  const subscriptionParams: Stripe.SubscriptionCreateParams = {
     customer: customerId,
     items: [{ price: priceId }],
-    trial_period_days: trialPeriodDays,
-    payment_behavior: 'default_incomplete',
-    payment_settings: {
-      save_default_payment_method: 'on_subscription',
-    },
     expand: ['latest_invoice.payment_intent', 'customer'],
+  };
+
+  // If no trial period, require payment method
+  if (!trialPeriodDays) {
+    subscriptionParams.payment_behavior = 'default_incomplete';
+    subscriptionParams.payment_settings = {
+      save_default_payment_method: 'on_subscription',
+    };
+  } else {
+    // With trial, allow incomplete payment (no payment method required yet)
+    subscriptionParams.trial_period_days = trialPeriodDays;
+    subscriptionParams.payment_behavior = 'allow_incomplete';
+    subscriptionParams.collection_method = 'charge_automatically';
+  }
+
+  const subscription = await stripe.subscriptions.create(subscriptionParams);
+
+  console.log('[createStripeSubscription] Created subscription:', {
+    id: subscription.id,
+    status: subscription.status,
+    current_period_start: subscription.current_period_start,
+    current_period_end: subscription.current_period_end,
+    trial_start: subscription.trial_start,
+    trial_end: subscription.trial_end,
+    collection_method: subscription.collection_method,
   });
 
   return subscription;

@@ -758,8 +758,8 @@ export default function TranscriptViewerPage() {
           </Button>
           
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-[#003366] mb-2">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl font-bold text-[#003366] mb-2 truncate" title={transcription.originalFilename}>
                 {transcription.originalFilename}
               </h1>
               <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
@@ -778,14 +778,14 @@ export default function TranscriptViewerPage() {
               </div>
             </div>
             
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2">
               {/* Only show edit button for completed transcriptions */}
               {transcription.status === 'complete' && (
                 <Button
                   variant="outline"
                   onClick={isEditing ? saveEdits : () => setIsEditing(true)}
                   disabled={saving}
-                  className="border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white"
+                  className="border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white w-full sm:w-auto"
                 >
                   {saving ? (
                     <>
@@ -805,13 +805,13 @@ export default function TranscriptViewerPage() {
                   )}
                 </Button>
               )}
-              
+
               {transcription.isShared ? (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <Button
                     variant="outline"
                     onClick={copyShareLink}
-                    className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                    className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100 w-full sm:w-auto"
                   >
                     <Link2 className="h-4 w-4 mr-2" />
                     Copy Link
@@ -819,7 +819,7 @@ export default function TranscriptViewerPage() {
                   <Button
                     variant="outline"
                     onClick={shareTranscript}
-                    className="border-gray-300"
+                    className="border-gray-300 w-full sm:w-auto"
                   >
                     <Globe className="h-4 w-4 mr-2" />
                     Disable Sharing
@@ -829,21 +829,21 @@ export default function TranscriptViewerPage() {
                 <Button
                   variant="outline"
                   onClick={shareTranscript}
-                  className="border-gray-300"
+                  className="border-gray-300 w-full sm:w-auto"
                 >
                   <Share2 className="h-4 w-4 mr-2" />
                   Share
                 </Button>
               )}
-              
-              <div className="flex">
+
+              <div className="flex w-full sm:w-auto">
                 <Button
                   variant="outline"
                   onClick={() => exportTranscript(selectedFormat)}
-                  className="border-gray-300 rounded-r-none border-r-0"
+                  className="border-gray-300 rounded-r-none border-r-0 flex-1 sm:flex-initial"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Export {selectedFormat.toUpperCase()}
+                  <span className="hidden sm:inline">Export </span>{selectedFormat.toUpperCase()}
                 </Button>
                 <select
                   value={selectedFormat}
@@ -858,7 +858,7 @@ export default function TranscriptViewerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
           {/* Audio Player Section */}
           <div className="lg:col-span-1">
             <Card>

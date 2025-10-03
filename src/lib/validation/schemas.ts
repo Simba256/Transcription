@@ -183,7 +183,6 @@ export const CreatePaymentIntentSchema = z.object({
  */
 export const ConfirmPaymentSchema = z.object({
   paymentIntentId: RequiredString.max(255),
-  packageId: z.enum(['starter', 'professional', 'enterprise']),
 });
 
 // =============================================================================
@@ -224,7 +223,7 @@ const SubscriptionStatusSchema = z.enum([
  */
 export const CreateSubscriptionSchema = z.object({
   planId: PlanIdSchema,
-  paymentMethodId: RequiredString.max(255, 'Payment method ID too long'),
+  paymentMethodId: z.string().max(255, 'Payment method ID too long').nullable().optional(),
 });
 
 /**

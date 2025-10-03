@@ -22,7 +22,8 @@ export interface TranscriptionJob {
   mode: TranscriptionMode;
   domain?: string; // Transcription domain (general, medical, legal, technical)
   duration: number; // in seconds (exact duration)
-  creditsUsed: number;
+  minutesFromSubscription?: number; // Minutes covered by subscription (if any)
+  creditsUsed: number; // Credits used for minutes not covered by subscription
   specialInstructions?: string;
   transcript?: string;
   timestampedTranscript?: TranscriptSegment[]; // New field for timestamped data

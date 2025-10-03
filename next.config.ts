@@ -11,9 +11,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   // Configure for larger file processing
-  experimental: {
-    serverComponentsExternalPackages: ['form-data'],
-  },
+  serverExternalPackages: ['form-data'],
+  // Allow ngrok domains for development
+  allowedDevOrigins: ['db0600fe582e.ngrok-free.app', '*.ngrok-free.app'],
   // Increase timeouts for API routes
   async headers() {
     return [

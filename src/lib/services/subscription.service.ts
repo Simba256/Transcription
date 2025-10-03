@@ -23,7 +23,7 @@ export async function createSubscription(
   userId: string,
   email: string,
   planId: PlanId,
-  paymentMethodId: string,
+  paymentMethodId?: string | null,
   name?: string
 ): Promise<{ subscription: Subscription; clientSecret?: string }> {
   const plan = SUBSCRIPTION_PLANS[planId];
@@ -38,33 +38,58 @@ export async function createSubscription(
   // Get or create Stripe customer
   const customer = await getOrCreateStripeCustomer(userId, email, name);
 
-  // Attach payment method to customer
-  await stripe.paymentMethods.attach(paymentMethodId, {
-    customer: customer.id,
+  // Attach payment method to customer if provided
+  if (paymentMethodId) {
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customer.id,
+    });
+
+    // Set as default payment method
+    await stripe.customers.update(customer.id, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+  }
+
+  // Flow:
+  // 1. New user gets 180 free trial minutes (no subscription, no payment)
+  // 2. When user subscribes, they pay immediately for the plan
+  // 3. Trial ends when subscription starts (no rollback)
+  // 4. After subscribing, user gets their plan's included minutes each month
+
+  console.log('[createSubscription] Creating subscription:', {
+    userId,
+    planId: plan.id,
+    priceMonthly: plan.priceMonthly,
   });
 
-  // Set as default payment method
-  await stripe.customers.update(customer.id, {
-    invoice_settings: {
-      default_payment_method: paymentMethodId,
-    },
-  });
-
-  // Create Stripe subscription with trial
+  // Create Stripe subscription - user pays immediately (no trial period in Stripe)
   const stripeSubscription = await createStripeSubHelper(
     customer.id,
     plan.stripePriceId,
-    30 // 30-day trial period
+    undefined // No Stripe trial - user pays when subscribing
   );
 
+  console.log('[createSubscription] Stripe subscription created:', {
+    id: stripeSubscription.id,
+    status: stripeSubscription.status,
+    current_period_start: stripeSubscription.current_period_start,
+    current_period_end: stripeSubscription.current_period_end,
+    trial_start: stripeSubscription.trial_start,
+    trial_end: stripeSubscription.trial_end,
+  });
+
   // Calculate period dates
+  if (!stripeSubscription.current_period_start || !stripeSubscription.current_period_end) {
+    throw new Error('Invalid subscription period dates from Stripe');
+  }
+
   const currentPeriodStart = Timestamp.fromMillis(stripeSubscription.current_period_start * 1000);
   const currentPeriodEnd = Timestamp.fromMillis(stripeSubscription.current_period_end * 1000);
-  const trialEnd = stripeSubscription.trial_end
-    ? Timestamp.fromMillis(stripeSubscription.trial_end * 1000)
-    : undefined;
 
   // Create subscription document
+  // Only includes plan minutes, NOT trial minutes (trial is separate from subscription)
   const subscription: Omit<Subscription, 'id'> = {
     userId,
     stripeSubscriptionId: stripeSubscription.id,
@@ -75,12 +100,11 @@ export async function createSubscription(
     currentPeriodStart,
     currentPeriodEnd,
     cancelAtPeriodEnd: false,
-    minutesIncluded: plan.minutesIncluded,
+    minutesIncluded: plan.minutesIncluded, // Only plan minutes, NOT trial
     minutesUsed: 0,
     minutesRemaining: plan.minutesIncluded,
     priceMonthly: plan.priceMonthly,
     currency: plan.currency,
-    trialEnd,
     trialMinutesUsed: 0,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -90,6 +114,7 @@ export async function createSubscription(
   const createdSubscription = { ...subscription, id: subscriptionRef.id };
 
   // Update user document
+  // Mark trial as used when user subscribes (trial ends, no rollback)
   await db
     .collection('users')
     .doc(userId)
@@ -101,6 +126,8 @@ export async function createSubscription(
       currentPeriodStart,
       currentPeriodEnd,
       currentPeriodMinutesUsed: 0,
+      trialUsed: true, // Mark trial as used - no more free trial
+      trialMinutesRemaining: 0, // Trial ends when subscription starts
       updatedAt: Timestamp.now(),
     });
 
@@ -379,6 +406,103 @@ async function logSubscriptionEvent(
     ...event,
     createdAt: Timestamp.now(),
   });
+}
+
+/**
+ * Create subscription from existing Stripe subscription (webhook handler)
+ */
+export async function createSubscriptionFromStripe(
+  userId: string,
+  stripeSubscription: any
+): Promise<Subscription> {
+  // Get plan by price ID
+  const priceId = stripeSubscription.items.data[0]?.price.id;
+  const plan = Object.values(SUBSCRIPTION_PLANS).find(
+    p => p && p.stripePriceId === priceId
+  );
+
+  if (!plan) {
+    throw new Error(`No plan found for Stripe price ID: ${priceId}`);
+  }
+
+  // Calculate period dates - use current time as fallback if not set yet
+  let currentPeriodStart: Timestamp;
+  let currentPeriodEnd: Timestamp;
+
+  if (stripeSubscription.current_period_start && stripeSubscription.current_period_end) {
+    currentPeriodStart = Timestamp.fromMillis(stripeSubscription.current_period_start * 1000);
+    currentPeriodEnd = Timestamp.fromMillis(stripeSubscription.current_period_end * 1000);
+  } else {
+    // Fallback: use billing_cycle_anchor or current time
+    const now = Date.now();
+    const oneMonth = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+
+    currentPeriodStart = Timestamp.fromMillis(stripeSubscription.billing_cycle_anchor ? stripeSubscription.billing_cycle_anchor * 1000 : now);
+    currentPeriodEnd = Timestamp.fromMillis(
+      stripeSubscription.billing_cycle_anchor
+        ? (stripeSubscription.billing_cycle_anchor * 1000) + oneMonth
+        : now + oneMonth
+    );
+
+    console.warn('Subscription period dates not set, using fallback dates');
+  }
+
+  // Create subscription document
+  const subscription: Omit<Subscription, 'id'> = {
+    userId,
+    stripeSubscriptionId: stripeSubscription.id,
+    stripeCustomerId: stripeSubscription.customer as string,
+    planId: plan.id,
+    planType: plan.type,
+    status: stripeSubscription.status as SubscriptionStatus,
+    currentPeriodStart,
+    currentPeriodEnd,
+    cancelAtPeriodEnd: false,
+    minutesIncluded: plan.minutesIncluded,
+    minutesUsed: 0,
+    minutesRemaining: plan.minutesIncluded,
+    priceMonthly: plan.priceMonthly,
+    currency: plan.currency,
+    trialMinutesUsed: 0,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+
+  const subscriptionRef = await db.collection('subscriptions').add(subscription);
+  const createdSubscription = { ...subscription, id: subscriptionRef.id };
+
+  // Update user document
+  await db
+    .collection('users')
+    .doc(userId)
+    .update({
+      subscriptionId: subscriptionRef.id,
+      subscriptionPlan: plan.id,
+      subscriptionStatus: stripeSubscription.status,
+      stripeCustomerId: stripeSubscription.customer,
+      currentPeriodStart,
+      currentPeriodEnd,
+      currentPeriodMinutesUsed: 0,
+      trialUsed: true, // Mark trial as used when subscribing
+      trialMinutesRemaining: 0, // Trial ends when subscription starts
+      updatedAt: Timestamp.now(),
+    });
+
+  // Log event
+  await logSubscriptionEvent({
+    type: 'subscription_created',
+    subscriptionId: subscriptionRef.id,
+    userId,
+    timestamp: Timestamp.now(),
+    data: {
+      planId: plan.id,
+      stripeSubscriptionId: stripeSubscription.id,
+      source: 'webhook',
+    },
+    processed: true,
+  });
+
+  return createdSubscription;
 }
 
 /**

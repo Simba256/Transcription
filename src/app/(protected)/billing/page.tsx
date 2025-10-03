@@ -159,14 +159,21 @@ export default function BillingPage() {
   const handleSelectPlan = async (planId: SubscriptionPlanId) => {
     setIsProcessingSubscription(true);
     try {
-      // TODO: Implement Stripe checkout session creation
-      // For now, show placeholder
-      toast({
-        title: 'Subscription management',
-        description: 'Subscription checkout will be implemented with Stripe checkout sessions.',
-        variant: 'default'
+      // Create checkout session
+      const response = await secureApiClient.post('/api/subscriptions/checkout', {
+        planId
       });
-      setShowPlanSelector(false);
+
+      // The response is already the JSON object, not wrapped in .data
+      const checkoutUrl = (response as { url?: string }).url;
+
+      if (!checkoutUrl) {
+        console.error('Response:', response);
+        throw new Error('No checkout URL returned');
+      }
+
+      // Redirect to Stripe Checkout
+      window.location.href = checkoutUrl;
     } catch (error) {
       console.error('Subscription error:', error);
       toast({
@@ -174,9 +181,9 @@ export default function BillingPage() {
         description: error instanceof Error ? error.message : 'Failed to start subscription',
         variant: 'destructive'
       });
-    } finally {
       setIsProcessingSubscription(false);
     }
+    // Don't set loading to false here - we're redirecting away
   };
 
   const handleManageSubscription = () => {
@@ -278,10 +285,10 @@ export default function BillingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#003366] mb-2">
             Billing & Subscriptions
@@ -293,21 +300,21 @@ export default function BillingPage() {
 
         {/* Plan Selector Modal */}
         {showPlanSelector && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-[#003366]">
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-lg max-w-full sm:max-w-3xl lg:max-w-5xl xl:max-w-7xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto my-4">
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 sm:p-6 flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-bold text-[#003366]">
                   Select a Subscription Plan
                 </h2>
                 <Button
                   variant="ghost"
                   onClick={() => setShowPlanSelector(false)}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="text-gray-500 hover:text-gray-700 flex-shrink-0"
                 >
-                  ✕ Close
+                  ✕ <span className="hidden sm:inline ml-1">Close</span>
                 </Button>
               </div>
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 <SubscriptionPlanSelector
                   currentPlan={subscriptionPlan}
                   onSelectPlan={handleSelectPlan}
@@ -383,76 +390,75 @@ export default function BillingPage() {
             </Card>
 
             {/* Credit Packages */}
-            <div>
-              <h2 className="text-2xl font-bold text-[#003366] mb-6">
-                Purchase Credits
-              </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {packages.map((pkg) => (
-              <Card 
-                key={pkg.id}
-                className={`border-0 shadow-sm hover:shadow-md transition-shadow ${
-                  pkg.popular ? 'ring-2 ring-[#b29dd9]' : ''
-                }`}
-              >
-                {pkg.popular && (
-                  <div className="bg-[#b29dd9] text-white text-center py-2 text-sm font-medium">
-                    Most Popular
-                  </div>
-                )}
-                
-                <CardHeader className={`text-center ${!pkg.popular ? 'pt-10' : ''}`}>
-                  <CardTitle className="text-xl font-bold text-[#003366]">
-                    {pkg.name}
-                  </CardTitle>
-                  <p className="text-gray-600 text-sm">{pkg.description}</p>
-                  
-                  <div className="mt-4">
-                    <div className="flex items-center justify-center space-x-2">
-                      <span className="text-3xl font-bold text-[#003366]">
-                        CA${pkg.price}
-                      </span>
-                      {pkg.originalPrice && (
-                        <span className="text-lg text-gray-400 line-through">
-                          CA${pkg.originalPrice}
-                        </span>
-                      )}
-                    </div>
-                    {pkg.savings && (
-                      <div className="text-green-600 font-medium text-sm mt-1">
-                        {pkg.savings}
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-2xl font-bold text-[#003366]">
+                  Purchase Credits
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {packages.map((pkg) => (
+                    <div
+                      key={pkg.id}
+                      className={`border-2 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col ${
+                        pkg.popular ? 'border-[#b29dd9]' : 'border-gray-200'
+                      }`}
+                    >
+                      <div className={`${pkg.popular ? 'bg-[#b29dd9] text-white' : 'bg-gray-50 text-gray-400'} text-center py-2 text-sm font-medium rounded-t-md`}>
+                        {pkg.popular ? 'Most Popular' : '\u00A0'}
                       </div>
-                    )}
-                  </div>
-                </CardHeader>
-                
-                <CardContent className={`text-center ${!pkg.popular ? 'pb-10' : 'pb-6'}`}>
-                  <CreditDisplay amount={pkg.credits} size="md" className="justify-center mb-6" />
-                  
-                  <Button
-                    onClick={() => handlePurchase(pkg)}
-                    disabled={purchasingPackage === pkg.id}
-                    className={`w-full ${
-                      pkg.popular
-                        ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
-                        : 'bg-[#003366] hover:bg-[#002244]'
-                    } text-white`}
-                  >
-                    {purchasingPackage === pkg.id ? (
-                      <>
-                        <LoadingSpinner size="sm" className="mr-2" />
-                        Setting up payment...
-                      </>
-                    ) : (
-                      'Purchase'
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-            </div>
-            </div>
+
+                      <div className="text-center flex-1 px-6 py-6">
+                        <h3 className="text-xl font-bold text-[#003366] mb-2">
+                          {pkg.name}
+                        </h3>
+                        <p className="text-gray-600 text-sm leading-relaxed">{pkg.description}</p>
+
+                        <div className="mt-4">
+                          <div className="flex items-center justify-center space-x-2 flex-wrap">
+                            <span className="text-3xl font-bold text-[#003366] whitespace-nowrap">
+                              CA${pkg.price}
+                            </span>
+                            {pkg.originalPrice && (
+                              <span className="text-lg text-gray-400 line-through whitespace-nowrap">
+                                CA${pkg.originalPrice}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-green-600 font-medium text-sm mt-1 min-h-[1.25rem]">
+                            {pkg.savings || '\u00A0'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-center pb-6 px-6">
+                        <CreditDisplay amount={pkg.credits} size="md" className="justify-center mb-6" />
+
+                        <Button
+                          onClick={() => handlePurchase(pkg)}
+                          disabled={purchasingPackage === pkg.id}
+                          className={`w-full ${
+                            pkg.popular
+                              ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
+                              : 'bg-[#003366] hover:bg-[#002244]'
+                          } text-white`}
+                        >
+                          {purchasingPackage === pkg.id ? (
+                            <>
+                              <LoadingSpinner size="sm" className="mr-2" />
+                              Setting up payment...
+                            </>
+                          ) : (
+                            'Purchase'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Transaction History Tab */}

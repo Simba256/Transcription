@@ -31,8 +31,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_STARTER_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_STARTER_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_STARTER_PRICE_ID || 'price_ai_starter_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_STARTER_PRODUCT_ID || 'prod_ai_starter_placeholder',
   },
 
   'ai-professional': {
@@ -55,8 +55,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_PROFESSIONAL_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_PROFESSIONAL_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_PROFESSIONAL_PRICE_ID || 'price_ai_professional_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_PROFESSIONAL_PRODUCT_ID || 'prod_ai_professional_placeholder',
   },
 
   'ai-enterprise': {
@@ -81,8 +81,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_ENTERPRISE_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_ENTERPRISE_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_AI_ENTERPRISE_PRICE_ID || 'price_ai_enterprise_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_AI_ENTERPRISE_PRODUCT_ID || 'prod_ai_enterprise_placeholder',
   },
 
   // ========== Hybrid Plans ==========
@@ -108,8 +108,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_STARTER_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_STARTER_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_STARTER_PRICE_ID || 'price_hybrid_starter_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_STARTER_PRODUCT_ID || 'prod_hybrid_starter_placeholder',
   },
 
   'hybrid-professional': {
@@ -135,8 +135,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_PROFESSIONAL_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_PROFESSIONAL_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_PROFESSIONAL_PRICE_ID || 'price_hybrid_professional_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_PROFESSIONAL_PRODUCT_ID || 'prod_hybrid_professional_placeholder',
   },
 
   'hybrid-enterprise': {
@@ -165,8 +165,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, PlanConfig> = {
       '180-minute (3-hour) free trial for new subscriptions',
       'No minute rollover (reset monthly)',
     ],
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_ENTERPRISE_PRICE_ID,
-    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_ENTERPRISE_PRODUCT_ID,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_ENTERPRISE_PRICE_ID || 'price_hybrid_enterprise_placeholder',
+    stripeProductId: process.env.NEXT_PUBLIC_STRIPE_HYBRID_ENTERPRISE_PRODUCT_ID || 'prod_hybrid_enterprise_placeholder',
   },
 };
 

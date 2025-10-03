@@ -427,11 +427,11 @@ export function TranscriptionQueue() {
 
       {/* Transcription Modal */}
       {selectedJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-full sm:max-w-2xl w-full max-h-[95vh] sm:max-h-[85vh] overflow-y-auto my-4">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-[#003366]">
+                <h3 className="text-base sm:text-lg font-semibold text-[#003366]">
                   {selectedJob.status === 'pending-review' ? 'Review AI Transcript' : 'Create Transcript'}
                 </h3>
                 <Button
@@ -441,27 +441,28 @@ export function TranscriptionQueue() {
                     setSelectedJob(null);
                     setTranscript('');
                   }}
+                  className="flex-shrink-0"
                 >
                   <XCircle className="h-4 w-4" />
                 </Button>
               </div>
-              
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  <strong>File:</strong> {selectedJob.originalFilename || selectedJob.filename || 'Unknown file'}
+
+              <div className="mb-4 space-y-2">
+                <p className="text-sm text-gray-600">
+                  <strong>File:</strong> <span className="break-words">{selectedJob.originalFilename || selectedJob.filename || 'Unknown file'}</span>
                 </p>
-                <p className="text-sm text-gray-600 mb-2">
-                  <strong>User:</strong> {userEmails[selectedJob.userId] || 'Loading...'}
+                <p className="text-sm text-gray-600">
+                  <strong>User:</strong> <span className="break-words">{userEmails[selectedJob.userId] || 'Loading...'}</span>
                 </p>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-sm text-gray-600">
                   <strong>Duration:</strong> {formatDuration(selectedJob.duration || 0)}
                 </p>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-gray-600">
                   <strong>Mode:</strong> {selectedJob.mode || 'Unknown'}
                 </p>
-                
+
                 {selectedJob.downloadURL && (
-                  <div className="mb-4">
+                  <div className="mb-4 pt-2">
                     <AudioPlayer
                       src={selectedJob.downloadURL}
                       standalone={true}
@@ -472,9 +473,9 @@ export function TranscriptionQueue() {
 
               {selectedJob.status === 'pending-review' && selectedJob.transcript && (
                 <div className="mb-4">
-                  <h4 className="font-medium text-[#003366] mb-2">AI Transcript:</h4>
-                  <div className="p-3 bg-gray-50 border rounded text-sm max-h-64 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                  <h4 className="font-medium text-[#003366] mb-2 text-sm sm:text-base">AI Transcript:</h4>
+                  <div className="p-3 bg-gray-50 border rounded text-sm max-h-48 sm:max-h-64 overflow-y-auto">
+                    <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed">
                       {selectedJob.transcript}
                     </pre>
                   </div>
@@ -490,19 +491,20 @@ export function TranscriptionQueue() {
                     value={transcript}
                     onChange={(e) => setTranscript(e.target.value)}
                     placeholder="Enter the transcription here..."
-                    rows={10}
-                    className="w-full"
+                    rows={6}
+                    className="w-full min-h-[150px] sm:min-h-[200px]"
                   />
                 </div>
               )}
 
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setSelectedJob(null);
                     setTranscript('');
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
@@ -510,7 +512,7 @@ export function TranscriptionQueue() {
                   <Button
                     onClick={() => selectedJob.id && handleAction(selectedJob.id, 'approve-review')}
                     disabled={isLoading}
-                    className="bg-[#003366] hover:bg-[#004080]"
+                    className="bg-[#003366] hover:bg-[#004080] w-full sm:w-auto"
                   >
                     Approve Transcript
                   </Button>
@@ -519,7 +521,7 @@ export function TranscriptionQueue() {
                   <Button
                     onClick={() => selectedJob.id && handleAction(selectedJob.id, 'submit-transcription', transcript)}
                     disabled={isLoading || !transcript.trim()}
-                    className="bg-[#003366] hover:bg-[#004080]"
+                    className="bg-[#003366] hover:bg-[#004080] w-full sm:w-auto"
                   >
                     Submit Transcript
                   </Button>

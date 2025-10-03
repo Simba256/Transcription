@@ -1,0 +1,10 @@
+Price ID,Product ID,Product Name,Product Statement Descriptor,Product Tax Code,Description,Created (UTC),Amount,Currency,Interval,Interval Count,Usage Type,Aggregate Usage,Billing Scheme,Trial Period Days,Tax Behavior
+price_1SEEUrEwjHfU15ucgi6rwbbs,prod_TAZeVhKBjijN2R,"12,000 Credits",,,,2025-10-03 19:18,100.00,cad,,,,,per_unit,,unspecified
+price_1SEEUOEwjHfU15uc1crnmY9i,prod_TAZdI4z5WLwXI0,5000 Credits,,,,2025-10-03 19:18,45.00,cad,,,,,per_unit,,unspecified
+price_1SEESJEwjHfU15ucjuFlvp1u,prod_TAZb7QdndsE8dI,1000 Credits,,,,2025-10-03 19:15,10.00,cad,,,,,per_unit,,unspecified
+price_1SEERgEwjHfU15ucJgSywJ4A,prod_TAZayb5NzwgTSX,Hybrid Enterprise,,,,2025-10-03 19:15,1950.00,cad,month,1,licensed,,per_unit,,unspecified
+price_1SEERIEwjHfU15ucItVIW74W,prod_TAZa1DsJEn8uTF,Hybrid Professional,,,,2025-10-03 19:14,1050.00,cad,month,1,licensed,,per_unit,,unspecified
+price_1SEEQtEwjHfU15ucQAyrGtxR,prod_TAZaqQWmN4boBc,Hybrid Starter,,,,2025-10-03 19:14,325.00,cad,month,1,licensed,,per_unit,,unspecified
+price_1SEEQQEwjHfU15ucq6o52QlT,prod_TAZZ9w3yi2N6fY,AI Enterprise,,,,2025-10-03 19:13,900.00,cad,month,1,licensed,,per_unit,,unspecified
+price_1SEEQ3EwjHfU15ucMMyNor1O,prod_TAZZyiD3Y9xN3n,AI Professional,,,,2025-10-03 19:13,488.00,cad,month,1,licensed,,per_unit,,unspecified
+price_1SEEOgEwjHfU15ucy6eoL3Uz,prod_TAZX7kN15kaO8C,AI Starter plan,,,,2025-10-03 19:12,210.00,cad,month,1,licensed,,per_unit,,unspecified

@@ -148,8 +148,16 @@ export default function UploadPage() {
   const selectedMode = transcriptionModes.find(mode => mode.id === transcriptionMode)!;
   const totalDurationSeconds = uploadedFiles.reduce((sum, file) => sum + file.duration, 0);
   const totalBillingMinutes = uploadedFiles.reduce((sum, file) => sum + getBillingMinutes(file.duration), 0);
-  const estimatedCredits = totalBillingMinutes * selectedMode.creditsPerMinute;
-  const hasInsufficientCredits = userData ? estimatedCredits > (userData.credits || 0) : false;
+
+  // Calculate subscription and credit usage
+  const subscriptionMinutesRemaining = userData?.subscriptionStatus === 'active'
+    ? Math.max(0, (userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0))
+    : (userData?.trialMinutesRemaining || 0); // Use trial minutes if no active subscription
+
+  const minutesCoveredBySubscription = Math.min(totalBillingMinutes, subscriptionMinutesRemaining);
+  const minutesNeedingCredits = Math.max(0, totalBillingMinutes - minutesCoveredBySubscription);
+  const estimatedCredits = minutesNeedingCredits * selectedMode.creditsPerMinute;
+  const hasInsufficientBalance = userData ? estimatedCredits > (userData.credits || 0) : false;
 
   // Function to get accurate duration from audio/video files
   const getMediaDuration = (file: File): Promise<number> => {
@@ -271,10 +279,14 @@ export default function UploadPage() {
       return;
     }
 
-    if (hasInsufficientCredits) {
+    if (hasInsufficientBalance) {
+      const message = subscriptionMinutesRemaining > 0
+        ? `You need ${minutesNeedingCredits} more minutes. Your subscription covers ${minutesCoveredBySubscription} minutes, but you need ${estimatedCredits} more credits.`
+        : `You need ${estimatedCredits} credits to process these files.`;
+
       toast({
-        title: "Insufficient Credits",
-        description: "Please purchase more Credits to process these files.",
+        title: "Insufficient Balance",
+        description: message,
         variant: "destructive",
       });
       return;
@@ -296,7 +308,10 @@ export default function UploadPage() {
 
     try {
       const modeDetails = getModeDetails(transcriptionMode as TranscriptionMode);
-      
+
+      // Track subscription minutes used across all files
+      let subscriptionMinutesUsedSoFar = 0;
+
       // Upload files to Firebase Storage and create transcription jobs
       const uploadPromises = uploadedFiles.map(async (uploadFile, index) => {
         setProcessingProgress(prev => ({
@@ -307,7 +322,7 @@ export default function UploadPage() {
 
         const filePath = generateFilePath(user.uid, uploadFile.file.name);
         const fileKey = `${index}-${uploadFile.file.name}`;
-        
+
         // Upload file to Firebase Storage with progress tracking
         const { uploadFile: uploadFileFunction } = await import('@/lib/firebase/storage');
         const result = await uploadFileFunction(
@@ -323,10 +338,18 @@ export default function UploadPage() {
             setOverallProgress(avgProgress);
           }
         );
-        
+
         // Create transcription job in Firestore
         const billingMinutes = getBillingMinutes(uploadFile.duration);
-        const creditsForFile = billingMinutes * modeDetails.creditsPerMinute;
+
+        // Calculate how much is covered by subscription vs credits for this file
+        const subscriptionMinutesAvailable = subscriptionMinutesRemaining - subscriptionMinutesUsedSoFar;
+        const minutesFromSubscription = Math.min(billingMinutes, subscriptionMinutesAvailable);
+        const minutesNeedingCreditsForFile = billingMinutes - minutesFromSubscription;
+        const creditsForFile = minutesNeedingCreditsForFile * modeDetails.creditsPerMinute;
+
+        // Update running total
+        subscriptionMinutesUsedSoFar += minutesFromSubscription;
         
         // Set initial status based on transcription mode
         let initialStatus: 'processing' | 'pending-transcription';
@@ -346,7 +369,8 @@ export default function UploadPage() {
           mode: transcriptionMode as TranscriptionMode,
           domain: transcriptionDomain, // Include domain for specialized vocabulary
           duration: uploadFile.duration, // Store duration in seconds
-          creditsUsed: creditsForFile,
+          minutesFromSubscription, // Track subscription minutes used
+          creditsUsed: creditsForFile, // Track credits used (only for minutes not covered by subscription)
           // Add metadata fields for template
           projectName: projectName.trim() || undefined,
           patientName: patientName.trim() || undefined,
@@ -437,10 +461,10 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#003366] mb-2">
             Upload Files for Transcription
@@ -567,12 +591,12 @@ export default function UploadPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <RadioGroup value={transcriptionMode} onValueChange={setTranscriptionMode} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <RadioGroup value={transcriptionMode} onValueChange={setTranscriptionMode} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {transcriptionModes.map((mode) => (
                   <Label
                     htmlFor={mode.id}
                     key={mode.id}
-                    className={`cursor-pointer border rounded-lg p-6 flex flex-col transition-colors min-h-[250px] ${
+                    className={`cursor-pointer border rounded-lg p-4 md:p-6 flex flex-col transition-colors min-h-[200px] md:min-h-[250px] ${
                       transcriptionMode === mode.id
                         ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
                         : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
@@ -816,33 +840,63 @@ export default function UploadPage() {
                   <span className="font-medium text-lg">{formatDuration(totalDurationSeconds)}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">Rate ({selectedMode.name}):</span>
-                  <CreditDisplay amount={selectedMode.creditsPerMinute} size="sm" />
+                  <span className="text-gray-600">Total Minutes:</span>
+                  <span className="font-medium">{totalBillingMinutes} min</span>
                 </div>
-                <div className="border-t pt-4">
-                  <div className="flex justify-between items-center py-2">
-                    <span className="font-semibold text-[#003366] text-lg">Estimated Cost:</span>
-                    <CreditDisplay amount={estimatedCredits} size="md" />
-                  </div>
-                </div>
-                
-                {userData && (
-                  <div className="flex justify-between items-center py-2 text-sm border-t pt-4">
-                    <span className="text-gray-600">Your Balance:</span>
-                    <CreditDisplay amount={userData.credits || 0} size="sm" />
+
+                {minutesCoveredBySubscription > 0 && (
+                  <div className="flex justify-between items-center py-2 text-green-600">
+                    <span>Subscription Minutes:</span>
+                    <span className="font-medium">-{minutesCoveredBySubscription} min</span>
                   </div>
                 )}
 
-                {hasInsufficientCredits && (
+                {minutesNeedingCredits > 0 && (
+                  <>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-gray-600">Minutes Needing Credits:</span>
+                      <span className="font-medium">{minutesNeedingCredits} min</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-gray-600">Rate ({selectedMode.name}):</span>
+                      <CreditDisplay amount={selectedMode.creditsPerMinute} size="sm" />
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center py-2">
+                        <span className="font-semibold text-[#003366] text-lg">Credits Needed:</span>
+                        <CreditDisplay amount={estimatedCredits} size="md" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {userData && (
+                  <div className="border-t pt-4 space-y-2">
+                    {subscriptionMinutesRemaining > 0 && (
+                      <div className="flex justify-between items-center py-2 text-sm">
+                        <span className="text-gray-600">Available Minutes:</span>
+                        <span className="font-medium text-green-600">{subscriptionMinutesRemaining} min</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-2 text-sm">
+                      <span className="text-gray-600">Credit Balance:</span>
+                      <CreditDisplay amount={userData.credits || 0} size="sm" />
+                    </div>
+                  </div>
+                )}
+
+                {hasInsufficientBalance && (
                   <div className="p-6 bg-red-50 border border-red-200 rounded-lg mt-4">
                     <div className="flex items-start">
                       <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 mr-3" />
                       <div>
                         <p className="font-medium text-red-800 mb-2">
-                          Insufficient Credits
+                          Insufficient Balance
                         </p>
                         <p className="text-red-700">
-                          You need {estimatedCredits - (userData?.credits || 0)} more Credits to process these files.
+                          {subscriptionMinutesRemaining > 0
+                            ? `Your subscription covers ${minutesCoveredBySubscription} minutes, but you need ${estimatedCredits} more credits.`
+                            : `You need ${estimatedCredits} credits to process these files.`}
                         </p>
                       </div>
                     </div>
@@ -864,7 +918,7 @@ export default function UploadPage() {
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isUploading || uploadedFiles.length === 0 || hasInsufficientCredits}
+              disabled={isUploading || uploadedFiles.length === 0 || hasInsufficientBalance}
               className={`text-white px-8 py-3 relative overflow-hidden ${
                 isUploading ? 'bg-gray-400' : 'bg-[#003366] hover:bg-[#002244]'
               }`}

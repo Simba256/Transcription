@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, MoreHorizontal, Mail, Ban } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Mail, Ban, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
+  const [filterSubscription, setFilterSubscription] = useState('all');
   const [users, setUsers] = useState<UserData[]>([]);
 
   useEffect(() => {
@@ -67,7 +68,10 @@ export default function UserManagementPage() {
     const matchesSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = filterRole === 'all' || user.role === filterRole;
-    return matchesSearch && matchesRole;
+    const matchesSubscription = filterSubscription === 'all' ||
+      (filterSubscription === 'subscribed' && user.subscriptionPlan && user.subscriptionPlan !== 'none') ||
+      (filterSubscription === 'none' && (!user.subscriptionPlan || user.subscriptionPlan === 'none'));
+    return matchesSearch && matchesRole && matchesSubscription;
   });
 
 
@@ -84,10 +88,10 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#003366] mb-2">
@@ -115,7 +119,7 @@ export default function UserManagementPage() {
                 </div>
               </div>
               <Select value={filterRole} onValueChange={setFilterRole}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue placeholder="Filter by role" />
                 </SelectTrigger>
@@ -123,6 +127,17 @@ export default function UserManagementPage() {
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="user">Users</SelectItem>
                   <SelectItem value="admin">Admins</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterSubscription} onValueChange={setFilterSubscription}>
+                <SelectTrigger className="w-full sm:w-52">
+                  <Repeat className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Filter by subscription" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Subscriptions</SelectItem>
+                  <SelectItem value="subscribed">Subscribed</SelectItem>
+                  <SelectItem value="none">No Subscription</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -137,59 +152,109 @@ export default function UserManagementPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-600">User</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Role</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Subscription</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600 hidden md:table-cell">Usage</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Credits</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Jobs</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Joined</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Last Active</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600 hidden lg:table-cell">Jobs</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600 hidden lg:table-cell">Joined</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-500">
+                      <td colSpan={8} className="py-8 text-center text-gray-500">
                         No users found
                       </td>
                     </tr>
                   )}
                   
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-4 px-4">
-                        <div>
-                          <p className="font-medium text-[#003366]">{user.name || 'Unnamed User'}</p>
-                          <p className="text-sm text-gray-600">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          user.role === 'admin' 
-                            ? 'bg-purple-100 text-purple-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {user.role === 'admin' ? 'Admin' : 'User'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <CreditDisplay amount={user.credits || 0} size="sm" />
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[#003366] font-medium">{user.totalJobs || 0}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-gray-600 text-sm">
-                          {user.createdAt?.toDate?.()?.toLocaleDateString() || '—'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-gray-600 text-sm">—</span>
-                      </td>
+                  {filteredUsers.map((user) => {
+                    const hasPlan = user.subscriptionPlan && user.subscriptionPlan !== 'none';
+                    const planName = hasPlan
+                      ? user.subscriptionPlan?.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+                      : 'None';
+                    const usagePercent = hasPlan && user.includedMinutesPerMonth
+                      ? Math.min(100, ((user.minutesUsedThisMonth || 0) / user.includedMinutesPerMonth) * 100)
+                      : 0;
+
+                    return (
+                      <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-4 px-4">
+                          <div className="min-w-[150px]">
+                            <p className="font-medium text-[#003366] truncate">{user.name || 'Unnamed User'}</p>
+                            <p className="text-sm text-gray-600 truncate max-w-[200px]" title={user.email}>{user.email}</p>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                            user.role === 'admin'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {user.role === 'admin' ? 'Admin' : 'User'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          {hasPlan ? (
+                            <div className="min-w-[100px]">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#b29dd9]/10 text-[#b29dd9] whitespace-nowrap">
+                                {planName}
+                              </span>
+                              {user.subscriptionStatus && (
+                                <div className="text-xs text-gray-500 mt-1 whitespace-nowrap">
+                                  {user.subscriptionStatus === 'active' && '✓ Active'}
+                                  {user.subscriptionStatus === 'trialing' && '🎁 Trial'}
+                                  {user.subscriptionStatus === 'past_due' && '⚠️ Past Due'}
+                                  {user.subscriptionStatus === 'canceled' && '✗ Canceled'}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">—</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-4 hidden md:table-cell">
+                          {hasPlan ? (
+                            <div className="min-w-[120px]">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
+                                  <div
+                                    className={`h-full transition-all ${
+                                      usagePercent >= 100 ? 'bg-red-500' :
+                                      usagePercent >= 80 ? 'bg-orange-500' :
+                                      'bg-green-500'
+                                    }`}
+                                    style={{ width: `${Math.min(100, usagePercent)}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-600 whitespace-nowrap">{Math.round(usagePercent)}%</span>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1 whitespace-nowrap">
+                                {user.minutesUsedThisMonth || 0}/{user.includedMinutesPerMonth || 0} min
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">—</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-4">
+                          <CreditDisplay amount={user.credits || 0} size="sm" />
+                        </td>
+                        <td className="py-4 px-4 hidden lg:table-cell">
+                          <span className="text-[#003366] font-medium">{user.totalJobs || 0}</span>
+                        </td>
+                        <td className="py-4 px-4 hidden lg:table-cell">
+                          <span className="text-gray-600 text-sm whitespace-nowrap">
+                            {user.createdAt?.toDate?.()?.toLocaleDateString() || '—'}
+                          </span>
+                        </td>
                       <td className="py-4 px-4">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -237,7 +302,8 @@ export default function UserManagementPage() {
                         </DropdownMenu>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

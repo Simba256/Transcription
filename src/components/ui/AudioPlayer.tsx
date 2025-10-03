@@ -210,9 +210,9 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(({
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
-        {/* Left: Playback controls */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex flex-col gap-3">
+        {/* Top: Playback controls */}
+        <div className="flex items-center justify-center gap-2 flex-shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -251,8 +251,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(({
           </Button>
         </div>
 
-        {/* Right: Volume controls */}
-        <div className="flex items-center gap-2 w-full sm:w-auto sm:min-w-[140px] sm:max-w-[180px]">
+        {/* Bottom: Volume controls */}
+        <div className="flex items-center gap-2 w-full">
           <Button
             variant="ghost"
             size="icon"
@@ -271,7 +271,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(({
             max={1}
             step={0.01}
             onValueChange={handleVolumeChange}
-            className="flex-1 sm:w-24"
+            className="flex-1 min-w-0"
           />
         </div>
       </div>

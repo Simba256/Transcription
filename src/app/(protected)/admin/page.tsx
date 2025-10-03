@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Users, FileText, DollarSign, TrendingUp, Clock, CheckCircle } from 'lucide-react';
+import { Users, FileText, DollarSign, TrendingUp, Clock, CheckCircle, Repeat, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -11,6 +11,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { TranscriptionJob } from '@/lib/firebase/transcriptions';
 import { UserData } from '@/lib/firebase/auth';
 import { collection, getDocs, query, orderBy, limit, getFirestore } from 'firebase/firestore';
@@ -27,7 +28,10 @@ export default function AdminPage() {
     totalUsers: 0,
     activeJobs: 0,
     totalRevenue: 0,
-    avgProcessingTime: '2.5hrs'
+    avgProcessingTime: '2.5hrs',
+    totalSubscribers: 0,
+    activeSubscriptions: 0,
+    monthlyRecurringRevenue: 0
   });
   
   const [systemHealth, setSystemHealth] = useState({
@@ -95,9 +99,37 @@ export default function AdminPage() {
         // Calculate system statistics
         const activeJobs = jobs.filter(j => j.status === 'processing' || j.status === 'queued').length;
         const totalRevenue = users.reduce((sum, user) => {
-          // Calculate revenue based on credit purchases - in a real system, 
+          // Calculate revenue based on credit purchases - in a real system,
           // this would come from payment transaction data
           return sum + (user.totalSpent || 0);
+        }, 0);
+
+        // Calculate subscription metrics
+        const subscribedUsers = users.filter(user =>
+          user.subscriptionPlan &&
+          user.subscriptionPlan !== 'none' &&
+          user.subscriptionStatus === 'active'
+        );
+        const totalSubscribers = subscribedUsers.length;
+
+        // Calculate active subscriptions (active or trialing)
+        const activeSubscriptions = users.filter(user =>
+          user.subscriptionPlan &&
+          user.subscriptionPlan !== 'none' &&
+          (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')
+        ).length;
+
+        // Calculate Monthly Recurring Revenue (MRR)
+        const { SUBSCRIPTION_PLANS } = await import('@/lib/subscriptions/plans');
+        const monthlyRecurringRevenue = users.reduce((sum, user) => {
+          if (user.subscriptionPlan && user.subscriptionPlan !== 'none' &&
+              (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')) {
+            const plan = SUBSCRIPTION_PLANS[user.subscriptionPlan];
+            if (plan) {
+              return sum + plan.price;
+            }
+          }
+          return sum;
         }, 0);
 
         // Calculate actual processing times from completed jobs
@@ -138,7 +170,10 @@ export default function AdminPage() {
           totalUsers: users.length,
           activeJobs,
           totalRevenue,
-          avgProcessingTime
+          avgProcessingTime,
+          totalSubscribers,
+          activeSubscriptions,
+          monthlyRecurringRevenue
         });
 
         // Calculate system health metrics
@@ -192,10 +227,10 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#003366] mb-2">
             Admin Dashboard
@@ -206,8 +241,8 @@ export default function AdminPage() {
         </div>
 
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Key Metrics - Row 1 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
           <Card className="border-0 shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -226,11 +261,27 @@ export default function AdminPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Active Jobs</p>
-                  <p className="text-2xl font-bold text-[#003366]">{systemStats.activeJobs}</p>
+                  <p className="text-sm font-medium text-gray-600">Active Subscriptions</p>
+                  <p className="text-2xl font-bold text-[#003366]">{systemStats.activeSubscriptions}</p>
+                  <p className="text-xs text-gray-500 mt-1">{systemStats.totalSubscribers} paid</p>
                 </div>
-                <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-white" />
+                <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
+                  <Repeat className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Monthly Recurring</p>
+                  <p className="text-2xl font-bold text-[#003366]">${systemStats.monthlyRecurringRevenue.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">MRR</p>
+                </div>
+                <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                  <DollarSign className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -242,9 +293,27 @@ export default function AdminPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Revenue</p>
                   <p className="text-2xl font-bold text-[#003366]">${systemStats.totalRevenue.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">All-time</p>
                 </div>
-                <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-white" />
+                <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Key Metrics - Row 2 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Active Jobs</p>
+                  <p className="text-2xl font-bold text-[#003366]">{systemStats.activeJobs}</p>
+                </div>
+                <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -263,6 +332,24 @@ export default function AdminPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Subscription Analytics Link */}
+          <Link href="/admin/subscriptions">
+            <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-[#b29dd9] to-[#9d87c7]">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white/90">View Analytics</p>
+                    <p className="text-lg font-bold text-white">Subscription Details</p>
+                    <p className="text-xs text-white/80 mt-1">Plans, conversion & churn</p>
+                  </div>
+                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                    <ArrowRight className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

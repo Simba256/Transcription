@@ -343,7 +343,7 @@ export function AdminLedger() {
                   </div>
                 </div>
                 <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-full sm:w-40">
                     <Filter className="mr-2 h-4 w-4" />
                     <SelectValue placeholder="Type" />
                   </SelectTrigger>
@@ -356,7 +356,7 @@ export function AdminLedger() {
                   </SelectContent>
                 </Select>
                 <Select value={dateRange} onValueChange={setDateRange}>
-                  <SelectTrigger className="w-44">
+                  <SelectTrigger className="w-full sm:w-44">
                     <Calendar className="mr-2 h-4 w-4" />
                     <SelectValue placeholder="Date range" />
                   </SelectTrigger>

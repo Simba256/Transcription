@@ -184,13 +184,13 @@ export const MODE_PRICING = {
 
 /**
  * Free Trial Configuration
+ * Trial is usage-based (180 minutes of AI transcription), not time-based
+ * Users get one trial when they first subscribe, regardless of plan
  */
 export const FREE_TRIAL_CONFIG = {
   enabled: true,
-  durationDays: 30,
-  includedMinutes: 180, // 3 hours
-  requiresPaymentMethod: true,
-  autoConvertToPaid: true,
+  includedMinutes: 180, // 3 hours of AI transcription
+  requiresPaymentMethod: false, // No payment method required for trial
   applicablePlans: ['ai-starter', 'ai-professional', 'ai-enterprise', 'hybrid-starter', 'hybrid-professional', 'hybrid-enterprise'] as SubscriptionPlanId[]
 };
 
