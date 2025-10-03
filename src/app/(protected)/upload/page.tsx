@@ -36,6 +36,8 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
   const [processingFiles, setProcessingFiles] = useState<Set<string>>(new Set());
+  const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0, stage: '' });
+  const [overallProgress, setOverallProgress] = useState(0);
 
   // Metadata fields for transcript template
   const [projectName, setProjectName] = useState('');
@@ -289,12 +291,20 @@ export default function UploadPage() {
 
     setIsUploading(true);
     const progress: {[key: string]: number} = {};
-    
+    setProcessingProgress({ current: 0, total: uploadedFiles.length, stage: 'Preparing files...' });
+    setOverallProgress(0);
+
     try {
       const modeDetails = getModeDetails(transcriptionMode as TranscriptionMode);
       
       // Upload files to Firebase Storage and create transcription jobs
       const uploadPromises = uploadedFiles.map(async (uploadFile, index) => {
+        setProcessingProgress(prev => ({
+          ...prev,
+          current: index,
+          stage: `Processing ${uploadFile.file.name}...`
+        }));
+
         const filePath = generateFilePath(user.uid, uploadFile.file.name);
         const fileKey = `${index}-${uploadFile.file.name}`;
         
@@ -306,6 +316,11 @@ export default function UploadPage() {
           (progressData) => {
             progress[fileKey] = progressData.progress;
             setUploadProgress({...progress});
+
+            // Calculate overall progress across all files
+            const totalProgress = Object.values(progress).reduce((sum, p) => sum + p, 0);
+            const avgProgress = totalProgress / uploadedFiles.length;
+            setOverallProgress(avgProgress);
           }
         );
         
@@ -350,60 +365,47 @@ export default function UploadPage() {
         const modeDisplayName = modeDetails.name; // e.g., "AI Transcription", "Hybrid Review", "Human Transcription"
         const description = `${modeDisplayName}: ${uploadFile.file.name}`;
         await consumeCredits(creditsForFile, jobId, description);
-        
-        // For AI and hybrid modes, start Speechmatics transcription processing
-        if (transcriptionMode === 'ai' || transcriptionMode === 'hybrid') {
-          try {
-            console.log(`Starting Speechmatics processing for job ${jobId}`);
-            const transcriptionResponse = await fetch('/api/transcriptions/process', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                jobId: jobId,
-                language: 'en', // You could make this configurable
-                operatingPoint: 'standard'
-              })
-            });
 
+        // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
+        if (transcriptionMode === 'ai' || transcriptionMode === 'hybrid') {
+          // Start processing in the background without waiting
+          fetch('/api/transcriptions/process', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              jobId: jobId,
+              language: 'en', // You could make this configurable
+              operatingPoint: 'standard'
+            })
+          }).then(async (transcriptionResponse) => {
             if (!transcriptionResponse.ok) {
               const errorData = await transcriptionResponse.json();
-              console.error(`Failed to start Speechmatics processing for job ${jobId}:`, errorData.error || errorData.message);
-              
-              // Don't fail the upload, but log the issue
-              toast({
-                title: "Processing Warning",
-                description: `File uploaded successfully, but automatic transcription may be delayed for ${uploadFile.file.name}`,
-                variant: "default",
-              });
+              console.warn(`[Upload] Speechmatics processing failed for job ${jobId} (${transcriptionResponse.status}):`, errorData.error || errorData.message);
+              // This is expected if Speechmatics is not configured or has issues
+              // The job will still be created and can be processed manually
             } else {
               // Check the response body for success status
               const responseData = await transcriptionResponse.json();
               if (responseData.success === false) {
-                console.warn(`Speechmatics processing not available for job ${jobId}:`, responseData.message);
-                
-                toast({
-                  title: "Manual Processing Required",
-                  description: `File uploaded successfully. ${responseData.message}`,
-                  variant: "default",
-                });
+                console.info(`[Upload] Speechmatics not available for job ${jobId}, marked for manual processing:`, responseData.message);
               } else {
-                console.log(`Successfully started Speechmatics processing for job ${jobId}`);
+                console.log(`[Upload] Successfully started Speechmatics processing for job ${jobId}`);
               }
             }
-          } catch (error) {
-            console.error(`Error starting Speechmatics processing for job ${jobId}:`, error);
-            
-            // Don't fail the upload, but notify user
-            toast({
-              title: "Processing Warning", 
-              description: `File uploaded successfully, but automatic transcription may be delayed for ${uploadFile.file.name}`,
-              variant: "default",
-            });
-          }
+          }).catch(error => {
+            console.warn(`[Upload] Network error starting Speechmatics processing for job ${jobId}:`, error.message);
+            // Job is still uploaded successfully, processing will be handled separately
+          });
         }
-        
+
+        setProcessingProgress(prev => ({
+          ...prev,
+          current: index + 1,
+          stage: index + 1 === uploadedFiles.length ? 'Finalizing...' : `Completed ${uploadFile.file.name}`
+        }));
+
         return jobId;
       });
       
@@ -429,6 +431,8 @@ export default function UploadPage() {
       });
     } finally {
       setIsUploading(false);
+      setProcessingProgress({ current: 0, total: 0, stage: '' });
+      setOverallProgress(0);
     }
   };
 
@@ -861,16 +865,29 @@ export default function UploadPage() {
             <Button
               onClick={handleSubmit}
               disabled={isUploading || uploadedFiles.length === 0 || hasInsufficientCredits}
-              className="bg-[#003366] hover:bg-[#002244] text-white px-8 py-3"
+              className={`text-white px-8 py-3 relative overflow-hidden ${
+                isUploading ? 'bg-gray-400' : 'bg-[#003366] hover:bg-[#002244]'
+              }`}
             >
-              {isUploading ? (
-                <>
-                  <LoadingSpinner size="sm" className="mr-2" />
-                  Processing...
-                </>
-              ) : (
-                'Start Transcription'
+              {/* Progress bar fill - completed portion shows normal button color */}
+              {isUploading && (
+                <div
+                  className="absolute inset-0 bg-[#003366] transition-all duration-300 ease-out"
+                  style={{ width: `${overallProgress}%` }}
+                />
               )}
+
+              {/* Button content */}
+              <span className="relative z-10 flex items-center">
+                {isUploading ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  'Start Transcription'
+                )}
+              </span>
             </Button>
           </div>
         </div>

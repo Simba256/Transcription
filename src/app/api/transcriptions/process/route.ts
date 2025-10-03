@@ -122,8 +122,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Choose processing method based on file duration
-    // For files longer than 5 minutes, use webhook-based processing to avoid timeouts
+    // Use webhook processing for longer files to avoid timeouts
+    // Files longer than 5 minutes use webhook callback for async processing
     const useWebhook = transcriptionJob.duration > 300; // 5 minutes
 
     console.log(`[API] File duration: ${transcriptionJob.duration}s, using ${useWebhook ? 'webhook' : 'synchronous'} processing`);
@@ -185,17 +185,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update job with Speechmatics job ID
-    await updateTranscriptionStatusAdmin(jobId, 'processing', {
-      speechmaticsJobId: result.speechmaticsJobId
-    });
+    // Update job with Speechmatics job ID (only for webhook processing)
+    // For synchronous processing, the job is already complete, so we don't update it again
+    if (useWebhook) {
+      await updateTranscriptionStatusAdmin(jobId, 'processing', {
+        speechmaticsJobId: result.speechmaticsJobId
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Transcription job submitted successfully',
+      message: useWebhook
+        ? 'Transcription job submitted successfully'
+        : 'Transcription completed successfully',
       jobId,
       speechmaticsJobId: result.speechmaticsJobId,
-      status: 'processing'
+      status: useWebhook ? 'processing' : 'complete'
     });
 
   } catch (error) {

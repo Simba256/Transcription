@@ -20,11 +20,15 @@ export interface TranscriptionJob {
   downloadURL: string;
   status: TranscriptionStatus;
   mode: TranscriptionMode;
+  domain?: string; // Transcription domain (general, medical, legal, technical)
   duration: number; // in seconds (exact duration)
   creditsUsed: number;
   specialInstructions?: string;
   transcript?: string;
   timestampedTranscript?: TranscriptSegment[]; // New field for timestamped data
+  transcriptStoragePath?: string; // Path to transcript in Storage (for large files)
+  segmentCount?: number; // Number of timestamped segments (for large files stored in Storage)
+  transcriptLength?: number; // Length of transcript text (for large files stored in Storage)
   createdAt: Timestamp;
   updatedAt: Timestamp;
   completedAt?: Timestamp;

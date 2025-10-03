@@ -344,7 +344,9 @@ export class SpeechmaticsService {
         notification_config: [{
           url: callbackUrl,
           contents: ['transcript'],
-          auth_headers: []
+          auth_headers: [
+            'ngrok-skip-browser-warning: true'  // Skip ngrok browser warning for webhooks
+          ]
         }]
       };
 
@@ -703,7 +705,7 @@ export class SpeechmaticsService {
    * Wait for Speechmatics job completion
    */
   private async waitForCompletion(jobId: string): Promise<SpeechmaticsResult> {
-    const maxAttempts = 50; // 4 minutes max (5s intervals) - fits within Vercel's 5-minute limit
+    const maxAttempts = 120; // 10 minutes max (5s intervals) - increased for longer files
     let attempts = 0;
     let jobStatus = 'running';
 

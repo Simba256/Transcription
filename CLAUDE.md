@@ -142,7 +142,7 @@ SPEECHMATICS_API_URL=https://asr.api.speechmatics.com/v2
 ### Supported Formats
 - **Audio**: MP3, WAV, M4A, FLAC
 - **Video**: MP4, MOV, AVI (audio extraction)
-- **Size limit**: 100MB per file
+- **Size limit**: 1GB per file
 
 ### Upload Flow
 1. Files uploaded to Firebase Storage at `/transcriptions/{userId}/`

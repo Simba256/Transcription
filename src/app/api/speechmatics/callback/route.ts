@@ -185,14 +185,60 @@ export async function POST(request: NextRequest) {
 
         console.log(`[Speechmatics Webhook] Created ${timestampedSegments.length} timestamped segments for job ${jobId}`);
 
-        // Update the job in our database
-        await jobDoc.ref.update({
-          status: 'complete',
-          transcript: transcriptData,
-          timestampedTranscript: timestampedSegments,
-          completedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp()
-        });
+        // Extract plain text transcript from segments
+        const plainTextTranscript = timestampedSegments.map(seg => seg.text).join(' ');
+
+        // Calculate the approximate size of the data
+        const dataSize = JSON.stringify({ transcript: transcriptData, timestampedTranscript: timestampedSegments }).length;
+        const maxFirestoreSize = 900000; // 900KB to leave buffer under 1MB limit
+
+        console.log(`[Speechmatics Webhook] Transcript data size: ${dataSize} bytes`);
+
+        // If data is too large, store in Firebase Storage instead
+        if (dataSize > maxFirestoreSize) {
+          console.log(`[Speechmatics Webhook] Data too large for Firestore, storing in Storage`);
+
+          const { getStorage } = await import('firebase-admin/storage');
+          const bucket = getStorage().bucket();
+
+          // Store transcript data in Storage
+          const transcriptPath = `transcripts/${jobId}/transcript.json`;
+          const transcriptFile = bucket.file(transcriptPath);
+
+          await transcriptFile.save(JSON.stringify({
+            transcript: plainTextTranscript,
+            timestampedTranscript: timestampedSegments
+          }), {
+            contentType: 'application/json',
+            metadata: {
+              jobId: jobId,
+              createdAt: new Date().toISOString()
+            }
+          });
+
+          console.log(`[Speechmatics Webhook] Stored large transcript in Storage: ${transcriptPath}`);
+
+          // Update Firestore with reference to Storage location
+          await jobDoc.ref.update({
+            status: 'complete',
+            transcriptStoragePath: transcriptPath,
+            segmentCount: timestampedSegments.length,
+            transcriptLength: plainTextTranscript.length,
+            completedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          });
+        } else {
+          // Data fits in Firestore, store directly
+          console.log(`[Speechmatics Webhook] Data fits in Firestore, storing directly`);
+
+          await jobDoc.ref.update({
+            status: 'complete',
+            transcript: transcriptData,
+            timestampedTranscript: timestampedSegments,
+            completedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          });
+        }
 
         console.log(`[Speechmatics Webhook] Job ${jobId} marked as complete`);
 

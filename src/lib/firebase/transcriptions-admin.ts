@@ -64,9 +64,17 @@ export const updateTranscriptionStatusAdmin = async (
     const docRef = adminDb.collection(TRANSCRIPTIONS_COLLECTION).doc(id);
     const updateData: Record<string, unknown> = {
       status,
-      updatedAt: FieldValue.serverTimestamp(),
-      ...additionalData
+      updatedAt: FieldValue.serverTimestamp()
     };
+
+    // Add additional data, filtering out undefined values
+    if (additionalData) {
+      for (const [key, value] of Object.entries(additionalData)) {
+        if (value !== undefined) {
+          updateData[key] = value;
+        }
+      }
+    }
 
     if (status === 'complete') {
       updateData.completedAt = FieldValue.serverTimestamp();

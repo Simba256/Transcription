@@ -80,7 +80,7 @@ export default function TranscriptViewerPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const transcriptionData = await getTranscriptionById(id as string);
 
       console.log(`[TranscriptViewer] Loaded transcription ${id}:`, {
@@ -88,6 +88,7 @@ export default function TranscriptViewerPage() {
         timestampedSegmentsCount: transcriptionData?.timestampedTranscript?.length || 0,
         hasTranscript: !!transcriptionData?.transcript,
         transcriptLength: transcriptionData?.transcript?.length || 0,
+        hasTranscriptStoragePath: !!transcriptionData?.transcriptStoragePath,
         status: transcriptionData?.status,
         timestampedTranscriptSample: transcriptionData?.timestampedTranscript?.slice(0, 2),
         allKeys: Object.keys(transcriptionData || {})
@@ -104,9 +105,28 @@ export default function TranscriptViewerPage() {
         return;
       }
 
+      // If transcript is stored in Storage (for large files), fetch it
+      if (transcriptionData.transcriptStoragePath && !transcriptionData.transcript) {
+        console.log(`[TranscriptViewer] Fetching large transcript from Storage: ${transcriptionData.transcriptStoragePath}`);
+
+        try {
+          const response = await fetch(`/api/transcriptions/${id}/transcript`);
+          if (response.ok) {
+            const { transcript, timestampedTranscript } = await response.json();
+            transcriptionData.transcript = transcript;
+            transcriptionData.timestampedTranscript = timestampedTranscript;
+            console.log(`[TranscriptViewer] Loaded transcript from Storage, segments: ${timestampedTranscript?.length || 0}`);
+          } else {
+            console.error('[TranscriptViewer] Failed to fetch transcript from Storage');
+          }
+        } catch (fetchError) {
+          console.error('[TranscriptViewer] Error fetching transcript from Storage:', fetchError);
+        }
+      }
+
       setTranscription(transcriptionData);
       setEditedTranscript(transcriptionData.transcript || '');
-      
+
     } catch (err) {
       console.error('Error loading transcription:', err);
       setError('Failed to load transcription');

@@ -24,8 +24,8 @@ service firebase.storage {
       
       // Users can upload their own files
       allow create: if isSignedIn() && isOwner(userId) && 
-                       // File size limit: 100MB
-                       request.resource.size < 100 * 1024 * 1024 &&
+                       // File size limit: 1GB
+                       request.resource.size < 1024 * 1024 * 1024 &&
                        // Allowed file types for audio/video
                        (request.resource.contentType.matches('audio/.*') ||
                        request.resource.contentType.matches('video/.*') ||
@@ -48,8 +48,8 @@ service firebase.storage {
       
       // Users can upload their own files
       allow create: if isSignedIn() && isOwner(userId) && 
-                       // File size limit: 100MB
-                       request.resource.size < 100 * 1024 * 1024 &&
+                       // File size limit: 1GB
+                       request.resource.size < 1024 * 1024 * 1024 &&
                        // Allowed file types for audio/video
                        (request.resource.contentType.matches('audio/.*') ||
                        request.resource.contentType.matches('video/.*') ||

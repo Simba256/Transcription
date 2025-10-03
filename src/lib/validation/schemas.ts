@@ -33,6 +33,13 @@ const TranscriptionModeSchema = z.enum(['ai', 'hybrid', 'human'], {
 });
 
 /**
+ * Transcription domain validation
+ */
+const TranscriptionDomainSchema = z.enum(['general', 'medical', 'legal', 'technical'], {
+  errorMap: () => ({ message: 'Domain must be general, medical, legal, or technical' }),
+});
+
+/**
  * Transcription status validation
  */
 const TranscriptionStatusSchema = z.enum([
@@ -60,13 +67,14 @@ export const CreateTranscriptionJobSchema = z.object({
   downloadURL: UrlSchema.max(1000, 'Download URL too long'),
   status: TranscriptionStatusSchema,
   mode: TranscriptionModeSchema,
+  domain: TranscriptionDomainSchema.optional(),
   duration: z.number()
     .min(0, 'Duration cannot be negative')
     .max(86400, 'Duration cannot exceed 24 hours'), // 24 hours in seconds
   creditsUsed: z.number()
     .int('Credits must be an integer')
     .min(0, 'Credits cannot be negative')
-    .max(10000, 'Credits too high'),
+    .max(100000, 'Credits too high'), // Increased to 100,000 to support longer files
   specialInstructions: z.string()
     .max(1000, 'Special instructions too long')
     .optional(),
@@ -208,7 +216,7 @@ export const FileUploadSchema = z.object({
   size: z.number()
     .int('Size must be an integer')
     .min(1, 'File cannot be empty')
-    .max(104857600, 'File cannot exceed 100MB'), // 100MB
+    .max(1073741824, 'File cannot exceed 1GB'), // 1GB
   type: z.string()
     .regex(/^(audio|video)\//, 'File must be audio or video')
     .max(100),
@@ -246,8 +254,11 @@ export function validateData<T>(
   } else {
     // Extract error messages from Zod error
     const errors: string[] = [];
-    if (result.error && result.error.errors) {
-      for (const err of result.error.errors) {
+    console.error('[Validation] Raw Zod error:', JSON.stringify(result.error, null, 2));
+    console.error('[Validation] Error issues:', result.error.issues);
+
+    if (result.error && result.error.issues) {
+      for (const err of result.error.issues) {
         const path = err.path.length > 0 ? `${err.path.join('.')}: ` : '';
         errors.push(`${path}${err.message}`);
       }
@@ -256,6 +267,8 @@ export function validateData<T>(
     if (errors.length === 0) {
       errors.push('Validation failed');
     }
+
+    console.error('[Validation] Extracted errors:', errors);
 
     return { success: false, errors };
   }

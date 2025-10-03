@@ -41,7 +41,9 @@ export async function POST(request: NextRequest) {
     const validation = validateData(body, CreateTranscriptionJobSchema);
 
     if (!validation.success) {
-      console.log('[API] Validation errors:', validation.errors);
+      console.error('[API] Validation failed for transcription job creation');
+      console.error('[API] Request body:', JSON.stringify(body, null, 2));
+      console.error('[API] Validation errors:', JSON.stringify(validation.errors, null, 2));
       return NextResponse.json(
         {
           error: 'Invalid request data',
