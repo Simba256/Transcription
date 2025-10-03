@@ -135,18 +135,57 @@ service cloud.firestore {
     // Usage records collection
     match /usage/{recordId} {
       // Users can read their own usage, admins can read all usage
-      allow read: if isSignedIn() && 
+      allow read: if isSignedIn() &&
                      (resource.data.userId == request.auth.uid || isAdmin());
-      
+
       // System can create usage records
-      allow create: if isSignedIn() && 
-                       request.resource.data.keys().hasAll(['userId', 'date', 'service']);
-      
+      allow create: if isSignedIn() &&
+                       request.resource.data.keys().hasAll(['userId', 'minutes', 'mode', 'billingType']);
+
       // System/admins can update usage records
-      allow update: if isSignedIn() && 
+      allow update: if isSignedIn() &&
                        (resource.data.userId == request.auth.uid || isAdmin());
-      
+
       // Only admins can delete usage records
+      allow delete: if isAdmin();
+    }
+
+    // Subscriptions collection
+    match /subscriptions/{subscriptionId} {
+      // Users can read their own subscription, admins can read all subscriptions
+      allow read: if isSignedIn() &&
+                     (resource.data.userId == request.auth.uid || isAdmin());
+
+      // System/backend can create subscriptions (via API, not directly from client)
+      // Validated through backend API that checks Stripe
+      allow create: if isSignedIn() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.keys().hasAll([
+                         'userId', 'stripeSubscriptionId', 'stripeCustomerId',
+                         'planId', 'planType', 'status', 'currentPeriodStart',
+                         'currentPeriodEnd', 'minutesIncluded', 'priceMonthly'
+                       ]);
+
+      // System/backend can update subscriptions (usage tracking, status changes)
+      allow update: if isSignedIn() &&
+                       (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Only admins can delete subscriptions
+      allow delete: if isAdmin();
+    }
+
+    // Subscription events collection (webhook processing)
+    match /subscriptionEvents/{eventId} {
+      // Only admins can read events
+      allow read: if isAdmin();
+
+      // System can create events (from webhooks)
+      allow create: if true; // Webhooks authenticated via Stripe signature
+
+      // System can update events (mark as processed)
+      allow update: if true;
+
+      // Only admins can delete events
       allow delete: if isAdmin();
     }
 

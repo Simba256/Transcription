@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX, exportTranscriptTXT } from '@/lib/utils/transcriptTemplate';
+import { generateTemplateData, exportTranscriptPDF, exportTranscriptDOCX } from '@/lib/utils/transcriptTemplate';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,7 @@ export default function TranscriptViewerPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTranscript, setEditedTranscript] = useState('');
   const [saving, setSaving] = useState(false);
-  const [selectedFormat, setSelectedFormat] = useState<'txt' | 'pdf' | 'docx'>('txt');
+  const [selectedFormat, setSelectedFormat] = useState<'pdf' | 'docx'>('pdf');
   const [timestampFrequency, setTimestampFrequency] = useState<30 | 60 | 300>(60); // 30s, 60s, 5min (300s)
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
@@ -238,7 +238,7 @@ export default function TranscriptViewerPage() {
     }
   };
 
-  const exportTranscript = async (format: 'txt' | 'pdf' | 'docx') => {
+  const exportTranscript = async (format: 'pdf' | 'docx') => {
     if (!transcription) return;
 
     try {
@@ -253,9 +253,7 @@ export default function TranscriptViewerPage() {
       console.log('User data:', userData);
 
       // Use the new template functions
-      if (format === 'txt') {
-        exportTranscriptTXT(templateData);
-      } else if (format === 'pdf') {
+      if (format === 'pdf') {
         await exportTranscriptPDF(templateData);
       } else if (format === 'docx') {
         await exportTranscriptDOCX(templateData);
@@ -849,10 +847,9 @@ export default function TranscriptViewerPage() {
                 </Button>
                 <select
                   value={selectedFormat}
-                  onChange={(e) => setSelectedFormat(e.target.value as 'txt' | 'pdf' | 'docx')}
+                  onChange={(e) => setSelectedFormat(e.target.value as 'pdf' | 'docx')}
                   className="border border-gray-300 rounded-l-none rounded-r-md px-2 py-2 text-sm bg-white hover:bg-gray-50"
                 >
-                  <option value="txt">TXT</option>
                   <option value="pdf">PDF</option>
                   <option value="docx">DOCX</option>
                 </select>

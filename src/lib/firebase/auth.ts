@@ -9,8 +9,9 @@ import {
   browserLocalPersistence,
 } from 'firebase/auth';
 import { auth, db } from './config';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { setCookie, deleteCookie } from 'cookies-next';
+import { SubscriptionStatus, PlanId } from '@/lib/types/subscription';
 
 // Ensure persistence is set to LOCAL (only on client side)
 if (typeof window !== 'undefined') {
@@ -25,8 +26,25 @@ export interface UserData {
   role: 'user' | 'admin';
   createdAt: any;
   lastLogin: any;
+
+  // Credits (pay-as-you-go)
   credits?: number;
   totalSpent?: number;
+
+  // Subscription info
+  subscriptionPlan?: PlanId;
+  subscriptionStatus?: SubscriptionStatus;
+  subscriptionId?: string;
+  stripeCustomerId?: string;
+
+  // Usage tracking
+  currentPeriodMinutesUsed?: number;
+  currentPeriodStart?: Timestamp;
+  currentPeriodEnd?: Timestamp;
+  lifetimeMinutesUsed?: number;
+
+  // User profile
+  name?: string;
 }
 
 // Sign up new user

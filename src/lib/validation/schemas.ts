@@ -187,6 +187,108 @@ export const ConfirmPaymentSchema = z.object({
 });
 
 // =============================================================================
+// SUBSCRIPTION API SCHEMAS
+// =============================================================================
+
+/**
+ * Plan ID validation
+ */
+const PlanIdSchema = z.enum([
+  'ai-starter',
+  'ai-professional',
+  'ai-enterprise',
+  'hybrid-starter',
+  'hybrid-professional',
+  'hybrid-enterprise',
+], {
+  errorMap: () => ({ message: 'Invalid plan ID' }),
+});
+
+/**
+ * Subscription status validation
+ */
+const SubscriptionStatusSchema = z.enum([
+  'active',
+  'past_due',
+  'canceled',
+  'incomplete',
+  'trialing',
+  'none',
+], {
+  errorMap: () => ({ message: 'Invalid subscription status' }),
+});
+
+/**
+ * Schema for creating subscriptions
+ * POST /api/subscriptions/create
+ */
+export const CreateSubscriptionSchema = z.object({
+  planId: PlanIdSchema,
+  paymentMethodId: RequiredString.max(255, 'Payment method ID too long'),
+});
+
+/**
+ * Schema for updating/changing subscriptions
+ * POST /api/subscriptions/update
+ */
+export const UpdateSubscriptionSchema = z.object({
+  subscriptionId: RequiredString.max(255, 'Subscription ID too long'),
+  newPlanId: PlanIdSchema,
+  prorate: z.boolean().optional().default(true),
+});
+
+/**
+ * Schema for canceling subscriptions
+ * POST /api/subscriptions/cancel
+ */
+export const CancelSubscriptionSchema = z.object({
+  subscriptionId: RequiredString.max(255, 'Subscription ID too long'),
+  immediate: z.boolean().optional().default(false),
+  cancellationReason: z.string().max(500, 'Reason too long').optional(),
+});
+
+/**
+ * Schema for fetching subscription usage
+ * GET /api/subscriptions/usage
+ */
+export const GetSubscriptionUsageSchema = z.object({
+  subscriptionId: RequiredString.max(255, 'Subscription ID too long').optional(),
+});
+
+/**
+ * Schema for previewing plan changes
+ * POST /api/subscriptions/preview
+ */
+export const PreviewPlanChangeSchema = z.object({
+  currentPlanId: PlanIdSchema,
+  newPlanId: PlanIdSchema,
+  subscriptionId: RequiredString.max(255, 'Subscription ID too long'),
+});
+
+/**
+ * Schema for tracking usage
+ * POST /api/usage/track
+ */
+export const TrackUsageSchema = z.object({
+  transcriptionId: FirebaseIdSchema,
+  minutes: z.number()
+    .min(0, 'Minutes cannot be negative')
+    .max(1440, 'Duration cannot exceed 24 hours'), // 1440 minutes = 24 hours
+  mode: TranscriptionModeSchema,
+  recordingDate: z.string().datetime().optional(),
+  filename: z.string().max(255, 'Filename too long').optional(),
+});
+
+/**
+ * Schema for resetting monthly usage
+ * POST /api/usage/reset (Admin only)
+ */
+export const ResetUsageSchema = z.object({
+  userId: FirebaseIdSchema,
+  subscriptionId: RequiredString.max(255, 'Subscription ID too long'),
+});
+
+// =============================================================================
 // ADMIN API SCHEMAS
 // =============================================================================
 
