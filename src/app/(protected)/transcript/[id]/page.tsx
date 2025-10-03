@@ -11,14 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { 
-  Play, 
-  Pause, 
-  Download, 
-  Share2, 
-  Edit3, 
-  Save, 
-  Volume2,
+import {
+  Download,
+  Share2,
+  Edit3,
+  Save,
   Clock,
   FileText,
   ArrowLeft,
@@ -29,6 +26,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { getTranscriptionById, updateTranscriptionStatus, TranscriptionJob } from '@/lib/firebase/transcriptions';
 import { Timestamp } from 'firebase/firestore';
 import { formatTime, formatDuration } from '@/lib/utils';
+import { AudioPlayer, AudioPlayerRef } from '@/components/ui/AudioPlayer';
 
 // Types for Speechmatics transcript data
 interface SpeechmaticsAlternative {
@@ -59,9 +57,7 @@ export default function TranscriptViewerPage() {
   const [transcription, setTranscription] = useState<TranscriptionJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTranscript, setEditedTranscript] = useState('');
   const [saving, setSaving] = useState(false);
@@ -70,8 +66,8 @@ export default function TranscriptViewerPage() {
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement>(null);
-  
+  const audioPlayerRef = useRef<AudioPlayerRef>(null);
+
   useEffect(() => {
     if (id && user) {
       loadTranscription();
@@ -205,29 +201,8 @@ export default function TranscriptViewerPage() {
     return text.replace(/\s+([,.!?;:])/g, '$1');
   };
 
-  const handlePlayPause = () => {
-    if (audioRef.current && transcription?.downloadURL) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play().catch(err => {
-          console.error('Error playing audio:', err);
-          toast({
-            title: 'Audio Error',
-            description: 'Unable to play audio file',
-            variant: 'destructive'
-          });
-        });
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      const time = audioRef.current.currentTime;
-      setCurrentTime(time);
-    }
+  const handleTimeUpdate = (time: number) => {
+    setCurrentTime(time);
   };
 
   const saveEdits = async () => {
@@ -312,10 +287,9 @@ export default function TranscriptViewerPage() {
   };
 
   const jumpToTime = (seconds: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = seconds;
-      setCurrentTime(seconds);
-    }
+    // Use the audio player's imperative API to seek
+    audioPlayerRef.current?.seekTo(seconds);
+    setCurrentTime(seconds);
   };
 
   // Speaker color mapping for visual differentiation
@@ -813,24 +787,13 @@ export default function TranscriptViewerPage() {
                 <CardTitle className="text-lg text-[#003366]">Audio Player</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Audio Player */}
                 {transcription.downloadURL ? (
-                  <audio
-                    ref={audioRef}
+                  <AudioPlayer
+                    ref={audioPlayerRef}
+                    src={transcription.downloadURL}
                     onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={() => {
-                      if (audioRef.current) {
-                        audioRef.current.volume = volume;
-                      }
-                    }}
-                    onEnded={() => setIsPlaying(false)}
-                    className="hidden"
-                  >
-                    <source src={transcription.downloadURL} type="audio/mpeg" />
-                    <source src={transcription.downloadURL} type="audio/wav" />
-                    <source src={transcription.downloadURL} type="audio/mp4" />
-                    Your browser does not support the audio element.
-                  </audio>
+                    standalone={false}
+                  />
                 ) : (
                   <div className="bg-gray-100 rounded-lg p-4 text-center">
                     <div className="text-gray-500 mb-2">🎵</div>
@@ -839,52 +802,6 @@ export default function TranscriptViewerPage() {
                     </div>
                   </div>
                 )}
-                
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handlePlayPause}
-                    disabled={!transcription.downloadURL}
-                    className="bg-[#003366] text-white hover:bg-[#004080] disabled:bg-gray-400"
-                    size="sm"
-                  >
-                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </Button>
-                  
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-600 mb-1">
-                      {formatTime(currentTime)} / {formatTime(transcription.duration)}
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-[#b29dd9] h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: transcription.duration > 0 
-                            ? `${(currentTime / transcription.duration) * 100}%` 
-                            : '0%' 
-                        }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="h-4 w-4 text-gray-600" />
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={volume}
-                      onChange={(e) => {
-                        const newVolume = parseFloat(e.target.value);
-                        setVolume(newVolume);
-                        if (audioRef.current) {
-                          audioRef.current.volume = newVolume;
-                        }
-                      }}
-                      className="w-16"
-                    />
-                  </div>
-                </div>
 
                 {/* File Info */}
                 <div className="text-sm space-y-2 pt-4 border-t">

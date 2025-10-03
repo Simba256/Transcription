@@ -24,6 +24,7 @@ import {
 } from '@/lib/firebase/transcriptions';
 import { formatDuration } from '@/lib/utils';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { AudioPlayer } from '@/components/ui/AudioPlayer';
 
 export function TranscriptionQueue() {
   const { user, userData } = useAuth();
@@ -461,10 +462,10 @@ export function TranscriptionQueue() {
                 
                 {selectedJob.downloadURL && (
                   <div className="mb-4">
-                    <audio controls className="w-full">
-                      <source src={selectedJob.downloadURL} />
-                      Your browser does not support the audio element.
-                    </audio>
+                    <AudioPlayer
+                      src={selectedJob.downloadURL}
+                      standalone={true}
+                    />
                   </div>
                 )}
               </div>
