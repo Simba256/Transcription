@@ -39,6 +39,10 @@ export interface TranscriptionJob {
   patientName?: string;
   location?: string;
   recordingTime?: string;
+  // Sharing fields
+  isShared?: boolean; // Whether this transcript is publicly shareable
+  shareId?: string; // Unique ID for sharing (different from document ID for security)
+  sharedAt?: Timestamp; // When sharing was enabled
 }
 
 const TRANSCRIPTIONS_COLLECTION = 'transcriptions';
@@ -181,6 +185,52 @@ export const getModeDetails = (mode: TranscriptionMode) => {
       turnaround: '24-72 hours'
     }
   };
-  
+
   return modeMap[mode];
+};
+
+// Sharing functions
+export const toggleTranscriptSharing = async (id: string, isShared: boolean): Promise<string | null> => {
+  const docRef = doc(db, TRANSCRIPTIONS_COLLECTION, id);
+
+  if (isShared) {
+    // Generate unique share ID
+    const shareId = `${id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    await updateDoc(docRef, {
+      isShared: true,
+      shareId,
+      sharedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    return shareId;
+  } else {
+    // Disable sharing
+    await updateDoc(docRef, {
+      isShared: false,
+      shareId: null,
+      sharedAt: null,
+      updatedAt: Timestamp.now()
+    });
+    return null;
+  }
+};
+
+export const getTranscriptionByShareId = async (shareId: string): Promise<TranscriptionJob | null> => {
+  const q = query(
+    collection(db, TRANSCRIPTIONS_COLLECTION),
+    where('shareId', '==', shareId),
+    where('isShared', '==', true)
+  );
+
+  const querySnapshot = await getDocs(q);
+
+  if (querySnapshot.empty) {
+    return null;
+  }
+
+  const doc = querySnapshot.docs[0];
+  return {
+    id: doc.id,
+    ...doc.data()
+  } as TranscriptionJob;
 };

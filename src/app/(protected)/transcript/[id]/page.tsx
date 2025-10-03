@@ -19,7 +19,9 @@ import {
   Clock,
   FileText,
   ArrowLeft,
-  AlertCircle
+  AlertCircle,
+  Link2,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -607,21 +609,80 @@ export default function TranscriptViewerPage() {
     );
   };
 
-  const shareTranscript = () => {
-    if (!transcription) return;
+  const shareTranscript = async () => {
+    if (!transcription || !user) return;
 
-    if (navigator.share) {
-      navigator.share({
-        title: `Transcript: ${transcription.originalFilename}`,
-        url: window.location.href
+    try {
+      // Toggle sharing status
+      const newSharingState = !transcription.isShared;
+
+      // Get auth token
+      const token = await user.getIdToken();
+
+      // Call API to toggle sharing
+      const response = await fetch(`/api/transcriptions/${id}/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isShared: newSharingState })
       });
-    } else {
-      // Fallback: copy link to clipboard
-      navigator.clipboard.writeText(window.location.href).then(() => {
+
+      if (!response.ok) {
+        throw new Error('Failed to update sharing settings');
+      }
+
+      const data = await response.json();
+
+      // Update local state
+      setTranscription({
+        ...transcription,
+        isShared: data.isShared,
+        shareId: data.shareId,
+        sharedAt: data.isShared ? Timestamp.now() : undefined
+      });
+
+      if (data.isShared && data.shareUrl) {
+        // Copy share link to clipboard
+        await navigator.clipboard.writeText(data.shareUrl);
         toast({
-          title: 'Link copied',
-          description: 'Transcript link copied to clipboard'
+          title: 'Sharing enabled',
+          description: 'Share link copied to clipboard!',
         });
+      } else {
+        toast({
+          title: 'Sharing disabled',
+          description: 'This transcript is now private',
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling share:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update sharing settings',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!transcription?.shareId) return;
+
+    const shareUrl = `${window.location.origin}/share/${transcription.shareId}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: 'Link copied',
+        description: 'Transcript link copied to clipboard'
+      });
+    } catch (error) {
+      console.error('Error copying link:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to copy link to clipboard',
+        variant: 'destructive',
       });
     }
   };
@@ -747,14 +808,35 @@ export default function TranscriptViewerPage() {
                 </Button>
               )}
               
-              <Button
-                variant="outline"
-                onClick={shareTranscript}
-                className="border-gray-300"
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
-              </Button>
+              {transcription.isShared ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={copyShareLink}
+                    className="border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                  >
+                    <Link2 className="h-4 w-4 mr-2" />
+                    Copy Link
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={shareTranscript}
+                    className="border-gray-300"
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    Disable Sharing
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={shareTranscript}
+                  className="border-gray-300"
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </Button>
+              )}
               
               <div className="flex">
                 <Button

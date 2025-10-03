@@ -52,26 +52,31 @@ service cloud.firestore {
     // Transcriptions collection
     match /transcriptions/{transcriptionId} {
       // Users can read their own transcriptions, admins can read all transcriptions
-      allow read: if isSignedIn() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
-      
+      // Shared transcriptions can be read by anyone (even unauthenticated)
+      allow read: if (resource.data.isShared == true) ||
+                     (isSignedIn() &&
+                      (resource.data.userId == request.auth.uid || isAdmin()));
+
       // Users can create transcriptions for themselves
-      allow create: if isSignedIn() && 
+      allow create: if isSignedIn() &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.keys().hasAll(['userId', 'filename', 'status', 'mode']) &&
-                       // Allow additional optional fields
+                       // Allow additional optional fields including sharing fields
                        request.resource.data.keys().hasOnly([
                          'userId', 'filename', 'originalFilename', 'filePath', 'downloadURL',
                          'status', 'mode', 'duration', 'creditsUsed', 'specialInstructions',
-                         'transcript', 'createdAt', 'updatedAt', 'completedAt'
+                         'transcript', 'timestampedTranscript', 'transcriptStoragePath',
+                         'segmentCount', 'transcriptLength', 'createdAt', 'updatedAt', 'completedAt',
+                         'clientName', 'projectName', 'providerName', 'patientName', 'location', 'recordingTime',
+                         'isShared', 'shareId', 'sharedAt', 'domain'
                        ]);
-      
+
       // Users can update their own transcriptions, admins can update any transcription
-      allow update: if isSignedIn() && 
+      allow update: if isSignedIn() &&
                        (resource.data.userId == request.auth.uid || isAdmin());
-      
+
       // Users can delete their own transcriptions, admins can delete any transcription
-      allow delete: if isSignedIn() && 
+      allow delete: if isSignedIn() &&
                        (resource.data.userId == request.auth.uid || isAdmin());
     }
 
