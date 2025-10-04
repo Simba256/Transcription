@@ -343,7 +343,7 @@ export class SpeechmaticsService {
         transcription_config: transcriptionConfig,
         notification_config: [{
           url: callbackUrl,
-          contents: ['transcript'],
+          contents: [],  // Don't include transcript in webhook (too large for Vercel 4.5MB limit)
           auth_headers: [
             'ngrok-skip-browser-warning: true'  // Skip ngrok browser warning for webhooks
           ]
