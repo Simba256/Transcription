@@ -262,9 +262,14 @@ export async function POST(request: NextRequest) {
 
           console.log(`[Speechmatics Webhook] Stored large transcript in Storage: ${transcriptPath}`);
 
+          // Determine final status based on transcription mode
+          // For hybrid mode, send to pending-review; for AI mode, mark as complete
+          const finalStatus = jobData.mode === 'hybrid' ? 'pending-review' : 'complete';
+          console.log(`[Speechmatics Webhook] Job mode: ${jobData.mode}, setting status to: ${finalStatus}`);
+
           // Update Firestore with reference to Storage location
           await jobDoc.ref.update({
-            status: 'complete',
+            status: finalStatus,
             transcriptStoragePath: transcriptPath,
             segmentCount: timestampedSegments.length,
             transcriptLength: plainTextTranscript.length,
@@ -275,8 +280,13 @@ export async function POST(request: NextRequest) {
           // Data fits in Firestore, store directly
           console.log(`[Speechmatics Webhook] Data fits in Firestore, storing directly`);
 
+          // Determine final status based on transcription mode
+          // For hybrid mode, send to pending-review; for AI mode, mark as complete
+          const finalStatus = jobData.mode === 'hybrid' ? 'pending-review' : 'complete';
+          console.log(`[Speechmatics Webhook] Job mode: ${jobData.mode}, setting status to: ${finalStatus}`);
+
           await jobDoc.ref.update({
-            status: 'complete',
+            status: finalStatus,
             transcript: transcriptData,
             timestampedTranscript: timestampedSegments,
             completedAt: FieldValue.serverTimestamp(),
@@ -284,7 +294,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        console.log(`[Speechmatics Webhook] Job ${jobId} marked as complete`);
+        console.log(`[Speechmatics Webhook] Job ${jobId} marked as ${jobData.mode === 'hybrid' ? 'pending-review' : 'complete'}`);
 
       } catch (error) {
         console.error(`[Speechmatics Webhook] Error processing transcript for job ${jobId}:`, error);
