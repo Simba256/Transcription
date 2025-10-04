@@ -56,3 +56,12 @@ next-env.d.ts
 client/signofthecross_*
 client/*_transcript*
 client/*.zip
+
+
+DEBUG_LONG_TRANSCRIPTIONS.md
+DEPLOYMENT_CHECKLIST.md
+ENVIRONMENT_SETUP.md
+FINAL_DEPLOYMENT_SUMMARY.md
+QUICK_START.md
+STRIPE_WEBHOOK_SETUP.md
+check-stuck-job.md
