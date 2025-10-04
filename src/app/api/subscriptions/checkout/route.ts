@@ -64,9 +64,11 @@ export async function POST(request: NextRequest) {
     // Get or create Stripe customer
     const customer = await getOrCreateStripeCustomer(userId, email, name);
 
-    // Get app URL from environment - use localhost for success to avoid ngrok cross-origin issues
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002';
-    const successUrl = `http://localhost:3002/billing/success?session_id={CHECKOUT_SESSION_ID}`;
+    // Get app URL from environment or construct from request
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
+                   (request.headers.get('origin') ||
+                   `${request.headers.get('x-forwarded-proto') || 'https'}://${request.headers.get('host')}`);
+    const successUrl = `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${appUrl}/billing?canceled=true`;
 
     // Create Checkout Session

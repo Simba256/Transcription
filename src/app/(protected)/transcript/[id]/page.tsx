@@ -252,11 +252,20 @@ export default function TranscriptViewerPage() {
       console.log('Transcription data:', transcription);
       console.log('User data:', userData);
 
-      // Use the new template functions
+      // Use the new template functions with UI state
       if (format === 'pdf') {
-        await exportTranscriptPDF(templateData);
+        await exportTranscriptPDF(templateData, {
+          timestampFrequency,
+          speakerNames,
+          getSpeakerColor,
+          getSpeakerDisplayName
+        });
       } else if (format === 'docx') {
-        await exportTranscriptDOCX(templateData);
+        await exportTranscriptDOCX(templateData, {
+          timestampFrequency,
+          speakerNames,
+          getSpeakerDisplayName
+        });
       }
 
       toast({
