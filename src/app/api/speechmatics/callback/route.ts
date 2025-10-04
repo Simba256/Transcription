@@ -43,11 +43,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing job ID' }, { status: 400 });
     }
 
-    const jobStatus = job.status; // 'running' | 'done' | 'rejected'
+    let jobStatus = job.status; // 'running' | 'done' | 'rejected'
+
+    // If status is missing (happens with contents: ['jobinfo']), fetch from API
+    if (!jobStatus) {
+      console.log(`[Speechmatics Webhook] Status missing in payload, fetching from API for job ${speechmaticsJobId}`);
+
+      const speechmaticsApiKey = process.env.SPEECHMATICS_API_KEY;
+      const speechmaticsApiUrl = process.env.SPEECHMATICS_API_URL || 'https://asr.api.speechmatics.com/v2';
+
+      if (speechmaticsApiKey) {
+        try {
+          const statusResponse = await fetch(`${speechmaticsApiUrl}/jobs/${speechmaticsJobId}`, {
+            headers: {
+              'Authorization': `Bearer ${speechmaticsApiKey}`
+            }
+          });
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            jobStatus = statusData.job?.status;
+            console.log(`[Speechmatics Webhook] Fetched job status from API: ${jobStatus}`);
+          } else {
+            console.error(`[Speechmatics Webhook] Failed to fetch status: ${statusResponse.status}`);
+          }
+        } catch (error) {
+          console.error(`[Speechmatics Webhook] Error fetching status:`, error);
+        }
+      }
+    }
 
     // Check if this is a transcript delivery (results present means job is done)
     const hasTranscript = payload.results && Array.isArray(payload.results) && payload.results.length > 0;
-    const effectiveStatus = hasTranscript ? 'done' : jobStatus;
+    const effectiveStatus = hasTranscript ? 'done' : (jobStatus || 'unknown');
 
     console.log(`[Speechmatics Webhook] Job ${speechmaticsJobId} status: ${jobStatus}, hasTranscript: ${hasTranscript}, effectiveStatus: ${effectiveStatus}`);
 
