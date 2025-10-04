@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, MoreHorizontal, Mail, Ban, Repeat } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Mail, Ban, Repeat, Coins, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,9 +22,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { getAllUsers } from '@/lib/firebase/firestore';
 import { UserData } from '@/lib/firebase/auth';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function UserManagementPage() {
-  const { userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,10 @@ export default function UserManagementPage() {
   const [filterRole, setFilterRole] = useState('all');
   const [filterSubscription, setFilterSubscription] = useState('all');
   const [users, setUsers] = useState<UserData[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditReason, setCreditReason] = useState('');
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     // Check if user is admin
@@ -63,6 +69,69 @@ export default function UserManagementPage() {
       loadUsers();
     }
   }, [userData, authLoading, router, toast]);
+
+  const handleUpdateCredits = async () => {
+    if (!selectedUser?.id) return;
+
+    const credits = parseInt(creditAmount);
+    if (isNaN(credits) || credits < 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid credit amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const token = await user?.getIdToken();
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/credits`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          credits,
+          reason: creditReason.trim() || `Admin updated credits to ${credits}`,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update credits');
+      }
+
+      const result = await response.json();
+
+      // Update the user in the local state
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === selectedUser.id ? { ...u, credits } : u
+        )
+      );
+
+      toast({
+        title: "Credits updated",
+        description: result.message,
+      });
+
+      // Close modal and reset form
+      setSelectedUser(null);
+      setCreditAmount('');
+      setCreditReason('');
+    } catch (error) {
+      console.error('Error updating credits:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to update credits',
+        variant: "destructive",
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -273,11 +342,11 @@ export default function UserManagementPage() {
                               Send Email
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
-                              toast({
-                                title: "Feature not available",
-                                description: "Credit editing will be available in a future update.",
-                              });
+                              setSelectedUser(user);
+                              setCreditAmount(String(user.credits || 0));
+                              setCreditReason('');
                             }}>
+                              <Coins className="mr-2 h-4 w-4" />
                               Edit Credits
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
@@ -310,6 +379,115 @@ export default function UserManagementPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Credit Edit Modal */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-[#003366]">
+                  Edit Credits
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedUser(null);
+                    setCreditAmount('');
+                    setCreditReason('');
+                  }}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="mb-4 space-y-2 p-3 bg-gray-50 rounded">
+                <div className="text-sm text-gray-600">
+                  <strong>User:</strong> {selectedUser.name || 'Unnamed User'}
+                </div>
+                <div className="text-sm text-gray-600">
+                  <strong>Email:</strong> {selectedUser.email}
+                </div>
+                <div className="text-sm text-gray-600 flex items-center gap-2">
+                  <strong>Current Credits:</strong> <CreditDisplay amount={selectedUser.credits || 0} size="sm" />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="creditAmount" className="text-sm font-medium text-gray-700">
+                    New Credit Amount
+                  </Label>
+                  <Input
+                    id="creditAmount"
+                    type="number"
+                    min="0"
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    placeholder="Enter credit amount"
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Current: {selectedUser.credits || 0} credits
+                    {creditAmount && !isNaN(parseInt(creditAmount)) && (
+                      <span className="ml-2">
+                        → Change: {parseInt(creditAmount) - (selectedUser.credits || 0) >= 0 ? '+' : ''}{parseInt(creditAmount) - (selectedUser.credits || 0)} credits
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="creditReason" className="text-sm font-medium text-gray-700">
+                    Reason (Optional)
+                  </Label>
+                  <Textarea
+                    id="creditReason"
+                    value={creditReason}
+                    onChange={(e) => setCreditReason(e.target.value)}
+                    placeholder="Enter reason for credit adjustment..."
+                    rows={3}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This will be recorded in the transaction history.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedUser(null);
+                    setCreditAmount('');
+                    setCreditReason('');
+                  }}
+                  disabled={updating}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateCredits}
+                  disabled={updating || !creditAmount || isNaN(parseInt(creditAmount))}
+                  className="flex-1 bg-[#003366] hover:bg-[#004080]"
+                >
+                  {updating ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Credits'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
