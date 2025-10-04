@@ -21,21 +21,28 @@ export async function POST(request: NextRequest) {
 
     // Parse the webhook payload
     const payload = await request.json();
+
+    // Handle different payload structures based on notification config
+    // When contents: ['jobinfo'], the structure is different
+    const job = payload.job || payload.jobinfo || payload;
+    const speechmaticsJobId = job?.id || payload.id;
+
     console.log('[Speechmatics Webhook] Payload summary:', {
       hasJob: !!payload.job,
-      jobId: payload.job?.id,
-      jobStatus: payload.job?.status,
+      hasJobinfo: !!payload.jobinfo,
+      jobId: speechmaticsJobId,
+      jobStatus: job?.status,
       hasResults: !!(payload.results && payload.results.length > 0),
-      resultsCount: payload.results?.length || 0
+      resultsCount: payload.results?.length || 0,
+      payloadKeys: Object.keys(payload)
     });
 
-    const { job } = payload;
-    if (!job?.id) {
-      console.error('[Speechmatics Webhook] Missing job ID in payload');
+    if (!speechmaticsJobId) {
+      console.error('[Speechmatics Webhook] Missing job ID in payload. Payload keys:', Object.keys(payload));
+      console.error('[Speechmatics Webhook] Full payload:', JSON.stringify(payload, null, 2));
       return NextResponse.json({ error: 'Missing job ID' }, { status: 400 });
     }
 
-    const speechmaticsJobId = job.id;
     const jobStatus = job.status; // 'running' | 'done' | 'rejected'
 
     // Check if this is a transcript delivery (results present means job is done)
