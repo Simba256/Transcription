@@ -37,6 +37,8 @@ export function TranscriptionQueue() {
   const [queueItems, setQueueItems] = useState<TranscriptionJob[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [userEmails, setUserEmails] = useState<{[key: string]: string}>({});
+  const [storageTranscripts, setStorageTranscripts] = useState<{[key: string]: string}>({});
+  const [loadingTranscript, setLoadingTranscript] = useState(false);
   const { toast } = useToast();
 
   // Load transcription jobs from Firebase
@@ -83,6 +85,65 @@ export function TranscriptionQueue() {
   useEffect(() => {
     loadQueueItems();
   }, [loadQueueItems]);
+
+  // Fetch transcript from Storage if needed
+  const fetchTranscriptFromStorage = async (jobId: string) => {
+    // Check if already fetched
+    if (storageTranscripts[jobId]) {
+      return storageTranscripts[jobId];
+    }
+
+    setLoadingTranscript(true);
+    try {
+      const response = await fetch(`/api/transcriptions/${jobId}/transcript`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch transcript');
+      }
+      const data = await response.json();
+
+      // Extract plain text from the response
+      let transcriptText = '';
+      if (typeof data.transcript === 'string') {
+        transcriptText = data.transcript;
+      } else if (data.timestampedTranscript && Array.isArray(data.timestampedTranscript)) {
+        transcriptText = data.timestampedTranscript.map((seg: any) => seg.text).join(' ');
+      }
+
+      // Cache it
+      setStorageTranscripts(prev => ({ ...prev, [jobId]: transcriptText }));
+      return transcriptText;
+    } catch (error) {
+      console.error('Error fetching transcript from storage:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load transcript from storage.",
+        variant: "destructive",
+      });
+      return '';
+    } finally {
+      setLoadingTranscript(false);
+    }
+  };
+
+  // Get transcript text helper (handles all formats)
+  const getTranscriptText = (job: TranscriptionJob): string => {
+    // Check if transcript is in storage
+    if (job.transcriptStoragePath && storageTranscripts[job.id || '']) {
+      return storageTranscripts[job.id || ''];
+    }
+
+    // Check if transcript is a string
+    if (typeof job.transcript === 'string') {
+      return job.transcript;
+    }
+
+    // Fallback to timestamped transcript
+    if (job.timestampedTranscript && Array.isArray(job.timestampedTranscript)) {
+      return job.timestampedTranscript.map(seg => seg.text).join(' ');
+    }
+
+    return '';
+  };
 
   const processJobWithSpeechmatics = async (jobId: string) => {
     try {
@@ -328,14 +389,21 @@ export function TranscriptionQueue() {
                     <div className="flex items-center space-x-2">
                       {item.status === 'pending-review' && (
                         <>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="text-blue-600"
-                            onClick={() => setSelectedJob(item)}
+                            onClick={async () => {
+                              // Pre-fetch transcript if it's in storage
+                              if (item.transcriptStoragePath && item.id) {
+                                await fetchTranscriptFromStorage(item.id);
+                              }
+                              setSelectedJob(item);
+                            }}
+                            disabled={loadingTranscript}
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            Review
+                            {loadingTranscript ? 'Loading...' : 'Review'}
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -399,13 +467,13 @@ export function TranscriptionQueue() {
                   </div>
 
                   {/* Show AI transcript for hybrid review */}
-                  {item.status === 'pending-review' && item.transcript && (
+                  {item.status === 'pending-review' && (item.transcript || item.transcriptStoragePath) && (
                     <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
                       <h4 className="font-medium text-blue-900 mb-2">AI Transcript (for review):</h4>
-                      <p className="text-sm text-blue-800">
-                        {typeof item.transcript === 'string'
-                          ? item.transcript
-                          : '[Transcript data format issue - please view in modal]'}
+                      <p className="text-sm text-blue-800 line-clamp-3">
+                        {item.transcriptStoragePath && !storageTranscripts[item.id || '']
+                          ? '[Transcript stored in cloud - click Review to load]'
+                          : (getTranscriptText(item) || '[Click Review to view transcript]')}
                       </p>
                     </div>
                   )}
@@ -475,17 +543,20 @@ export function TranscriptionQueue() {
                 )}
               </div>
 
-              {selectedJob.status === 'pending-review' && selectedJob.transcript && (
+              {selectedJob.status === 'pending-review' && (selectedJob.transcript || selectedJob.transcriptStoragePath) && (
                 <div className="mb-4">
                   <h4 className="font-medium text-[#003366] mb-2 text-sm sm:text-base">AI Transcript:</h4>
                   <div className="p-3 bg-gray-50 border rounded text-sm max-h-48 sm:max-h-64 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed">
-                      {typeof selectedJob.transcript === 'string'
-                        ? selectedJob.transcript
-                        : (selectedJob.timestampedTranscript && Array.isArray(selectedJob.timestampedTranscript)
-                            ? selectedJob.timestampedTranscript.map(seg => seg.text).join(' ')
-                            : 'Unable to display transcript - data format issue')}
-                    </pre>
+                    {loadingTranscript ? (
+                      <div className="flex items-center justify-center py-4">
+                        <LoadingSpinner size="sm" />
+                        <span className="ml-2 text-gray-600">Loading transcript...</span>
+                      </div>
+                    ) : (
+                      <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed">
+                        {getTranscriptText(selectedJob) || 'Unable to load transcript'}
+                      </pre>
+                    )}
                   </div>
                 </div>
               )}

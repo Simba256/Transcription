@@ -4,10 +4,10 @@ import { getStorage } from 'firebase-admin/storage';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get auth token from Authorization header
     const authHeader = request.headers.get('authorization');
@@ -125,10 +125,10 @@ export async function PUT(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get auth token from cookie
     const token = request.cookies.get('auth-token')?.value;
@@ -170,32 +170,38 @@ export async function GET(
       }
     }
 
-    // Check if transcript is in Storage
+    // Check if transcript is in Storage or Firestore
     const transcriptStoragePath = transcriptionData?.transcriptStoragePath;
 
-    if (!transcriptStoragePath) {
+    if (transcriptStoragePath) {
+      // Fetch transcript from Storage
+      const bucket = getStorage().bucket();
+      const file = bucket.file(transcriptStoragePath);
+
+      const [exists] = await file.exists();
+      if (!exists) {
+        return NextResponse.json(
+          { error: 'Transcript file not found in Storage' },
+          { status: 404 }
+        );
+      }
+
+      const [fileContents] = await file.download();
+      const transcriptData = JSON.parse(fileContents.toString('utf-8'));
+
+      return NextResponse.json(transcriptData);
+    } else if (transcriptionData?.transcript || transcriptionData?.timestampedTranscript) {
+      // Transcript is stored directly in Firestore
+      return NextResponse.json({
+        transcript: transcriptionData.transcript,
+        timestampedTranscript: transcriptionData.timestampedTranscript
+      });
+    } else {
       return NextResponse.json(
-        { error: 'Transcript not stored in Storage' },
+        { error: 'No transcript data found' },
         { status: 404 }
       );
     }
-
-    // Fetch transcript from Storage
-    const bucket = getStorage().bucket();
-    const file = bucket.file(transcriptStoragePath);
-
-    const [exists] = await file.exists();
-    if (!exists) {
-      return NextResponse.json(
-        { error: 'Transcript file not found in Storage' },
-        { status: 404 }
-      );
-    }
-
-    const [fileContents] = await file.download();
-    const transcriptData = JSON.parse(fileContents.toString('utf-8'));
-
-    return NextResponse.json(transcriptData);
 
   } catch (error) {
     console.error('[API] Error fetching transcript from Storage:', error);
