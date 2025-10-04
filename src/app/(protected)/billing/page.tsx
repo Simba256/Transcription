@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { CreditCard, Download, Clock, CheckCircle, ChevronLeft, ChevronRight, Repeat } from 'lucide-react';
+import { CreditCard, Download, Clock, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -291,10 +291,10 @@ export default function BillingPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#003366] mb-2">
-            Billing & Subscriptions
+            Billing & Credits
           </h1>
           <p className="text-gray-600">
-            Manage your subscription, usage, and credit balance.
+            Purchase credits and manage your transaction history.
           </p>
         </div>
 
@@ -326,12 +326,8 @@ export default function BillingPage() {
         )}
 
         {/* Tabs for different sections */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <Repeat className="h-4 w-4" />
-              Overview
-            </TabsTrigger>
+        <Tabs defaultValue="credits" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
             <TabsTrigger value="credits" className="flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
               Buy Credits
@@ -341,31 +337,6 @@ export default function BillingPage() {
               History
             </TabsTrigger>
           </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            {/* Subscription Status */}
-            <SubscriptionStatus
-              subscriptionPlan={subscriptionPlan}
-              subscriptionStatus={subscriptionStatus}
-              currentPeriodEnd={currentPeriodEnd}
-              trialEnd={trialEnd}
-              cancelAtPeriodEnd={cancelAtPeriodEnd}
-              onManageSubscription={handleManageSubscription}
-              onCancelSubscription={handleCancelSubscription}
-              onReactivateSubscription={handleReactivateSubscription}
-            />
-
-            {/* Usage Meter */}
-            <UsageMeter
-              subscriptionPlan={subscriptionPlan}
-              minutesUsed={minutesUsed}
-              minutesReserved={minutesReserved}
-              includedMinutes={includedMinutes}
-              billingCycleEnd={billingCycleEnd}
-              credits={credits}
-            />
-          </TabsContent>
 
           {/* Credits Tab */}
           <TabsContent value="credits" className="space-y-6">
@@ -379,7 +350,7 @@ export default function BillingPage() {
                     </h2>
                     <CreditDisplay amount={credits} size="lg" />
                     <p className="text-sm text-gray-600 mt-2">
-                      Used for overages and non-subscription modes
+                      Credits are used for all transcription services
                     </p>
                   </div>
                   <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center">
