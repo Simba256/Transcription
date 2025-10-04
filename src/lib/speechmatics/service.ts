@@ -345,7 +345,7 @@ export class SpeechmaticsService {
           url: callbackUrl,
           // Don't include 'transcript' in contents - it's too large for Vercel 4.5MB limit
           // Webhook will just notify job status, then we fetch transcript from API
-          contents: ['job'],  // Only send job status, not full transcript
+          contents: ['jobinfo'],  // Only send job info, not full transcript (avoids 413 error)
           auth_headers: [
             'ngrok-skip-browser-warning: true'  // Skip ngrok browser warning for webhooks
           ]
