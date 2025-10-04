@@ -100,7 +100,9 @@ export async function POST(request: NextRequest) {
         language,
         operatingPoint,
         enableDiarization: true,
-        enablePunctuation: true
+        enablePunctuation: true,
+        domain: transcriptionJob.domain || 'general',
+        removeDisfluencies: !transcriptionJob.includeFiller // Remove filler words if includeFiller is false
       }
     );
 

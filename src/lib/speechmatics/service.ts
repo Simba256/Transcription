@@ -10,6 +10,7 @@ export interface SpeechmaticsConfig {
   maxSpeakers?: number; // Only available for real-time API (not batch API)
   speakerSensitivity?: number; // Speaker sensitivity (0-1, default 0.5) - available for batch API
   domain?: 'general' | 'medical' | 'legal'; // Domain-specific vocabulary
+  removeDisfluencies?: boolean; // Remove filler words (um, uh, etc.) - English only
 }
 
 export interface SpeechmaticsResult {
@@ -336,7 +337,14 @@ export class SpeechmaticsService {
       } else {
         console.log(`[Speechmatics] Using general vocabulary (no additional_vocab)`);
       }
-      // Note: remove_disfluencies is not available in Batch API v2
+
+      // Add transcript filtering configuration for disfluencies (filler words)
+      if (config.removeDisfluencies !== undefined) {
+        transcriptionConfig.transcript_filtering_config = {
+          remove_disfluencies: config.removeDisfluencies
+        };
+        console.log(`[Speechmatics] Disfluency removal: ${config.removeDisfluencies ? 'ENABLED' : 'DISABLED'}`);
+      }
 
       const jobConfig = {
         type: 'transcription',
@@ -492,7 +500,9 @@ export class SpeechmaticsService {
         language = 'en',
         operatingPoint = 'standard',
         enableDiarization = true,
-        enablePunctuation = true
+        enablePunctuation = true,
+        removeDisfluencies,
+        domain
       } = config;
 
       console.log(`[Speechmatics] Starting transcription for ${filename}`);
@@ -506,15 +516,40 @@ export class SpeechmaticsService {
         contentType: 'application/octet-stream',
       } as any);
 
+      // Build transcription config
+      const transcriptionConfig: any = {
+        language,
+        operating_point: operatingPoint
+      };
+
+      // Add diarization if enabled
+      if (enableDiarization) {
+        transcriptionConfig.diarization = 'speaker';
+      }
+
+      // Add domain-specific vocabulary
+      if (domain === 'medical') {
+        transcriptionConfig.additional_vocab = MEDICAL_VOCABULARY;
+        console.log(`[Speechmatics] Using medical vocabulary (${MEDICAL_VOCABULARY.length} terms)`);
+      } else if (domain === 'legal') {
+        transcriptionConfig.additional_vocab = LEGAL_VOCABULARY;
+        console.log(`[Speechmatics] Using legal vocabulary (${LEGAL_VOCABULARY.length} terms)`);
+      }
+
+      // Add disfluency filtering if specified
+      if (removeDisfluencies !== undefined) {
+        transcriptionConfig.transcript_filtering_config = {
+          remove_disfluencies: removeDisfluencies
+        };
+        console.log(`[Speechmatics] Disfluency removal: ${removeDisfluencies ? 'ENABLED' : 'DISABLED'}`);
+      }
+
       // Add the configuration as JSON (using only valid Speechmatics properties)
       const jobConfig = {
         type: 'transcription',
-        transcription_config: {
-          language,
-          operating_point: operatingPoint
-        }
+        transcription_config: transcriptionConfig
       };
-      
+
       formData.append('config', JSON.stringify(jobConfig));
 
       console.log(`[Speechmatics] Job config:`, JSON.stringify(jobConfig, null, 2));

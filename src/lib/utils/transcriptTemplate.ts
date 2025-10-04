@@ -71,10 +71,30 @@ export function generateTemplateData(transcription: TranscriptionJob, userData?:
   };
 }
 
-export async function exportTranscriptPDF(templateData: TranscriptTemplateData): Promise<void> {
+export interface ExportOptions {
+  timestampFrequency?: 30 | 60 | 300; // 30s, 60s, or 5min
+  speakerNames?: Record<string, string>;
+  getSpeakerColor?: (speaker: string | undefined) => string;
+  getSpeakerDisplayName?: (speaker: string | undefined) => string;
+}
+
+export async function exportTranscriptPDF(templateData: TranscriptTemplateData, options?: ExportOptions): Promise<void> {
   const pdf = new jsPDF();
   const pageHeight = pdf.internal.pageSize.height;
   const pageWidth = pdf.internal.pageSize.width;
+
+  // Default options
+  const timestampFrequency = options?.timestampFrequency || 60;
+  const speakerNames = options?.speakerNames || {};
+
+  // Helper function to get speaker display name
+  const getSpeakerDisplayName = (speaker: string | undefined): string => {
+    if (!speaker || speaker === 'UU') return 'Speaker';
+    if (speakerNames[speaker]) {
+      return speakerNames[speaker];
+    }
+    return `Speaker ${speaker.replace('S', '')}`;
+  };
 
   // Load and add the logo
   try {
@@ -169,46 +189,131 @@ export async function exportTranscriptPDF(templateData: TranscriptTemplateData):
 
   // Check if we have timestamped data, use it if available
   if (templateData.timestampedTranscript && templateData.timestampedTranscript.length > 0) {
-    // Render timestamped content
-    for (const segment of templateData.timestampedTranscript) {
-      if (yPos > pageHeight - 50) {
-        pdf.addPage();
-        // Add border to new page
-        pdf.setDrawColor(0, 0, 0);
-        pdf.setLineWidth(0.5);
-        pdf.rect(10, 10, pageWidth - 20, pageHeight - 20);
-        yPos = 25;
-      }
+    // Process segments to group by speaker with interval-based timestamps
+    let currentSpeaker: string | undefined = undefined;
+    let accumulatedText = '';
+    // Start from the first timestamp interval (0 seconds)
+    let nextTimestampTarget = 0;
+    let pendingTimestamp: string | null = null;
 
-      // Add timestamp in bold
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(100, 100, 100); // Gray color for timestamps
-      pdf.text(`[${formatTimestamp(segment.start)}]`, 25, yPos);
+    const addNewPage = () => {
+      pdf.addPage();
+      pdf.setDrawColor(0, 0, 0);
+      pdf.setLineWidth(0.5);
+      pdf.rect(10, 10, pageWidth - 20, pageHeight - 20);
+      return 25;
+    };
 
-      // Add the text content with reduced spacing
+    const renderTextWithTimestamp = (text: string, timestamp: string | null) => {
       pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(0, 0, 0); // Black color for text
-      const lines = pdf.splitTextToSize(segment.text, pageWidth - 55); // Reduced space for timestamp
+      pdf.setTextColor(0, 0, 0);
 
-      for (let i = 0; i < lines.length; i++) {
-        if (i === 0) {
-          // First line goes on the same line as timestamp with reduced spacing
-          pdf.text(lines[i], 55, yPos); // Reduced from 75 to 55
-        } else {
-          // Subsequent lines are indented
-          yPos += 6;
+      if (timestamp) {
+        // Text with inline timestamp
+        const textBeforeTimestamp = text.trim();
+        const combinedText = `${textBeforeTimestamp} `;
+        const lines = pdf.splitTextToSize(combinedText, pageWidth - 50);
+
+        for (let i = 0; i < lines.length; i++) {
           if (yPos > pageHeight - 50) {
-            pdf.addPage();
-            pdf.setDrawColor(0, 0, 0);
-            pdf.setLineWidth(0.5);
-            pdf.rect(10, 10, pageWidth - 20, pageHeight - 20);
-            yPos = 25;
+            yPos = addNewPage();
           }
-          pdf.text(lines[i], 55, yPos); // Reduced from 75 to 55
+          pdf.text(lines[i], 25, yPos);
+          yPos += 6;
+        }
+
+        // Add timestamp on same line or next line
+        if (yPos > pageHeight - 50) {
+          yPos = addNewPage();
+        }
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 51, 102); // Brand color for timestamps
+        pdf.text(`[${timestamp}]`, 25, yPos);
+        yPos += 6;
+
+      } else {
+        // Regular text without timestamp
+        const lines = pdf.splitTextToSize(text.trim(), pageWidth - 50);
+        for (let i = 0; i < lines.length; i++) {
+          if (yPos > pageHeight - 50) {
+            yPos = addNewPage();
+          }
+          pdf.text(lines[i], 25, yPos);
+          yPos += 6;
         }
       }
-      yPos += 10; // Extra space between segments
+    };
+
+    const addCurrentSegment = () => {
+      if (accumulatedText.trim()) {
+        renderTextWithTimestamp(accumulatedText, pendingTimestamp);
+        accumulatedText = '';
+        pendingTimestamp = null;
+        yPos += 4; // Extra space between paragraphs
+      }
+    };
+
+    for (let i = 0; i < templateData.timestampedTranscript.length; i++) {
+      const segment = templateData.timestampedTranscript[i];
+      const speakerChanged = currentSpeaker !== undefined && currentSpeaker !== segment.speaker;
+
+      // If speaker changed, finalize current segment and add speaker label
+      if (speakerChanged) {
+        addCurrentSegment();
+
+        // Add extra space before new speaker
+        yPos += 6;
+        if (yPos > pageHeight - 50) {
+          yPos = addNewPage();
+        }
+
+        // Add speaker label
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 51, 102); // Brand color
+        pdf.text(getSpeakerDisplayName(segment.speaker), 25, yPos);
+        yPos += 8;
+
+        currentSpeaker = segment.speaker;
+        // Don't reset timestamp target when speaker changes - keep continuous timeline
+      } else if (currentSpeaker === undefined) {
+        // First segment - add speaker label
+        if (yPos > pageHeight - 50) {
+          yPos = addNewPage();
+        }
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 51, 102);
+        pdf.text(getSpeakerDisplayName(segment.speaker), 25, yPos);
+        yPos += 8;
+
+        currentSpeaker = segment.speaker;
+        // Set the first timestamp target based on the frequency
+        nextTimestampTarget = timestampFrequency;
+      }
+
+      // Check if we've passed a timestamp target - handle multiple missed timestamps
+      while (segment.start >= nextTimestampTarget) {
+        // If we already have a pending timestamp, we need to insert it first
+        if (pendingTimestamp && accumulatedText.trim()) {
+          addCurrentSegment();
+        }
+        pendingTimestamp = formatTimestamp(nextTimestampTarget);
+        nextTimestampTarget += timestampFrequency;
+      }
+
+      // Check for sentence end to insert timestamp
+      const endsWithSentence = /[.!?]\s*$/.test(segment.text);
+
+      if (pendingTimestamp && endsWithSentence) {
+        accumulatedText += segment.text;
+        addCurrentSegment();
+      } else {
+        accumulatedText += segment.text + ' ';
+      }
     }
+
+    // Add any remaining text
+    addCurrentSegment();
+
   } else {
     // Fallback to regular content without timestamps
     const content = templateData.transcriptContent || '{{transcript_body}}';
@@ -243,6 +348,7 @@ export async function exportTranscriptPDF(templateData: TranscriptTemplateData):
     // Footer content
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
     pdf.text('www.talktotext.ca', 20, pageHeight - 15);
     pdf.text(`Page ${i} of ${pageCount}`, pageWidth - 40, pageHeight - 15);
 
@@ -303,36 +409,9 @@ function generateMetadataRows(templateData: TranscriptTemplateData): TableRow[] 
   );
 }
 
-// Helper function to generate DOCX transcript content with timestamps
-function generateDocxTranscriptContent(templateData: TranscriptTemplateData): Paragraph[] {
-  if (templateData.timestampedTranscript && templateData.timestampedTranscript.length > 0) {
-    // Create paragraphs for each timestamped segment matching PDF formatting
-    return templateData.timestampedTranscript.map(segment =>
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `[${formatTimestamp(segment.start)}] `,
-            bold: true,
-            color: "646464", // Match PDF gray color for timestamps
-            size: 22,
-          }),
-          new TextRun({
-            text: segment.text,
-            size: 22,
-            color: "000000", // Black text for content
-          }),
-        ],
-        spacing: {
-          line: 300, // Slightly increased line spacing for readability
-          after: 240 // Space after each segment matching PDF
-        },
-        indent: {
-          left: 0, // No additional indent for clean look
-          hanging: 0
-        },
-      })
-    );
-  } else {
+// Helper function to generate DOCX transcript content with interval-based timestamps and speakers
+function generateDocxTranscriptContent(templateData: TranscriptTemplateData, options?: ExportOptions): Paragraph[] {
+  if (!templateData.timestampedTranscript || templateData.timestampedTranscript.length === 0) {
     // Fallback to regular content
     return [
       new Paragraph({
@@ -347,9 +426,135 @@ function generateDocxTranscriptContent(templateData: TranscriptTemplateData): Pa
       })
     ];
   }
+
+  const timestampFrequency = options?.timestampFrequency || 60;
+  const speakerNames = options?.speakerNames || {};
+
+  const getSpeakerDisplayName = (speaker: string | undefined): string => {
+    if (!speaker || speaker === 'UU') return 'Speaker';
+    if (speakerNames[speaker]) {
+      return speakerNames[speaker];
+    }
+    return `Speaker ${speaker.replace('S', '')}`;
+  };
+
+  const paragraphs: Paragraph[] = [];
+  let currentSpeaker: string | undefined = undefined;
+  let accumulatedText = '';
+  // Start from the first timestamp interval (0 seconds)
+  let nextTimestampTarget = 0;
+  let pendingTimestamp: string | null = null;
+
+  const addCurrentSegment = () => {
+    if (accumulatedText.trim()) {
+      const children: TextRun[] = [];
+
+      // Add text
+      children.push(new TextRun({
+        text: accumulatedText.trim(),
+        size: 22,
+        color: "000000"
+      }));
+
+      // Add timestamp if present
+      if (pendingTimestamp) {
+        children.push(new TextRun({
+          text: ` [${pendingTimestamp}]`,
+          bold: true,
+          color: "003366", // Brand color for timestamps
+          size: 22
+        }));
+      }
+
+      paragraphs.push(new Paragraph({
+        children,
+        spacing: {
+          line: 300,
+          after: 200
+        }
+      }));
+
+      accumulatedText = '';
+      pendingTimestamp = null;
+    }
+  };
+
+  for (let i = 0; i < templateData.timestampedTranscript.length; i++) {
+    const segment = templateData.timestampedTranscript[i];
+    const speakerChanged = currentSpeaker !== undefined && currentSpeaker !== segment.speaker;
+
+    // If speaker changed, finalize current segment and add speaker label
+    if (speakerChanged) {
+      addCurrentSegment();
+
+      // Add speaker label paragraph
+      paragraphs.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: getSpeakerDisplayName(segment.speaker),
+            bold: true,
+            color: "003366", // Brand color
+            size: 24
+          })
+        ],
+        spacing: {
+          before: 400,
+          after: 200
+        }
+      }));
+
+      currentSpeaker = segment.speaker;
+      // Don't reset timestamp target when speaker changes - keep continuous timeline
+    } else if (currentSpeaker === undefined) {
+      // First segment - add speaker label
+      paragraphs.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: getSpeakerDisplayName(segment.speaker),
+            bold: true,
+            color: "003366",
+            size: 24
+          })
+        ],
+        spacing: {
+          before: 200,
+          after: 200
+        }
+      }));
+
+      currentSpeaker = segment.speaker;
+      // Set the first timestamp target based on the frequency
+      nextTimestampTarget = timestampFrequency;
+    }
+
+    // Check if we've passed a timestamp target - handle multiple missed timestamps
+    while (segment.start >= nextTimestampTarget) {
+      // If we already have a pending timestamp, we need to insert it first
+      if (pendingTimestamp && accumulatedText.trim()) {
+        addCurrentSegment();
+      }
+      pendingTimestamp = formatTimestamp(nextTimestampTarget);
+      nextTimestampTarget += timestampFrequency;
+    }
+
+    // Check for sentence end to insert timestamp
+    const endsWithSentence = /[.!?]\s*$/.test(segment.text);
+
+    if (pendingTimestamp && endsWithSentence) {
+      accumulatedText += segment.text;
+      addCurrentSegment();
+    } else {
+      accumulatedText += segment.text + ' ';
+    }
+  }
+
+  // Add any remaining text
+  addCurrentSegment();
+
+  return paragraphs;
 }
 
-export async function exportTranscriptDOCX(templateData: TranscriptTemplateData): Promise<void> {
+export async function exportTranscriptDOCX(templateData: TranscriptTemplateData, options?: ExportOptions): Promise<void> {
   const doc = new Document({
     sections: [
       {
@@ -463,7 +668,7 @@ export async function exportTranscriptDOCX(templateData: TranscriptTemplateData)
           }),
 
           // Transcript content - handle timestamped segments
-          ...generateDocxTranscriptContent(templateData),
+          ...generateDocxTranscriptContent(templateData, options),
         ],
       },
     ],

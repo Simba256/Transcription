@@ -8,6 +8,7 @@ export interface TranscriptSegment {
   start: number; // Start time in seconds
   end: number;   // End time in seconds
   text: string;  // Text content
+  speaker?: string; // Speaker identifier (e.g., "S1", "S2", "UU" for unidentified)
   confidence?: number; // Optional confidence score
 }
 
@@ -44,6 +45,10 @@ export interface TranscriptionJob {
   isShared?: boolean; // Whether this transcript is publicly shareable
   shareId?: string; // Unique ID for sharing (different from document ID for security)
   sharedAt?: Timestamp; // When sharing was enabled
+  // Speaker customization
+  speakerNames?: Record<string, string>; // Custom names for speakers (e.g., {"S1": "John", "S2": "Mary"})
+  // Filler words option
+  includeFiller?: boolean; // Whether to include filler words (um, uh, etc.) in the transcript
 }
 
 const TRANSCRIPTIONS_COLLECTION = 'transcriptions';

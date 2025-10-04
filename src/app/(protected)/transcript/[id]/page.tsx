@@ -21,7 +21,12 @@ import {
   ArrowLeft,
   AlertCircle,
   Link2,
-  Globe
+  Globe,
+  Search,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Replace
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -62,6 +67,7 @@ export default function TranscriptViewerPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTranscript, setEditedTranscript] = useState('');
+  const [editedSegments, setEditedSegments] = useState<{[key: number]: string}>({});
   const [saving, setSaving] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'pdf' | 'docx'>('pdf');
   const [timestampFrequency, setTimestampFrequency] = useState<30 | 60 | 300>(60); // 30s, 60s, 5min (300s)
@@ -69,6 +75,21 @@ export default function TranscriptViewerPage() {
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
   const [speakerOrder, setSpeakerOrder] = useState<string[]>([]);
   const [draggedSpeaker, setDraggedSpeaker] = useState<string | null>(null);
+  const [isEditingSpeakerSegments, setIsEditingSpeakerSegments] = useState(false);
+  const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null);
+  const [selectedSegments, setSelectedSegments] = useState<Set<number>>(new Set());
+  const [panelPosition, setPanelPosition] = useState({ x: 16, y: window.innerHeight - 400 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+
+  // Search and replace state
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [replaceQuery, setReplaceQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<{segmentIndex: number, matchIndex: number}[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [caseSensitive, setCaseSensitive] = useState(false);
 
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
 
@@ -78,14 +99,32 @@ export default function TranscriptViewerPage() {
     }
   }, [id, user]);
 
+  // Add selection change listener for better text selection detection
+  useEffect(() => {
+    if (!isEditingSpeakerSegments) return;
+
+    const handleSelectionChange = () => {
+      // Small delay to ensure selection is complete
+      setTimeout(handleTextSelection, 10);
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, [isEditingSpeakerSegments, transcription?.timestampedTranscript]);
+
   const loadTranscription = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      console.log('[Load] Starting to load transcription:', id);
+
       const transcriptionData = await getTranscriptionById(id as string);
 
-      console.log(`[TranscriptViewer] Loaded transcription ${id}:`, {
+      console.log(`[Load] Loaded transcription ${id} from Firestore:`, {
         hasTimestampedTranscript: !!transcriptionData?.timestampedTranscript,
         timestampedSegmentsCount: transcriptionData?.timestampedTranscript?.length || 0,
         hasTranscript: !!transcriptionData?.transcript,
@@ -108,29 +147,47 @@ export default function TranscriptViewerPage() {
       }
 
       // If transcript is stored in Storage (for large files), fetch it
-      if (transcriptionData.transcriptStoragePath && !transcriptionData.transcript) {
-        console.log(`[TranscriptViewer] Fetching large transcript from Storage: ${transcriptionData.transcriptStoragePath}`);
+      if (transcriptionData.transcriptStoragePath) {
+        console.log(`[Load] Transcription uses Storage, fetching from: ${transcriptionData.transcriptStoragePath}`);
 
         try {
           const response = await fetch(`/api/transcriptions/${id}/transcript`);
+          console.log('[Load] Storage fetch response status:', response.status);
+
           if (response.ok) {
             const { transcript, timestampedTranscript } = await response.json();
+            console.log('[Load] Loaded from Storage:', {
+              transcriptLength: transcript?.length,
+              segmentsCount: timestampedTranscript?.length,
+              firstSegmentSample: timestampedTranscript?.[0]?.text?.substring(0, 50)
+            });
             transcriptionData.transcript = transcript;
             transcriptionData.timestampedTranscript = timestampedTranscript;
-            console.log(`[TranscriptViewer] Loaded transcript from Storage, segments: ${timestampedTranscript?.length || 0}`);
           } else {
-            console.error('[TranscriptViewer] Failed to fetch transcript from Storage');
+            const errorText = await response.text();
+            console.error('[Load] Failed to fetch from Storage:', response.status, errorText);
           }
         } catch (fetchError) {
-          console.error('[TranscriptViewer] Error fetching transcript from Storage:', fetchError);
+          console.error('[Load] Error fetching transcript from Storage:', fetchError);
         }
       }
+
+      console.log('[Load] Final transcription data being set to state:', {
+        hasTranscript: !!transcriptionData.transcript,
+        hasTimestampedTranscript: !!transcriptionData.timestampedTranscript,
+        segmentsCount: transcriptionData.timestampedTranscript?.length
+      });
 
       setTranscription(transcriptionData);
       setEditedTranscript(transcriptionData.transcript || '');
 
+      // Load saved speaker names
+      if (transcriptionData.speakerNames) {
+        setSpeakerNames(transcriptionData.speakerNames);
+      }
+
     } catch (err) {
-      console.error('Error loading transcription:', err);
+      console.error('[Load] Error loading transcription:', err);
       setError('Failed to load transcription');
     } finally {
       setLoading(false);
@@ -210,26 +267,100 @@ export default function TranscriptViewerPage() {
   };
 
   const saveEdits = async () => {
-    if (!transcription || !editedTranscript.trim()) return;
+    if (!transcription) return;
 
     try {
       setSaving(true);
-      
-      await updateTranscriptionStatus(transcription.id!, 'complete', {
-        transcript: editedTranscript.trim()
-      });
-      
-      // Update local state
-      setTranscription(prev => prev ? { ...prev, transcript: editedTranscript.trim() } : null);
+
+      console.log('[Save] editedSegments:', editedSegments);
+      console.log('[Save] hasTimestampedTranscript:', !!transcription.timestampedTranscript);
+      console.log('[Save] transcriptStoragePath:', transcription.transcriptStoragePath);
+
+      // Check if we have edited segments (inline editing)
+      if (Object.keys(editedSegments).length > 0 && transcription.timestampedTranscript) {
+        console.log('[Save] Saving edited segments...');
+
+        // Apply edited segments to timestampedTranscript
+        const updatedTimestampedTranscript = transcription.timestampedTranscript.map((segment, index) => {
+          if (editedSegments[index] !== undefined) {
+            return { ...segment, text: editedSegments[index] };
+          }
+          return segment;
+        });
+
+        // Generate new plain transcript from segments
+        const updatedPlainTranscript = updatedTimestampedTranscript
+          .map(seg => seg.text)
+          .join(' ');
+
+        console.log('[Save] Updated segments count:', Object.keys(editedSegments).length);
+
+        // Save via API if using Storage, otherwise save to Firestore
+        if (transcription.transcriptStoragePath) {
+          console.log('[Save] Saving to Storage via API...');
+          const token = await user?.getIdToken();
+          const response = await fetch(`/api/transcriptions/${transcription.id}/transcript`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              timestampedTranscript: updatedTimestampedTranscript,
+              transcript: updatedPlainTranscript
+            })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            console.error('[Save] Storage save failed:', error);
+            throw new Error('Failed to save transcript to Storage');
+          }
+          console.log('[Save] Successfully saved to Storage');
+        } else {
+          console.log('[Save] Saving to Firestore...');
+          await updateTranscriptionStatus(transcription.id!, 'complete', {
+            timestampedTranscript: updatedTimestampedTranscript,
+            transcript: updatedPlainTranscript
+          });
+          console.log('[Save] Successfully saved to Firestore');
+        }
+
+        // Update local state
+        setTranscription(prev => prev ? {
+          ...prev,
+          timestampedTranscript: updatedTimestampedTranscript,
+          transcript: updatedPlainTranscript
+        } : null);
+        setEditedSegments({});
+
+        // Reload from server to verify persistence
+        console.log('[Save] Reloading transcript to verify save...');
+        await loadTranscription();
+      } else if (editedTranscript.trim()) {
+        console.log('[Save] Saving legacy plain text...');
+        // Legacy plain text editing (fallback)
+        await updateTranscriptionStatus(transcription.id!, 'complete', {
+          transcript: editedTranscript.trim()
+        });
+
+        setTranscription(prev => prev ? { ...prev, transcript: editedTranscript.trim() } : null);
+
+        // Reload from server to verify persistence
+        await loadTranscription();
+      } else {
+        console.warn('[Save] No changes to save!');
+      }
+
       setIsEditing(false);
-      
+
       toast({
         title: 'Changes saved',
         description: 'Transcript has been updated successfully'
       });
-      
+
     } catch (error) {
-      console.error('Error saving transcript:', error);
+      console.error('[Save] Error saving transcript:', error);
       toast({
         title: 'Save failed',
         description: 'Unable to save changes. Please try again.',
@@ -285,6 +416,191 @@ export default function TranscriptViewerPage() {
     }
   };
 
+  // Search and replace functions
+  const performSearch = () => {
+    if (!searchQuery || !transcription?.timestampedTranscript) {
+      setSearchMatches([]);
+      setCurrentMatchIndex(0);
+      return;
+    }
+
+    const matches: {segmentIndex: number, matchIndex: number}[] = [];
+    const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
+
+    transcription.timestampedTranscript.forEach((segment, segmentIndex) => {
+      const text = caseSensitive ? segment.text : segment.text.toLowerCase();
+      let startIndex = 0;
+      let matchIndex = text.indexOf(query, startIndex);
+
+      while (matchIndex !== -1) {
+        matches.push({ segmentIndex, matchIndex });
+        startIndex = matchIndex + query.length;
+        matchIndex = text.indexOf(query, startIndex);
+      }
+    });
+
+    setSearchMatches(matches);
+    setCurrentMatchIndex(0);
+
+    if (matches.length === 0) {
+      toast({
+        title: 'No matches found',
+        description: `"${searchQuery}" was not found in the transcript`,
+        variant: 'default'
+      });
+    }
+  };
+
+  const navigateToMatch = (direction: 'next' | 'prev') => {
+    if (searchMatches.length === 0) return;
+
+    let newIndex = currentMatchIndex;
+    if (direction === 'next') {
+      newIndex = (currentMatchIndex + 1) % searchMatches.length;
+    } else {
+      newIndex = currentMatchIndex === 0 ? searchMatches.length - 1 : currentMatchIndex - 1;
+    }
+    setCurrentMatchIndex(newIndex);
+
+    // Scroll to the match
+    const match = searchMatches[newIndex];
+    const element = document.getElementById(`segment-${match.segmentIndex}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('ring-2', 'ring-yellow-400');
+      setTimeout(() => {
+        element.classList.remove('ring-2', 'ring-yellow-400');
+      }, 2000);
+    }
+  };
+
+  const replaceAll = () => {
+    if (!searchQuery || !replaceQuery || !transcription?.timestampedTranscript) {
+      toast({
+        title: 'Invalid input',
+        description: 'Please enter both search and replace text',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const newEditedSegments = { ...editedSegments };
+    let replacementCount = 0;
+
+    transcription.timestampedTranscript.forEach((segment, index) => {
+      const regex = new RegExp(
+        searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        caseSensitive ? 'g' : 'gi'
+      );
+      const currentText = newEditedSegments[index] !== undefined ? newEditedSegments[index] : segment.text;
+      const newText = currentText.replace(regex, replaceQuery);
+
+      if (newText !== currentText) {
+        newEditedSegments[index] = newText;
+        replacementCount++;
+
+        // Update the DOM element immediately
+        const element = document.getElementById(`segment-${index}`)?.querySelector('[contenteditable]') as HTMLElement;
+        if (element) {
+          element.textContent = newText;
+        }
+      }
+    });
+
+    setEditedSegments(newEditedSegments);
+    setSearchMatches([]);
+    setSearchQuery('');
+
+    toast({
+      title: 'Replace complete',
+      description: `Replaced ${replacementCount} occurrence(s). Click "Save Changes" to persist.`,
+      variant: 'default'
+    });
+  };
+
+  const replaceNext = () => {
+    if (searchMatches.length === 0 || !transcription?.timestampedTranscript || !replaceQuery) {
+      toast({
+        title: 'Invalid operation',
+        description: 'Please search for text first and enter replacement text',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const match = searchMatches[currentMatchIndex];
+    const segment = transcription.timestampedTranscript[match.segmentIndex];
+    const currentText = editedSegments[match.segmentIndex] !== undefined
+      ? editedSegments[match.segmentIndex]
+      : segment.text;
+
+    // Replace just this occurrence
+    const beforeMatch = currentText.substring(0, match.matchIndex);
+    const afterMatch = currentText.substring(match.matchIndex + searchQuery.length);
+    const newText = beforeMatch + replaceQuery + afterMatch;
+
+    setEditedSegments({
+      ...editedSegments,
+      [match.segmentIndex]: newText
+    });
+
+    // Update the DOM element immediately
+    const element = document.getElementById(`segment-${match.segmentIndex}`)?.querySelector('[contenteditable]') as HTMLElement;
+    if (element) {
+      element.textContent = newText;
+    }
+
+    // Re-run search to update matches
+    setTimeout(() => {
+      performSearch();
+      navigateToMatch('next');
+    }, 100);
+
+    toast({
+      title: 'Replaced',
+      description: 'Replaced current match. Click "Save Changes" to persist.',
+      variant: 'default'
+    });
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+F or Cmd+F - Open search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearchPanel(true);
+      }
+
+      // Ctrl+H or Cmd+H - Open search with replace
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault();
+        setShowSearchPanel(true);
+      }
+
+      // Escape - Close search panel
+      if (e.key === 'Escape' && showSearchPanel) {
+        setShowSearchPanel(false);
+        setSearchMatches([]);
+      }
+
+      // Enter in search box - Find next
+      if (e.key === 'Enter' && showSearchPanel && document.activeElement?.id === 'search-input') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          navigateToMatch('prev');
+        } else {
+          navigateToMatch('next');
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isEditing, showSearchPanel, searchMatches, currentMatchIndex]);
+
   const formatTimestamp = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -336,12 +652,39 @@ export default function TranscriptViewerPage() {
   };
 
   // Update speaker name
-  const updateSpeakerName = (speaker: string, newName: string) => {
-    setSpeakerNames(prev => ({
-      ...prev,
+  const updateSpeakerName = async (speaker: string, newName: string) => {
+    const updatedNames = {
+      ...speakerNames,
       [speaker]: newName
-    }));
+    };
+
+    setSpeakerNames(updatedNames);
     setEditingSpeaker(null);
+
+    // Save to database
+    if (!transcription || !user) return;
+
+    try {
+      // Save via API if using Storage, otherwise save to Firestore
+      if (transcription.transcriptStoragePath) {
+        // For large transcripts, we need to update Firestore metadata directly
+        await updateTranscriptionStatus(transcription.id!, transcription.status, {
+          speakerNames: updatedNames
+        });
+      } else {
+        // Small transcript - save directly to Firestore
+        await updateTranscriptionStatus(transcription.id!, transcription.status, {
+          speakerNames: updatedNames
+        });
+      }
+    } catch (error) {
+      console.error('Error saving speaker name:', error);
+      toast({
+        title: 'Save failed',
+        description: 'Unable to save speaker name. Please try again.',
+        variant: 'destructive'
+      });
+    }
   };
 
   // Drag and drop handlers
@@ -383,6 +726,294 @@ export default function TranscriptViewerPage() {
     setDraggedSpeaker(null);
   };
 
+  // Toggle segment selection
+  const toggleSegmentSelection = (segmentIndex: number, shiftKey: boolean = false) => {
+    setSelectedSegments(prev => {
+      const newSelection = new Set(prev);
+
+      if (shiftKey && prev.size > 0) {
+        // Shift+click: select range from last selected to current
+        const indices = Array.from(prev);
+        const lastSelected = Math.max(...indices);
+        const start = Math.min(lastSelected, segmentIndex);
+        const end = Math.max(lastSelected, segmentIndex);
+
+        for (let i = start; i <= end; i++) {
+          newSelection.add(i);
+        }
+      } else {
+        // Regular click: toggle selection
+        if (newSelection.has(segmentIndex)) {
+          newSelection.delete(segmentIndex);
+        } else {
+          newSelection.add(segmentIndex);
+        }
+      }
+
+      return newSelection;
+    });
+  };
+
+  // Select all segments in a range
+  const selectRange = (startIndex: number, endIndex: number) => {
+    const newSelection = new Set<number>();
+    for (let i = startIndex; i <= endIndex; i++) {
+      newSelection.add(i);
+    }
+    setSelectedSegments(newSelection);
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedSegments(new Set());
+  };
+
+  // Drag panel handlers
+  const handlePanelMouseDown = (e: React.MouseEvent) => {
+    // Only allow dragging from the header area
+    if ((e.target as HTMLElement).closest('.drag-handle')) {
+      e.preventDefault(); // Prevent text selection during drag
+      e.stopPropagation(); // Stop event from bubbling
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - panelPosition.x,
+        y: e.clientY - panelPosition.y
+      });
+    }
+  };
+
+  const handlePanelMouseMove = (e: MouseEvent) => {
+    if (isDragging) {
+      setPanelPosition({
+        x: e.clientX - dragOffset.x,
+        y: e.clientY - dragOffset.y
+      });
+    }
+  };
+
+  const handlePanelMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Add/remove mouse move and up listeners for dragging
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handlePanelMouseMove);
+      document.addEventListener('mouseup', handlePanelMouseUp);
+    } else {
+      document.removeEventListener('mousemove', handlePanelMouseMove);
+      document.removeEventListener('mouseup', handlePanelMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handlePanelMouseMove);
+      document.removeEventListener('mouseup', handlePanelMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  // Handle text selection in edit mode
+  const handleTextSelection = () => {
+    if (!isEditingSpeakerSegments || !transcription?.timestampedTranscript) return;
+
+    // Don't clear selection while dragging the panel
+    if (isDragging) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      // Don't clear if we have segments selected (user might be dragging)
+      if (selectedSegments.size === 0) {
+        setSelectedSegments(new Set());
+      }
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText) {
+      // Don't clear if we have segments selected (user might be dragging)
+      if (selectedSegments.size === 0) {
+        setSelectedSegments(new Set());
+      }
+      return;
+    }
+
+    // Get the range of the selection
+    const range = selection.getRangeAt(0);
+
+    // Find all segment elements that intersect with the selection
+    const segmentsToSelect = new Set<number>();
+
+    // Get all segment divs in the container
+    if (transcriptContainerRef.current) {
+      const segmentElements = transcriptContainerRef.current.querySelectorAll('[data-segment-index]');
+
+      segmentElements.forEach((element) => {
+        // Check if this element intersects with the selection range
+        try {
+          const segmentIndex = parseInt(element.getAttribute('data-segment-index') || '-1');
+          if (segmentIndex === -1) return;
+
+          // Check if the selection contains any part of this element
+          // Use a simpler approach: check if selection contains the element's text node
+          const elementRange = document.createRange();
+          elementRange.selectNode(element);
+
+          // Check for any intersection between ranges
+          // Two ranges intersect if the start of one is before the end of the other AND vice versa
+          try {
+            // Method 1: Use intersectsNode (simpler)
+            if (range.intersectsNode(element)) {
+              segmentsToSelect.add(segmentIndex);
+            }
+          } catch (intersectError) {
+            // Fallback: Manual boundary comparison
+            // Ranges overlap if: rangeA.start < rangeB.end AND rangeA.end > rangeB.start
+            const startToEnd = range.compareBoundaryPoints(Range.START_TO_END, elementRange);
+            const endToStart = range.compareBoundaryPoints(Range.END_TO_START, elementRange);
+
+            if (startToEnd < 0 && endToStart > 0) {
+              segmentsToSelect.add(segmentIndex);
+            }
+          }
+        } catch (e) {
+          // Ignore comparison errors
+          console.debug('Range comparison error:', e);
+        }
+      });
+    }
+
+    if (segmentsToSelect.size > 0) {
+      setSelectedSegments(segmentsToSelect);
+    } else {
+      setSelectedSegments(new Set());
+    }
+  };
+
+  // Change speaker for selected segments
+  const changeSpeakerForSelectedSegments = (newSpeaker: string) => {
+    if (!transcription?.timestampedTranscript || selectedSegments.size === 0) {
+      console.log('Cannot change speaker - no transcript or segments selected');
+      return;
+    }
+
+    console.log(`Changing speaker for ${selectedSegments.size} segments to ${newSpeaker}`);
+
+    const updatedTranscript = [...transcription.timestampedTranscript];
+    selectedSegments.forEach(index => {
+      console.log(`Updating segment ${index} from ${updatedTranscript[index].speaker} to ${newSpeaker}`);
+      updatedTranscript[index] = {
+        ...updatedTranscript[index],
+        speaker: newSpeaker
+      };
+    });
+
+    setTranscription({
+      ...transcription,
+      timestampedTranscript: updatedTranscript
+    });
+
+    // Get speaker display name for toast
+    const speakerDisplayName = speakerNames[newSpeaker] || `Speaker ${newSpeaker.replace('S', '')}`;
+
+    // Show feedback
+    toast({
+      title: 'Speaker changed',
+      description: `${selectedSegments.size} segment${selectedSegments.size !== 1 ? 's' : ''} assigned to ${speakerDisplayName}`,
+    });
+
+    // Clear selection after changing
+    clearSelection();
+  };
+
+  // Change speaker for a specific segment
+  const changeSpeakerForSegment = (segmentIndex: number, newSpeaker: string) => {
+    if (!transcription?.timestampedTranscript) return;
+
+    const updatedTranscript = [...transcription.timestampedTranscript];
+    updatedTranscript[segmentIndex] = {
+      ...updatedTranscript[segmentIndex],
+      speaker: newSpeaker
+    };
+
+    setTranscription({
+      ...transcription,
+      timestampedTranscript: updatedTranscript
+    });
+  };
+
+  // Save speaker segment changes to database
+  const saveSpeakerSegmentChanges = async () => {
+    if (!transcription?.timestampedTranscript || !user) return;
+
+    try {
+      setSaving(true);
+
+      // If transcript is stored in Storage (large file), we need to use the API endpoint
+      if (transcription.transcriptStoragePath) {
+        console.log('[Save] Saving large transcript via API endpoint');
+        const token = await user.getIdToken();
+
+        const response = await fetch(`/api/transcriptions/${transcription.id}/transcript`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            timestampedTranscript: transcription.timestampedTranscript,
+            transcript: transcription.transcript
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save transcript to Storage');
+        }
+      } else {
+        // Small transcript - save directly to Firestore
+        console.log('[Save] Saving transcript to Firestore');
+        await updateTranscriptionStatus(transcription.id!, 'complete', {
+          timestampedTranscript: transcription.timestampedTranscript
+        });
+      }
+
+      setIsEditingSpeakerSegments(false);
+
+      toast({
+        title: 'Changes saved',
+        description: 'Speaker assignments have been updated successfully'
+      });
+
+    } catch (error) {
+      console.error('Error saving speaker changes:', error);
+      toast({
+        title: 'Save failed',
+        description: 'Unable to save speaker changes. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Get unique speakers from the transcript - calculate at component level
+  const getOrderedSpeakers = () => {
+    if (!transcription?.timestampedTranscript || transcription.timestampedTranscript.length === 0) {
+      return [];
+    }
+
+    const allSpeakers = [...new Set(
+      transcription.timestampedTranscript
+        .map(segment => segment.speaker)
+        .filter(speaker => speaker)
+    )];
+
+    const identifiedSpeakers = allSpeakers.filter(speaker => speaker !== 'UU').sort();
+
+    // Use speakerOrder for display, fallback to identifiedSpeakers if order not set
+    return speakerOrder.length > 0 ? speakerOrder : identifiedSpeakers;
+  };
+
+  const orderedSpeakers = getOrderedSpeakers();
+
   const renderTimestampedTranscript = () => {
     if (!transcription?.timestampedTranscript || transcription.timestampedTranscript.length === 0) {
       return (
@@ -406,9 +1037,6 @@ export default function TranscriptViewerPage() {
     if (speakerOrder.length === 0 && identifiedSpeakers.length > 0) {
       setSpeakerOrder(identifiedSpeakers);
     }
-
-    // Use speakerOrder for display, fallback to identifiedSpeakers if order not set
-    const orderedSpeakers = speakerOrder.length > 0 ? speakerOrder : identifiedSpeakers;
 
     // Helper function to detect paragraph breaks based on context
     const shouldBreakParagraph = (text: string, nextText?: string): boolean => {
@@ -562,9 +1190,53 @@ export default function TranscriptViewerPage() {
               <h4 className="text-sm font-semibold text-gray-700">
                 🎤 Speaker Detection Results
               </h4>
-              <p className="text-xs text-gray-500 italic">
-                Click to edit • Drag to reorder
-              </p>
+              <div className="flex items-center gap-3">
+                {isEditingSpeakerSegments ? (
+                  <Button
+                    onClick={saveSpeakerSegmentChanges}
+                    disabled={saving}
+                    size="sm"
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    {saving ? (
+                      <>
+                        <LoadingSpinner size="sm" className="mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3 w-3 mr-1" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setIsEditingSpeakerSegments(true)}
+                    size="sm"
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    Edit Speakers
+                  </Button>
+                )}
+                {isEditingSpeakerSegments && (
+                  <Button
+                    onClick={() => {
+                      setIsEditingSpeakerSegments(false);
+                      loadTranscription(); // Reload to discard changes
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <p className="text-xs text-gray-500 italic">
+                  Click to edit names • Drag to reorder
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {orderedSpeakers.map(speaker => (
@@ -632,42 +1304,314 @@ export default function TranscriptViewerPage() {
 
         {/* Transcript with Intelligent Paragraphs and Inline Timestamps */}
         <div className="space-y-6">
-          {processedSpeakerSegments.map((speakerSegment, index) => (
-            <div key={index} className="group">
-              {/* Speaker Label */}
-              {speakerSegment.speaker && (
-                <div className="flex items-center mb-4">
-                  <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speakerSegment.speaker)}`}>
-                    {getSpeakerDisplayName(speakerSegment.speaker)}
+          {isEditingSpeakerSegments ? (
+            // Edit mode: Show individual segments with speaker controls
+            <div className="space-y-2 relative">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-800">
+                  ✏️ <strong>Editing Speaker Assignments:</strong> Select any text (drag to highlight) and assign it to a speaker using the popup menu.
+                </p>
+              </div>
+
+
+              {/* Transcript Container with Text Selection */}
+              <div
+                ref={transcriptContainerRef}
+                onMouseUp={handleTextSelection}
+                onTouchEnd={handleTextSelection}
+                onKeyUp={(e) => {
+                  // Handle keyboard selection (Shift+Arrow keys)
+                  if (e.shiftKey) {
+                    handleTextSelection();
+                  }
+                }}
+                className="select-text user-select-text"
+                style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+              >
+                {transcription.timestampedTranscript.map((segment, index) => {
+                  // Check if this is the start of a new speaker block
+                  const isNewSpeaker = index === 0 || transcription.timestampedTranscript[index - 1].speaker !== segment.speaker;
+                  const isSelected = selectedSegments.has(index);
+
+                  return (
+                    <div
+                      key={index}
+                      data-segment-index={index}
+                      className={`relative rounded-lg transition-all border-2 ${
+                        isSelected
+                          ? 'bg-indigo-50 border-indigo-400 shadow-md'
+                          : 'border-transparent'
+                      } ${isNewSpeaker ? 'mt-4' : 'mt-1'}`}
+                    >
+                      <div className="p-3">
+                        {/* Show speaker label on new speaker blocks */}
+                        {isNewSpeaker && (
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(segment.speaker)}`}>
+                              {getSpeakerDisplayName(segment.speaker)}
+                            </div>
+                            <span className="text-xs text-gray-500 font-mono">
+                              {formatTimestamp(segment.start)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Segment text - selectable */}
+                        <div
+                          data-segment-text
+                          className={`text-gray-800 leading-relaxed ${isSelected ? 'font-medium' : ''} cursor-text`}
+                        >
+                          {segment.text}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : isEditing && transcription.timestampedTranscript ? (
+            // Edit mode: Make individual segments editable
+            <div className="space-y-2">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-green-800">
+                    ✏️ <strong>Editing Transcript:</strong> Click on any text segment to edit it inline. Changes will be saved when you click "Save Changes".
+                  </p>
+                  <Button
+                    onClick={() => setShowSearchPanel(!showSearchPanel)}
+                    size="sm"
+                    variant="outline"
+                    className="border-green-300 text-green-700 hover:bg-green-100"
+                  >
+                    <Search className="h-4 w-4 mr-1" />
+                    Search & Replace
+                  </Button>
+                </div>
+              </div>
+
+              {/* Search and Replace Panel */}
+              {showSearchPanel && (
+                <div className="bg-white border-2 border-blue-400 rounded-lg p-4 mb-4 shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                      <Search className="h-4 w-4 text-blue-600" />
+                      Search & Replace
+                    </h4>
+                    <button
+                      onClick={() => {
+                        setShowSearchPanel(false);
+                        setSearchMatches([]);
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Search input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Search for..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            performSearch();
+                          }
+                        }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <Button
+                        onClick={performSearch}
+                        size="sm"
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        Find All
+                      </Button>
+                    </div>
+
+                    {/* Replace input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Replace with..."
+                        value={replaceQuery}
+                        onChange={(e) => setReplaceQuery(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <Button
+                        onClick={replaceNext}
+                        size="sm"
+                        variant="outline"
+                        disabled={searchMatches.length === 0}
+                      >
+                        Replace
+                      </Button>
+                      <Button
+                        onClick={replaceAll}
+                        size="sm"
+                        className="bg-orange-600 text-white hover:bg-orange-700"
+                      >
+                        Replace All
+                      </Button>
+                    </div>
+
+                    {/* Search options and navigation */}
+                    <div className="flex items-center justify-between text-xs">
+                      <label className="flex items-center gap-1.5 text-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={caseSensitive}
+                          onChange={(e) => setCaseSensitive(e.target.checked)}
+                          className="rounded"
+                        />
+                        Case sensitive
+                      </label>
+
+                      {searchMatches.length > 0 && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-600 font-medium">
+                            {currentMatchIndex + 1} of {searchMatches.length} matches
+                          </span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => navigateToMatch('prev')}
+                              className="p-1 hover:bg-gray-100 rounded border border-gray-300"
+                              title="Previous match (Shift+Enter)"
+                            >
+                              <ChevronUp className="h-4 w-4 text-gray-600" />
+                            </button>
+                            <button
+                              onClick={() => navigateToMatch('next')}
+                              className="p-1 hover:bg-gray-100 rounded border border-gray-300"
+                              title="Next match (Enter)"
+                            >
+                              <ChevronDown className="h-4 w-4 text-gray-600" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Keyboard shortcuts hint */}
+                    <div className="text-xs text-gray-500 italic border-t pt-2">
+                      💡 Shortcuts: <kbd className="px-1 py-0.5 bg-gray-100 border rounded">Ctrl+F</kbd> to open,
+                      <kbd className="px-1 py-0.5 bg-gray-100 border rounded ml-1">Enter</kbd> next match,
+                      <kbd className="px-1 py-0.5 bg-gray-100 border rounded ml-1">Shift+Enter</kbd> previous,
+                      <kbd className="px-1 py-0.5 bg-gray-100 border rounded ml-1">Esc</kbd> to close
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Paragraphs with Inline Timestamps */}
-              <div className="pl-4 border-l-2 border-gray-200 space-y-4">
-                {speakerSegment.paragraphs.map((paragraph, paragraphIndex) => (
-                  <div key={paragraphIndex} className="text-gray-800 leading-relaxed">
-                    {paragraph.map((part, partIndex) => (
-                      <span key={partIndex}>
-                        {part.type === 'text' ? (
-                          part.content
-                        ) : (
-                          <button
-                            onClick={() => jumpToTime(part.time)}
-                            className="inline-flex items-center mx-2 text-[#003366] hover:text-[#004080] font-mono text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors cursor-pointer"
-                            title={`Jump to ${part.content}`}
-                          >
-                            [{part.content}]
-                          </button>
-                        )}
-                        {part.type === 'timestamp' && partIndex < paragraph.length - 1 && ' '}
-                      </span>
-                    ))}
+              {transcription.timestampedTranscript.map((segment, index) => {
+                const isNewSpeaker = index === 0 || transcription.timestampedTranscript![index - 1].speaker !== segment.speaker;
+                const isCurrentMatch = searchMatches.length > 0 && searchMatches[currentMatchIndex]?.segmentIndex === index;
+                const hasMatch = searchMatches.some(m => m.segmentIndex === index);
+
+                return (
+                  <div
+                    key={index}
+                    id={`segment-${index}`}
+                    className={`relative rounded-lg border-2 transition-all ${isNewSpeaker ? 'mt-4' : 'mt-1'} ${
+                      isCurrentMatch
+                        ? 'border-yellow-400 bg-yellow-50 shadow-lg'
+                        : hasMatch
+                        ? 'border-yellow-200 bg-yellow-25'
+                        : 'border-gray-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="p-3">
+                      {/* Show speaker label on new speaker blocks */}
+                      {isNewSpeaker && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(segment.speaker)}`}>
+                            {getSpeakerDisplayName(segment.speaker)}
+                          </div>
+                          <span className="text-xs text-gray-500 font-mono">
+                            {formatTimestamp(segment.start)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Editable segment text */}
+                      <div
+                        ref={(el) => {
+                          if (el && !el.dataset.initialized) {
+                            el.textContent = segment.text;
+                            el.dataset.initialized = 'true';
+                          }
+                        }}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => {
+                          // Track changes on input instead of blur for better UX
+                          const newText = e.currentTarget.textContent || '';
+                          console.log(`[Edit] Segment ${index} changed:`, { old: segment.text, new: newText });
+                          setEditedSegments(prev => ({
+                            ...prev,
+                            [index]: newText
+                          }));
+                        }}
+                        onBlur={(e) => {
+                          const newText = e.currentTarget.textContent || '';
+                          console.log(`[Edit] Segment ${index} blur:`, { old: segment.text, new: newText });
+                          // Ensure it's saved on blur
+                          setEditedSegments(prev => ({
+                            ...prev,
+                            [index]: newText
+                          }));
+                        }}
+                        className="text-gray-800 leading-relaxed outline-none focus:bg-yellow-50 rounded px-2 py-1 cursor-text min-h-[2rem]"
+                      />
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          ))}
+          ) : (
+            // View mode: Normal grouped display
+            processedSpeakerSegments.map((speakerSegment, index) => (
+              <div key={index} className="group">
+                {/* Speaker Label */}
+                {speakerSegment.speaker && (
+                  <div className="flex items-center mb-4">
+                    <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speakerSegment.speaker)}`}>
+                      {getSpeakerDisplayName(speakerSegment.speaker)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Paragraphs with Inline Timestamps */}
+                <div className="pl-4 border-l-2 border-gray-200 space-y-4">
+                  {speakerSegment.paragraphs.map((paragraph, paragraphIndex) => (
+                    <div key={paragraphIndex} className="text-gray-800 leading-relaxed">
+                      {paragraph.map((part, partIndex) => (
+                        <span key={partIndex}>
+                          {part.type === 'text' ? (
+                            part.content
+                          ) : (
+                            <button
+                              onClick={() => jumpToTime(part.time)}
+                              className="inline-flex items-center mx-2 text-[#003366] hover:text-[#004080] font-mono text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors cursor-pointer"
+                              title={`Jump to ${part.content}`}
+                            >
+                              [{part.content}]
+                            </button>
+                          )}
+                          {part.type === 'timestamp' && partIndex < paragraph.length - 1 && ' '}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     );
@@ -927,11 +1871,12 @@ export default function TranscriptViewerPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
           {/* Audio Player Section */}
           <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg text-[#003366]">Audio Player</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div className="sticky top-20 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg text-[#003366]">Audio Player</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                 {transcription.downloadURL ? (
                   <AudioPlayer
                     ref={audioPlayerRef}
@@ -973,9 +1918,74 @@ export default function TranscriptViewerPage() {
                     </div>
                   )}
                 </div>
+
               </CardContent>
             </Card>
+            </div>
           </div>
+
+          {/* Speaker Assignment Panel - Draggable floating panel */}
+          {isEditingSpeakerSegments && selectedSegments.size > 0 && (
+            <div
+              className="fixed w-80 z-50 animate-in slide-in-from-bottom duration-300"
+              style={{
+                left: `${panelPosition.x}px`,
+                top: `${panelPosition.y}px`,
+                cursor: isDragging ? 'grabbing' : 'default'
+              }}
+              onMouseDown={handlePanelMouseDown}
+            >
+              <Card className="shadow-2xl">
+                <CardContent className="p-4">
+                  <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-4 border-2 border-indigo-300">
+                    <div className="mb-3 drag-handle cursor-grab active:cursor-grabbing">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-indigo-900 mb-1">
+                            ✏️ Assign Selected Text
+                          </h3>
+                          <p className="text-xs text-indigo-700">
+                            {selectedSegments.size} segment{selectedSegments.size !== 1 ? 's' : ''} selected
+                          </p>
+                        </div>
+                        <div className="text-indigo-400">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Scrollable speaker buttons container */}
+                    <div className="max-h-[50vh] overflow-y-auto pr-1 space-y-2 scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-indigo-100">
+                      {orderedSpeakers.map(speaker => (
+                        <button
+                          key={speaker}
+                          onClick={() => {
+                            changeSpeakerForSelectedSegments(speaker);
+                            window.getSelection()?.removeAllRanges();
+                          }}
+                          className={`w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-left transition-all hover:scale-[1.02] hover:shadow-md ${getSpeakerColor(speaker)}`}
+                        >
+                          {getSpeakerDisplayName(speaker)}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        clearSelection();
+                        window.getSelection()?.removeAllRanges();
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 border border-gray-300 mt-2"
+                    >
+                      Cancel Selection
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Transcript Content */}
           <div className="lg:col-span-2">
@@ -984,24 +1994,38 @@ export default function TranscriptViewerPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg text-[#003366]">Transcript</CardTitle>
                   {isEditing && (
-                    <Button
-                      onClick={saveEdits}
-                      disabled={saving}
-                      className="bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400"
-                      size="sm"
-                    >
-                      {saving ? (
-                        <>
-                          <LoadingSpinner size="sm" className="mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          setIsEditing(false);
+                          setEditedSegments({});
+                          setEditedTranscript('');
+                        }}
+                        disabled={saving}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={saveEdits}
+                        disabled={saving}
+                        className="bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400"
+                        size="sm"
+                      >
+                        {saving ? (
+                          <>
+                            <LoadingSpinner size="sm" className="mr-2" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>
@@ -1025,36 +2049,21 @@ export default function TranscriptViewerPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {isEditing ? (
-                      <div>
-                        <textarea
-                          value={editedTranscript}
-                          onChange={(e) => setEditedTranscript(e.target.value)}
-                          className="w-full p-4 border rounded-md resize-none focus:ring-2 focus:ring-[#b29dd9] focus:border-[#b29dd9] outline-none"
-                          rows={20}
-                          placeholder="Enter or edit the transcript content here..."
-                        />
-                        <div className="mt-2 text-sm text-gray-500">
-                          Word count: {getWordCount(editedTranscript)}
-                        </div>
+                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                      <div className="prose max-w-none">
+                        {renderTimestampedTranscript()}
                       </div>
-                    ) : (
-                      <div className="bg-white rounded-lg border border-gray-200 p-6">
-                        <div className="prose max-w-none">
-                          {renderTimestampedTranscript()}
+                      {transcription.transcript && !isEditing && (
+                        <div className="mt-4 pt-4 border-t text-sm text-gray-500 flex justify-between items-center">
+                          <span>Word count: {getWordCount(transcription.transcript)}</span>
+                          {transcription.timestampedTranscript && transcription.timestampedTranscript.length > 0 && (
+                            <span className="text-[#003366]">
+                              📍 {transcription.timestampedTranscript.length} timestamped segments
+                            </span>
+                          )}
                         </div>
-                        {transcription.transcript && (
-                          <div className="mt-4 pt-4 border-t text-sm text-gray-500 flex justify-between items-center">
-                            <span>Word count: {getWordCount(transcription.transcript)}</span>
-                            {transcription.timestampedTranscript && transcription.timestampedTranscript.length > 0 && (
-                              <span className="text-[#003366]">
-                                📍 {transcription.timestampedTranscript.length} timestamped segments
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                     
                     {transcription.specialInstructions && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">

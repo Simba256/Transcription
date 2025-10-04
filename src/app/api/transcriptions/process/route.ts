@@ -150,7 +150,8 @@ export async function POST(request: NextRequest) {
           enableDiarization: true,
           enablePunctuation: true,
           speakerSensitivity: 0.6, // Higher sensitivity for better speaker detection
-          domain: transcriptionJob.domain || 'general' // Use domain for specialized vocabulary
+          domain: transcriptionJob.domain || 'general', // Use domain for specialized vocabulary
+          removeDisfluencies: !transcriptionJob.includeFiller // Remove filler words if includeFiller is false
         }
       );
     } else {
@@ -165,7 +166,8 @@ export async function POST(request: NextRequest) {
           enableDiarization: true,
           enablePunctuation: true,
           speakerSensitivity: 0.6, // Higher sensitivity for better speaker detection
-          domain: transcriptionJob.domain || 'general' // Use domain for specialized vocabulary
+          domain: transcriptionJob.domain || 'general', // Use domain for specialized vocabulary
+          removeDisfluencies: !transcriptionJob.includeFiller // Remove filler words if includeFiller is false
         }
       );
     }
