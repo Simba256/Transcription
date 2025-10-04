@@ -67,6 +67,8 @@ export default function TranscriptViewerPage() {
   const [timestampFrequency, setTimestampFrequency] = useState<30 | 60 | 300>(60); // 30s, 60s, 5min (300s)
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
+  const [speakerOrder, setSpeakerOrder] = useState<string[]>([]);
+  const [draggedSpeaker, setDraggedSpeaker] = useState<string | null>(null);
 
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
 
@@ -342,6 +344,45 @@ export default function TranscriptViewerPage() {
     setEditingSpeaker(null);
   };
 
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, speaker: string) => {
+    setDraggedSpeaker(speaker);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetSpeaker: string) => {
+    e.preventDefault();
+
+    if (!draggedSpeaker || draggedSpeaker === targetSpeaker) {
+      setDraggedSpeaker(null);
+      return;
+    }
+
+    setSpeakerOrder(prev => {
+      const newOrder = [...prev];
+      const draggedIndex = newOrder.indexOf(draggedSpeaker);
+      const targetIndex = newOrder.indexOf(targetSpeaker);
+
+      // Remove dragged speaker from old position
+      newOrder.splice(draggedIndex, 1);
+      // Insert at new position
+      newOrder.splice(targetIndex, 0, draggedSpeaker);
+
+      return newOrder;
+    });
+
+    setDraggedSpeaker(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSpeaker(null);
+  };
+
   const renderTimestampedTranscript = () => {
     if (!transcription?.timestampedTranscript || transcription.timestampedTranscript.length === 0) {
       return (
@@ -360,6 +401,14 @@ export default function TranscriptViewerPage() {
 
     const identifiedSpeakers = allSpeakers.filter(speaker => speaker !== 'UU').sort();
     const hasUnknownSpeakers = allSpeakers.includes('UU');
+
+    // Initialize speaker order if not set
+    if (speakerOrder.length === 0 && identifiedSpeakers.length > 0) {
+      setSpeakerOrder(identifiedSpeakers);
+    }
+
+    // Use speakerOrder for display, fallback to identifiedSpeakers if order not set
+    const orderedSpeakers = speakerOrder.length > 0 ? speakerOrder : identifiedSpeakers;
 
     // Helper function to detect paragraph breaks based on context
     const shouldBreakParagraph = (text: string, nextText?: string): boolean => {
@@ -514,12 +563,20 @@ export default function TranscriptViewerPage() {
                 🎤 Speaker Detection Results
               </h4>
               <p className="text-xs text-gray-500 italic">
-                Click speaker names to edit
+                Click to edit • Drag to reorder
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {identifiedSpeakers.map(speaker => (
-                <div key={speaker} className="relative group">
+              {orderedSpeakers.map(speaker => (
+                <div
+                  key={speaker}
+                  className="relative group"
+                  draggable={editingSpeaker !== speaker}
+                  onDragStart={(e) => handleDragStart(e, speaker)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, speaker)}
+                  onDragEnd={handleDragEnd}
+                >
                   {editingSpeaker === speaker ? (
                     <input
                       type="text"
@@ -550,8 +607,8 @@ export default function TranscriptViewerPage() {
                   ) : (
                     <button
                       onClick={() => setEditingSpeaker(speaker)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)} hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer`}
-                      title="Click to edit speaker name"
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${getSpeakerColor(speaker)} hover:ring-2 hover:ring-blue-400 transition-all ${draggedSpeaker === speaker ? 'opacity-50' : 'opacity-100'} ${editingSpeaker !== speaker ? 'cursor-move' : 'cursor-text'}`}
+                      title="Click to edit • Drag to reorder"
                     >
                       {getSpeakerDisplayName(speaker)}
                       <Edit3 className="inline-block ml-1 h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
