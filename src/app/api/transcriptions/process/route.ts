@@ -102,6 +102,12 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[API] Processing transcription job ${jobId} with mode: ${transcriptionJob.mode}`);
+    console.log(`[API] Job details:`, {
+      mode: transcriptionJob.mode,
+      duration: transcriptionJob.duration,
+      status: transcriptionJob.status,
+      hasDownloadURL: !!transcriptionJob.downloadURL
+    });
 
     // Ensure status is processing (in case it was failed and we're retrying)
     if (transcriptionJob.status === 'failed') {
@@ -110,12 +116,12 @@ export async function POST(request: NextRequest) {
 
     // Download the audio file from Firebase Storage
     const audioBuffer = await downloadAudioFile(transcriptionJob.downloadURL);
-    
+
     if (!audioBuffer) {
       await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: 'Failed to download audio file'
       });
-      
+
       return NextResponse.json(
         { error: 'Failed to download audio file' },
         { status: 500 }
@@ -124,9 +130,12 @@ export async function POST(request: NextRequest) {
 
     // Use webhook processing for longer files to avoid timeouts
     // Files longer than 5 minutes use webhook callback for async processing
-    const useWebhook = transcriptionJob.duration > 300; // 5 minutes
+    // If duration is missing/0/null, default to webhook mode for safety
+    const useWebhook = transcriptionJob.duration
+      ? transcriptionJob.duration > 300  // 5 minutes
+      : true; // Default to webhook if duration unknown (safer for long files)
 
-    console.log(`[API] File duration: ${transcriptionJob.duration}s, using ${useWebhook ? 'webhook' : 'synchronous'} processing`);
+    console.log(`[API] File duration: ${transcriptionJob.duration || 'unknown'}s, using ${useWebhook ? 'WEBHOOK' : 'SYNCHRONOUS'} processing`);
 
     let result;
     if (useWebhook) {

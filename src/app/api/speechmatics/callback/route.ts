@@ -4,21 +4,30 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('[Speechmatics Webhook] Received callback');
+    const url = new URL(request.url);
+    const jobIdParam = url.searchParams.get('jobId');
+    console.log('[Speechmatics Webhook] ========================================');
+    console.log('[Speechmatics Webhook] Received callback for jobId:', jobIdParam);
+    console.log('[Speechmatics Webhook] Full URL:', request.url);
 
     // Verify webhook token for security
-    const url = new URL(request.url);
     const token = url.searchParams.get('token');
     const expectedToken = process.env.SPEECHMATICS_WEBHOOK_TOKEN || 'default-webhook-secret';
 
     if (token !== expectedToken) {
-      console.error('[Speechmatics Webhook] Invalid token');
+      console.error('[Speechmatics Webhook] Invalid token. Expected:', expectedToken?.substring(0, 10) + '...', 'Got:', token?.substring(0, 10) + '...');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse the webhook payload
     const payload = await request.json();
-    console.log('[Speechmatics Webhook] Payload:', JSON.stringify(payload, null, 2));
+    console.log('[Speechmatics Webhook] Payload summary:', {
+      hasJob: !!payload.job,
+      jobId: payload.job?.id,
+      jobStatus: payload.job?.status,
+      hasResults: !!(payload.results && payload.results.length > 0),
+      resultsCount: payload.results?.length || 0
+    });
 
     const { job } = payload;
     if (!job?.id) {
