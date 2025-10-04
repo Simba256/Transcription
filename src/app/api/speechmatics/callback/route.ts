@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
 
           await jobDoc.ref.update({
             status: finalStatus,
-            transcript: transcriptData,
+            transcript: plainTextTranscript,
             timestampedTranscript: timestampedSegments,
             completedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()

@@ -402,7 +402,11 @@ export function TranscriptionQueue() {
                   {item.status === 'pending-review' && item.transcript && (
                     <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
                       <h4 className="font-medium text-blue-900 mb-2">AI Transcript (for review):</h4>
-                      <p className="text-sm text-blue-800">{item.transcript}</p>
+                      <p className="text-sm text-blue-800">
+                        {typeof item.transcript === 'string'
+                          ? item.transcript
+                          : '[Transcript data format issue - please view in modal]'}
+                      </p>
                     </div>
                   )}
 
@@ -476,7 +480,11 @@ export function TranscriptionQueue() {
                   <h4 className="font-medium text-[#003366] mb-2 text-sm sm:text-base">AI Transcript:</h4>
                   <div className="p-3 bg-gray-50 border rounded text-sm max-h-48 sm:max-h-64 overflow-y-auto">
                     <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm leading-relaxed">
-                      {selectedJob.transcript}
+                      {typeof selectedJob.transcript === 'string'
+                        ? selectedJob.transcript
+                        : (selectedJob.timestampedTranscript && Array.isArray(selectedJob.timestampedTranscript)
+                            ? selectedJob.timestampedTranscript.map(seg => seg.text).join(' ')
+                            : 'Unable to display transcript - data format issue')}
                     </pre>
                   </div>
                 </div>
