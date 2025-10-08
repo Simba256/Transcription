@@ -22,6 +22,7 @@ export interface TranscriptionJob {
   status: TranscriptionStatus;
   mode: TranscriptionMode;
   domain?: string; // Transcription domain (general, medical, legal, technical)
+  language?: string; // Transcription language (e.g., 'en', 'fr')
   duration: number; // in seconds (exact duration)
   minutesFromSubscription?: number; // Minutes covered by subscription (if any)
   creditsUsed: number; // Credits used for minutes not covered by subscription

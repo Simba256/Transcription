@@ -30,6 +30,7 @@ interface UploadFile {
 export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadFile[]>([]);
   const [transcriptionMode, setTranscriptionMode] = useState('ai');
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState('en');
   const [transcriptionDomain, setTranscriptionDomain] = useState<TranscriptionDomain>('general');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -369,6 +370,7 @@ export default function UploadPage() {
           status: initialStatus,
           mode: transcriptionMode as TranscriptionMode,
           domain: transcriptionDomain, // Include domain for specialized vocabulary
+          language: transcriptionLanguage, // Store language selection
           duration: uploadFile.duration, // Store duration in seconds
           minutesFromSubscription, // Track subscription minutes used
           creditsUsed: creditsForFile, // Track credits used (only for minutes not covered by subscription)
@@ -417,7 +419,7 @@ export default function UploadPage() {
             },
             body: JSON.stringify({
               jobId: jobId,
-              language: 'en', // You could make this configurable
+              language: transcriptionLanguage, // Use selected language
               operatingPoint: 'standard'
             })
           }).then(async (transcriptionResponse) => {
@@ -655,6 +657,70 @@ export default function UploadPage() {
               </RadioGroup>
             </CardContent>
           </Card>
+
+          {/* Language Selection (AI Mode Only) */}
+          {transcriptionMode === 'ai' && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-[#003366]">
+                  🌍 Transcription Language
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-2">
+                  Select the language of your audio/video file
+                </p>
+              </CardHeader>
+              <CardContent>
+                <RadioGroup value={transcriptionLanguage} onValueChange={setTranscriptionLanguage} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Label
+                    htmlFor="lang-en"
+                    className={`cursor-pointer border rounded-lg p-4 flex flex-col transition-colors ${
+                      transcriptionLanguage === 'en'
+                        ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
+                        : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 mb-2">
+                      <div className="text-2xl">🇨🇦</div>
+                      <h3 className="font-medium text-gray-900 flex-1">Canadian English</h3>
+                      <RadioGroupItem value="en" id="lang-en" />
+                    </div>
+                    <p className="text-sm text-gray-600">Transcribe Canadian English audio and video files</p>
+                  </Label>
+
+                  <Label
+                    htmlFor="lang-fr"
+                    className={`cursor-pointer border rounded-lg p-4 flex flex-col transition-colors ${
+                      transcriptionLanguage === 'fr'
+                        ? 'border-[#b29dd9] ring-2 ring-[#b29dd9] bg-[#b29dd9]/5'
+                        : 'border-gray-200 hover:border-[#b29dd9] hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 mb-2">
+                      <div className="text-2xl">🇫🇷</div>
+                      <h3 className="font-medium text-gray-900 flex-1">French</h3>
+                      <RadioGroupItem value="fr" id="lang-fr" />
+                    </div>
+                    <p className="text-sm text-gray-600">Transcrire des fichiers audio et vidéo en français</p>
+                  </Label>
+                </RadioGroup>
+
+                {/* Information box for French */}
+                {transcriptionLanguage === 'fr' && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-blue-600 mt-0.5">ℹ️</div>
+                      <div>
+                        <p className="text-sm text-blue-800 font-medium">French Transcription Active</p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Your audio will be transcribed in French with optimized language models for accurate French transcription.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Domain Selection for Medical/Legal Terminology */}
           <Card className="border-0 shadow-sm">

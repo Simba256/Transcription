@@ -24,6 +24,7 @@ export interface TranscriptionJob {
   status: TranscriptionStatus;
   mode: TranscriptionMode;
   domain?: TranscriptionDomain; // Domain for specialized vocabulary
+  language?: string; // Transcription language (e.g., 'en', 'fr')
   duration: number; // in seconds (exact duration)
   creditsUsed: number;
   specialInstructions?: string;
