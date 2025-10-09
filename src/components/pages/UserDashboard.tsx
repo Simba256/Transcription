@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
@@ -47,8 +46,10 @@ export function UserDashboard() {
 
   // Real transaction data now comes from CreditContext
 
-  // Demo user credits - in real implementation, this would come from userData
-  const userCredits = userData?.credits || 500;
+  // Wallet balance - combining legacy credits with wallet balance
+  const legacyCredits = userData?.credits || 0;
+  const existingWallet = userData?.walletBalance || 0;
+  const walletBalance = existingWallet + legacyCredits;
 
   // Calculate real average turnaround time from user's completed jobs
   const calculateAvgTurnaround = (jobs: TranscriptionJob[]) => {
@@ -106,7 +107,7 @@ export function UserDashboard() {
   const stats = {
     totalJobs: allJobs.length,
     completedJobs: allJobs.filter(j => j.status === 'complete').length,
-    creditsUsedThisMonth: allJobs.reduce((s, j) => s + (j.creditsUsed || 0), 0),
+    spentThisMonth: allJobs.reduce((s, j) => s + ((j.creditsUsed || 0) / 100), 0), // Convert credits to CAD (100 credits = $1)
     avgTurnaroundTime: calculateAvgTurnaround(allJobs)
   };
 
@@ -186,8 +187,8 @@ export function UserDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Available Credits</p>
-                  <CreditDisplay amount={userCredits} size="lg" />
+                  <p className="text-sm font-medium text-gray-600">Wallet Balance</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${walletBalance.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
                   <CreditCard className="h-6 w-6 text-white" />
@@ -265,12 +266,12 @@ export function UserDashboard() {
                 >
                   <Link href="/billing">
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Buy Credits
+                    Add Funds
                   </Link>
                 </Button>
 
                 {/* Credit Balance Alert */}
-                {userCredits < 100 && (
+                {walletBalance < 100 && (
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-start">
                       <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" />
@@ -279,7 +280,7 @@ export function UserDashboard() {
                           Low Credit Balance
                         </p>
                         <p className="text-sm text-yellow-700 mt-1">
-                          You have {userCredits} credits remaining. Consider purchasing more to avoid interruptions.
+                          Your wallet balance is low (CA${walletBalance}). Consider adding funds or purchasing a package to avoid interruptions.
                         </p>
                       </div>
                     </div>
@@ -333,8 +334,8 @@ export function UserDashboard() {
                              job.mode === 'hybrid' ? 'Hybrid Review' :
                              job.mode === 'human' ? 'Human Transcription' : job.mode}
                           </span>
-                          <span>{job.duration} min</span>
-                          <CreditDisplay amount={job.creditsUsed || 0} size="sm" />
+                          <span>{Math.ceil(job.duration / 60)} min</span>
+                          <span className="text-[#003366] font-medium">CA${((job.creditsUsed || 0) / 100).toFixed(2)}</span>
                         </div>
                       </div>
                       
@@ -402,14 +403,14 @@ export function UserDashboard() {
                     <div className={`font-medium ${
                       transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {transaction.amount > 0 ? '+' : ''}{transaction.amount} credits
+                      {transaction.amount > 0 ? '+' : ''}CA${Math.abs(transaction.amount).toFixed(2)}
                     </div>
                   </div>
                 ))}
                 
                 {transactions.length === 0 && (
                   <p className="text-gray-500 text-center py-8">
-                    No credit activity yet. Purchase credits to get started!
+                    No transaction history yet. Add funds or purchase a package to get started!
                   </p>
                 )}
               </div>

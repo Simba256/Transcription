@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { User, CreditCard, Settings, LogOut, Upload, BarChart3, MessageCircle } from 'lucide-react';
+import { User, CreditCard, Settings, LogOut, Upload, BarChart3, MessageCircle, HelpCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +77,12 @@ export function UserMenu() {
           <Link href="/profile" className="flex items-center text-gray-900 hover:bg-gray-100">
             <Settings className="mr-2 h-4 w-4 text-gray-600" />
             Profile
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/guide" className="flex items-center text-gray-900 hover:bg-gray-100">
+            <HelpCircle className="mr-2 h-4 w-4 text-gray-600" />
+            Guide
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

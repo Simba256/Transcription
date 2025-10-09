@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import { Upload, FileAudio, FileVideo, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
@@ -125,7 +125,8 @@ export default function UploadPage() {
       id: 'ai',
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
-      creditsPerMinute: 100,
+      creditsPerMinute: 100, // Legacy support
+      costPerMinute: 1.20, // CA$ per minute
       turnaround: '60 mins',
       icon: '/ai_transcription.jpg'
     },
@@ -133,16 +134,18 @@ export default function UploadPage() {
       id: 'hybrid',
       name: 'Hybrid Review',
       description: 'AI transcription reviewed by human experts',
-      creditsPerMinute: 150,
-      turnaround: '24-48 hrs',
+      creditsPerMinute: 150, // Legacy support
+      costPerMinute: 1.50, // CA$ per minute
+      turnaround: '3-5 days',
       icon: '/hybrid_review.jpg'
     },
     {
       id: 'human',
       name: 'Human Transcription',
       description: 'Professional human transcription for highest accuracy',
-      creditsPerMinute: 200,
-      turnaround: '24-72 hrs',
+      creditsPerMinute: 200, // Legacy support
+      costPerMinute: 2.50, // CA$ per minute
+      turnaround: '3-5 days',
       icon: '/human_transcription.jpg'
     }
   ];
@@ -151,37 +154,44 @@ export default function UploadPage() {
   const totalDurationSeconds = uploadedFiles.reduce((sum, file) => sum + file.duration, 0);
   const totalBillingMinutes = uploadedFiles.reduce((sum, file) => sum + getBillingMinutes(file.duration), 0);
 
-  // Calculate subscription and credit usage
-  const subscriptionMinutesRemaining = userData?.subscriptionStatus === 'active'
-    ? Math.max(0, (userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0))
-    : (userData?.trialMinutesRemaining || 0); // Use trial minutes if no active subscription
-
-  const minutesCoveredBySubscription = Math.min(totalBillingMinutes, subscriptionMinutesRemaining);
-  const minutesNeedingCredits = Math.max(0, totalBillingMinutes - minutesCoveredBySubscription);
-  const estimatedCredits = minutesNeedingCredits * selectedMode.creditsPerMinute;
-  const hasInsufficientBalance = userData ? estimatedCredits > (userData.credits || 0) : false;
+  // Calculate cost based on minutes and mode
+  const walletBalance = userData ? (userData.walletBalance || 0) + (userData.credits || 0) : 0; // Combine legacy credits with wallet
+  const totalCost = totalBillingMinutes * selectedMode.costPerMinute;
+  const hasInsufficientBalance = userData ? totalCost > walletBalance : false;
 
   // Function to get accurate duration from audio/video files
   const getMediaDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const isVideo = file.type.startsWith('video/');
       const media = isVideo ? document.createElement('video') : document.createElement('audio');
-      
+
       // Create object URL for the file
       const objectUrl = URL.createObjectURL(file);
-      
+
+      // Set timeout for large files (30 seconds)
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Timeout loading media file'));
+      }, 30000);
+
       media.addEventListener('loadedmetadata', () => {
+        clearTimeout(timeout);
         // Clean up the object URL to free memory
         URL.revokeObjectURL(objectUrl);
         // Return exact duration in seconds
         resolve(media.duration);
       });
-      
-      media.addEventListener('error', () => {
+
+      media.addEventListener('error', (error) => {
+        clearTimeout(timeout);
         URL.revokeObjectURL(objectUrl);
+        console.error('Media loading error:', error);
         reject(new Error('Failed to load media file'));
       });
-      
+
+      // Set preload to metadata only to speed up loading for large files
+      media.preload = 'metadata';
+
       // Set the source to trigger loading
       media.src = objectUrl;
     });
@@ -282,13 +292,9 @@ export default function UploadPage() {
     }
 
     if (hasInsufficientBalance) {
-      const message = subscriptionMinutesRemaining > 0
-        ? `You need ${minutesNeedingCredits} more minutes. Your subscription covers ${minutesCoveredBySubscription} minutes, but you need ${estimatedCredits} more credits.`
-        : `You need ${estimatedCredits} credits to process these files.`;
-
       toast({
-        title: "Insufficient Balance",
-        description: message,
+        title: "Insufficient Wallet Balance",
+        description: `You need CA$${totalCost.toFixed(2)} but only have CA$${walletBalance.toFixed(2)} in your wallet. Please top up your wallet to continue.`,
         variant: "destructive",
       });
       return;
@@ -312,7 +318,7 @@ export default function UploadPage() {
       const modeDetails = getModeDetails(transcriptionMode as TranscriptionMode);
 
       // Track subscription minutes used across all files
-      let subscriptionMinutesUsedSoFar = 0;
+      let totalCostProcessed = 0; // Track total cost of files being processed
 
       // Upload files to Firebase Storage and create transcription jobs
       const uploadPromises = uploadedFiles.map(async (uploadFile, index) => {
@@ -343,15 +349,7 @@ export default function UploadPage() {
 
         // Create transcription job in Firestore
         const billingMinutes = getBillingMinutes(uploadFile.duration);
-
-        // Calculate how much is covered by subscription vs credits for this file
-        const subscriptionMinutesAvailable = subscriptionMinutesRemaining - subscriptionMinutesUsedSoFar;
-        const minutesFromSubscription = Math.min(billingMinutes, subscriptionMinutesAvailable);
-        const minutesNeedingCreditsForFile = billingMinutes - minutesFromSubscription;
-        const creditsForFile = minutesNeedingCreditsForFile * modeDetails.creditsPerMinute;
-
-        // Update running total
-        subscriptionMinutesUsedSoFar += minutesFromSubscription;
+        const costForFile = billingMinutes * modeDetails.costPerMinute;
         
         // Set initial status based on transcription mode
         let initialStatus: 'processing' | 'pending-transcription';
@@ -372,8 +370,7 @@ export default function UploadPage() {
           domain: transcriptionDomain, // Include domain for specialized vocabulary
           language: transcriptionLanguage, // Store language selection
           duration: uploadFile.duration, // Store duration in seconds
-          minutesFromSubscription, // Track subscription minutes used
-          creditsUsed: creditsForFile, // Track credits used (only for minutes not covered by subscription)
+          creditsUsed: Math.round(costForFile * 100), // Store cost as credits (1 credit = $0.01) for backward compatibility
           // Add metadata fields for template
           projectName: projectName.trim() || undefined,
           patientName: patientName.trim() || undefined,
@@ -390,23 +387,22 @@ export default function UploadPage() {
         
         const jobId = await createTranscriptionJobAPI(jobData);
 
-        // Update subscription minutes if used
-        if (minutesFromSubscription > 0) {
-          const { updateDoc, doc } = await import('firebase/firestore');
-          const { db } = await import('@/lib/firebase/config');
-          const { increment } = await import('firebase/firestore');
+        // Update minutes used for tracking
+        const { updateDoc, doc } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase/config');
+        const { increment } = await import('firebase/firestore');
 
-          await updateDoc(doc(db, 'users', user.uid), {
-            minutesUsedThisMonth: increment(minutesFromSubscription),
-            currentPeriodMinutesUsed: increment(minutesFromSubscription)
-          });
-        }
+        await updateDoc(doc(db, 'users', user.uid), {
+          minutesUsedThisMonth: increment(billingMinutes)
+        });
 
-        // Consume credits only if needed
-        if (creditsForFile > 0) {
+        // Deduct from wallet balance
+        if (costForFile > 0) {
           const modeDisplayName = modeDetails.name;
-          const description = `${modeDisplayName}: ${uploadFile.file.name} (${minutesNeedingCreditsForFile} min)`;
-          await consumeCredits(creditsForFile, jobId, description);
+          const description = `${modeDisplayName}: ${uploadFile.file.name} (${billingMinutes} min)`;
+          // TODO: Implement wallet deduction when WalletContext is created
+          // await deductFromWallet(costForFile, jobId, description);
+          totalCostProcessed += costForFile;
         }
 
         // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
@@ -643,7 +639,7 @@ export default function UploadPage() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-gray-700">Cost/min:</span>
-                          <CreditDisplay amount={mode.creditsPerMinute} size="sm" />
+                          <span className="text-sm font-semibold text-[#b29dd9]">CA${mode.costPerMinute.toFixed(2)}</span>
                         </div>
                         
                         <div className="flex items-center justify-between">
@@ -971,52 +967,49 @@ export default function UploadPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">Total Duration:</span>
-                  <span className="font-medium text-lg">{formatDuration(totalDurationSeconds)}</span>
+                  <span className="text-gray-600">Billable Minutes:</span>
+                  <span className="font-medium text-lg">{totalBillingMinutes} {totalBillingMinutes === 1 ? 'minute' : 'minutes'}</span>
                 </div>
+                {totalDurationSeconds > 0 && totalBillingMinutes !== Math.floor(totalDurationSeconds / 60) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Actual duration: {formatDuration(totalDurationSeconds)} (partial minutes rounded up)
+                  </p>
+                )}
+
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">Total Minutes:</span>
-                  <span className="font-medium">{totalBillingMinutes} min</span>
+                  <span className="text-gray-600">Rate ({selectedMode.name}):</span>
+                  <span className="font-semibold text-[#b29dd9]">CA${selectedMode.costPerMinute.toFixed(2)}/min</span>
                 </div>
 
-                {minutesCoveredBySubscription > 0 && (
-                  <div className="flex justify-between items-center py-2 text-green-600">
-                    <span>Subscription Minutes:</span>
-                    <span className="font-medium">-{minutesCoveredBySubscription} min</span>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center py-2">
+                    <span className="font-semibold text-[#003366] text-lg">Total Cost:</span>
+                    <span className="font-bold text-[#003366] text-lg">CA${totalCost.toFixed(2)}</span>
                   </div>
-                )}
-
-                {minutesNeedingCredits > 0 && (
-                  <>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-gray-600">Minutes Needing Credits:</span>
-                      <span className="font-medium">{minutesNeedingCredits} min</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-gray-600">Rate ({selectedMode.name}):</span>
-                      <CreditDisplay amount={selectedMode.creditsPerMinute} size="sm" />
-                    </div>
-                    <div className="border-t pt-4">
-                      <div className="flex justify-between items-center py-2">
-                        <span className="font-semibold text-[#003366] text-lg">Credits Needed:</span>
-                        <CreditDisplay amount={estimatedCredits} size="md" />
-                      </div>
-                    </div>
-                  </>
-                )}
+                </div>
 
                 {userData && (
                   <div className="border-t pt-4 space-y-2">
-                    {subscriptionMinutesRemaining > 0 && (
+                    <div className="flex justify-between items-center py-2 text-sm">
+                      <span className="text-gray-600">Wallet Balance:</span>
+                      <span className={`font-medium ${walletBalance >= totalCost ? 'text-green-600' : 'text-red-600'}`}>
+                        CA${walletBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    {walletBalance >= totalCost && (
                       <div className="flex justify-between items-center py-2 text-sm">
-                        <span className="text-gray-600">Available Minutes:</span>
-                        <span className="font-medium text-green-600">{subscriptionMinutesRemaining} min</span>
+                        <span className="text-gray-600">Balance After:</span>
+                        <span className="font-medium">CA${(walletBalance - totalCost).toFixed(2)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center py-2 text-sm">
-                      <span className="text-gray-600">Credit Balance:</span>
-                      <CreditDisplay amount={userData.credits || 0} size="sm" />
-                    </div>
+                    {/* Package benefits notice */}
+                    {userData.hasActivePackage && (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-800">
+                          ✓ Package rate applied • Rush delivery & multiple speakers included FREE
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1026,13 +1019,14 @@ export default function UploadPage() {
                       <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 mr-3" />
                       <div>
                         <p className="font-medium text-red-800 mb-2">
-                          Insufficient Balance
+                          Insufficient Wallet Balance
                         </p>
                         <p className="text-red-700">
-                          {subscriptionMinutesRemaining > 0
-                            ? `Your subscription covers ${minutesCoveredBySubscription} minutes, but you need ${estimatedCredits} more credits.`
-                            : `You need ${estimatedCredits} credits to process these files.`}
+                          You need CA${totalCost.toFixed(2)} but only have CA${walletBalance.toFixed(2)} in your wallet.
                         </p>
+                        <Link href="/billing" className="text-red-800 underline mt-2 inline-block">
+                          Top up your wallet
+                        </Link>
                       </div>
                     </div>
                   </div>

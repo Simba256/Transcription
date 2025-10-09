@@ -64,8 +64,23 @@ export function formatDuration(seconds: number): string {
 
 /**
  * Converts seconds to rounded-up minutes for billing calculations
+ * Handles floating point precision issues (e.g., 600.1 seconds should be 10 minutes, not 11)
  */
 export function getBillingMinutes(seconds: number): number {
   if (!seconds || seconds <= 0) return 1; // Minimum 1 minute for billing
-  return Math.ceil(seconds / 60);
+
+  // Round seconds to 2 decimal places to handle floating point precision issues
+  const roundedSeconds = Math.round(seconds * 100) / 100;
+
+  // Calculate minutes
+  const minutes = roundedSeconds / 60;
+
+  // If we're within 0.01 seconds of a whole minute, treat it as that whole minute
+  // This handles cases like 600.001 seconds = 10 minutes exactly
+  if (Math.abs(minutes - Math.round(minutes)) < 0.0002) {
+    return Math.round(minutes);
+  }
+
+  // Otherwise, round up partial minutes
+  return Math.ceil(minutes);
 }

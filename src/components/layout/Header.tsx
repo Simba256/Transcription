@@ -42,28 +42,34 @@ export function Header() {
             </Link>
           </div>
 
-          {!user && (
-            <nav className="hidden md:flex items-center space-x-8">
+          <nav className="hidden md:flex items-center space-x-8">
+            <Link
+              href="/guide"
+              className="text-gray-600 hover:text-[#003366] transition-colors"
+            >
+              Guide
+            </Link>
+            {!user && (
               <Link
                 href="/pricing"
                 className="text-gray-600 hover:text-[#003366] transition-colors"
               >
                 Pricing
               </Link>
-              <Link
-                href="/about"
-                className="text-gray-600 hover:text-[#003366] transition-colors"
-              >
-                About
-              </Link>
-              <Link
-                href="/contact"
-                className="text-gray-600 hover:text-[#003366] transition-colors"
-              >
-                Contact
-              </Link>
-            </nav>
-          )}
+            )}
+            <Link
+              href="/about"
+              className="text-gray-600 hover:text-[#003366] transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="/contact"
+              className="text-gray-600 hover:text-[#003366] transition-colors"
+            >
+              Contact
+            </Link>
+          </nav>
 
           <div className="flex items-center space-x-4">
             {user ? (

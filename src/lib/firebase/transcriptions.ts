@@ -176,20 +176,23 @@ export const getModeDetails = (mode: TranscriptionMode) => {
     ai: {
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
-      creditsPerMinute: 100,
+      creditsPerMinute: 100, // Legacy support
+      costPerMinute: 1.20, // Pay as you go rate in CAD
       turnaround: '60 minutes'
     },
     hybrid: {
       name: 'Hybrid Review',
       description: 'AI transcription reviewed by human experts',
-      creditsPerMinute: 150,
-      turnaround: '24-48 hours'
+      creditsPerMinute: 150, // Legacy support
+      costPerMinute: 1.50, // Pay as you go rate in CAD
+      turnaround: '3-5 business days'
     },
     human: {
       name: 'Human Transcription',
       description: 'Professional human transcription for highest accuracy',
-      creditsPerMinute: 200,
-      turnaround: '24-72 hours'
+      creditsPerMinute: 200, // Legacy support
+      costPerMinute: 2.50, // Pay as you go rate in CAD
+      turnaround: '3-5 business days'
     }
   };
 

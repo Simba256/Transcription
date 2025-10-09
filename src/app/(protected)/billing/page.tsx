@@ -1,58 +1,90 @@
 "use client";
 
-import React, { useState } from 'react';
-import { CreditCard, Download, Clock, CheckCircle, ChevronLeft, ChevronRight, Repeat } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CreditCard, Download, Clock, CheckCircle, ChevronLeft, ChevronRight, Zap, Users, Check, Star, Wallet, Info, TrendingDown, Calendar, FileAudio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { StripeProvider } from '@/components/stripe/StripeProvider';
-import { StripePaymentForm } from '@/components/stripe/StripePaymentForm';
-import { SubscriptionPlanSelector } from '@/components/billing/SubscriptionPlanSelector';
-import { SubscriptionStatus } from '@/components/billing/SubscriptionStatus';
-import { UsageMeter } from '@/components/billing/UsageMeter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { secureApiClient } from '@/lib/secure-api-client';
-import { SubscriptionPlanId, SubscriptionStatus as Status } from '@/types/subscription';
 import { Timestamp } from 'firebase/firestore';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+
+// Declare stripe-pricing-table as a valid HTML element
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'stripe-pricing-table': React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & {
+          'pricing-table-id': string;
+          'publishable-key': string;
+          'customer-email'?: string;
+          'customer-session-client-secret'?: string;
+        },
+        HTMLElement
+      >;
+    }
+  }
+}
 
 export default function BillingPage() {
   const { user, userData } = useAuth();
   const { transactions, purchaseCredits } = useCredits();
   const { toast } = useToast();
-  const [purchasingPackage, setPurchasingPackage] = useState<string | null>(null);
-  const [paymentData, setPaymentData] = useState<{
-    clientSecret: string;
-    paymentIntentId: string;
-    packageInfo: typeof packages[0];
-  } | null>(null);
+  const [selectedTab, setSelectedTab] = useState('ai');
+  const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isProcessingSubscription, setIsProcessingSubscription] = useState(false);
-  const [showPlanSelector, setShowPlanSelector] = useState(false);
   const transactionsPerPage = 10;
 
-  // Extract subscription data from userData
-  const subscriptionPlan = (userData?.subscriptionPlan || 'none') as SubscriptionPlanId;
-  const subscriptionStatus = (userData?.subscriptionStatus || 'canceled') as Status;
+  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+
+  // Pricing table IDs from environment variables
+  const pricingTables = {
+    ai: process.env.NEXT_PUBLIC_STRIPE_PRICING_TABLE_1 || 'prctbl_1SEiiP2azdA2IqxcaPtq6mRI',
+    hybrid: process.env.NEXT_PUBLIC_STRIPE_PRICING_TABLE_2 || 'prctbl_1SEifq2azdA2IqxcF4aBRdRx',
+    human: process.env.NEXT_PUBLIC_STRIPE_PRICING_TABLE_3 || 'prctbl_1SEicm2azdA2Iqxcst8fSGne',
+  };
+
+  // Wallet payment links
+  const walletLinks = {
+    '50': 'https://buy.stripe.com/8x2bIUg2Cara5dA9ew7AI02',
+    '200': 'https://buy.stripe.com/dRmfZa7w642M8pMgGY7AI01',
+    '500': 'https://buy.stripe.com/28E6oAeYyara8pM8as7AI03'
+  };
+
+  useEffect(() => {
+    // Load Stripe Pricing Table script
+    if (typeof window !== 'undefined' && !scriptsLoaded) {
+      const script = document.createElement('script');
+      script.src = 'https://js.stripe.com/v3/pricing-table.js';
+      script.async = true;
+      script.onload = () => setScriptsLoaded(true);
+      document.body.appendChild(script);
+
+      return () => {
+        // Cleanup
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
+        }
+      };
+    }
+  }, [scriptsLoaded]);
+
+  // Extract user data
   const minutesUsed = userData?.minutesUsedThisMonth || 0;
-  const minutesReserved = userData?.minutesReserved || 0;
-  const includedMinutes = userData?.includedMinutesPerMonth || 0;
-  const credits = userData?.credits || 0;
-  const billingCycleEnd = userData?.billingCycleEnd
-    ? new Date((userData.billingCycleEnd as Timestamp).toMillis())
-    : null;
-  const currentPeriodEnd = userData?.currentPeriodEnd
-    ? new Date((userData.currentPeriodEnd as Timestamp).toMillis())
-    : null;
-  const trialEnd = userData?.trialEnd
-    ? new Date((userData.trialEnd as Timestamp).toMillis())
-    : null;
-  const cancelAtPeriodEnd = userData?.cancelAtPeriodEnd || false;
+  // Combine credits and wallet balance into a single wallet balance
+  const legacyCredits = userData?.credits || 0;
+  const existingWallet = userData?.walletBalance || 0;
+  const walletBalance = existingWallet + legacyCredits; // Combined balance
 
   // Calculate pagination
   const totalPages = Math.ceil(transactions.length / transactionsPerPage);
@@ -64,177 +96,124 @@ export default function BillingPage() {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  const packages = [
-    {
-      id: 'starter',
-      name: 'Starter Pack',
-      credits: 1000,
-      price: 10,
-      description: 'Perfect for individuals and small projects'
+  // Package information for display
+  const packageInfo = {
+    ai: {
+      name: 'AI Transcription',
+      icon: Zap,
+      description: 'Fast automated transcription (60 minute turnaround)',
+      standardRate: 1.20,
+      packages: [
+        {
+          minutes: 300,
+          price: 225,
+          rate: 0.75,
+          savings: 37.5,
+          bestFor: 'Individual creators',
+          estimatedFiles: '~10 podcasts',
+          validity: '30 days',
+          savingsAmount: 135
+        },
+        {
+          minutes: 750,
+          price: 488,
+          rate: 0.65,
+          savings: 46,
+          popular: true,
+          bestFor: 'Regular users',
+          estimatedFiles: '~25 interviews',
+          validity: '30 days',
+          savingsAmount: 412
+        },
+        {
+          minutes: 1500,
+          price: 900,
+          rate: 0.60,
+          savings: 50,
+          bestFor: 'Power users',
+          estimatedFiles: '~50 recordings',
+          validity: '30 days',
+          savingsAmount: 900
+        }
+      ]
     },
-    {
-      id: 'professional',
-      name: 'Professional Pack',
-      credits: 5000,
-      price: 45,
-      originalPrice: 50,
-      savings: '10% savings',
-      popular: true,
-      description: 'Most popular for businesses and professionals'
+    hybrid: {
+      name: 'Hybrid Review',
+      icon: Users,
+      description: 'AI + Human review (3-5 business days)',
+      standardRate: 1.50,
+      packages: [
+        {
+          minutes: 300,
+          price: 360,
+          rate: 1.20,
+          savings: 20,
+          bestFor: 'Quality-focused',
+          estimatedFiles: '~10 meetings',
+          validity: '30 days',
+          savingsAmount: 90
+        },
+        {
+          minutes: 750,
+          price: 862.50,
+          rate: 1.15,
+          savings: 23,
+          popular: true,
+          bestFor: 'Professionals',
+          estimatedFiles: '~25 sessions',
+          validity: '30 days',
+          savingsAmount: 262.50
+        },
+        {
+          minutes: 1500,
+          price: 1950,
+          rate: 1.30,
+          savings: 13,
+          bestFor: 'Businesses',
+          estimatedFiles: '~50 recordings',
+          validity: '30 days',
+          savingsAmount: 300
+        }
+      ]
     },
-    {
-      id: 'enterprise',
-      name: 'Enterprise Pack',
-      credits: 12000,
-      price: 100,
-      originalPrice: 120,
-      savings: '17% savings',
-      description: 'Best value for high-volume users'
-    }
-  ];
-
-  const handlePurchase = async (pkg: typeof packages[0]) => {
-    // Check if Stripe is configured
-    if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-      toast({
-        title: 'Payment system unavailable',
-        description: 'Payment processing is not configured. Please contact support.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setPurchasingPackage(pkg.id);
-    try {
-      // Create payment intent via backend
-      const resp = await secureApiClient.post('/api/billing/create-payment-intent', {
-        packageId: pkg.id,
-        amount: pkg.price,
-        credits: pkg.credits,
-        currency: 'cad'
-      });
-      setPaymentData({
-        clientSecret: resp.clientSecret!,
-        paymentIntentId: resp.paymentIntentId!,
-        packageInfo: pkg,
-      });
-    } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      toast({ title: 'Failed to start payment', description: errorMessage, variant: 'destructive' });
-    } finally {
-      setPurchasingPackage(null);
-    }
-  };
-
-  const handlePaymentSuccess = async (creditsAdded: number) => {
-    if (!paymentData || !user) return;
-    try {
-      // For this demo, finalize by recording a purchase and updating credits
-      await purchaseCredits(
-        paymentData.packageInfo.id,
-        creditsAdded,
-        paymentData.packageInfo.price
-      );
-      // No need to call refreshCredits() since purchaseCredits already updates user data
-      toast({
-        title: 'Purchase successful!',
-        description: `${creditsAdded} credits have been added to your account.`,
-      });
-      setPaymentData(null);
-    } catch (error) {
-      console.error('Payment confirmation error:', error);
-      toast({
-        title: 'Payment confirmation failed',
-        description: 'Please contact support if credits were not added.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handlePaymentCancel = () => {
-    setPaymentData(null);
-  };
-
-  // Subscription management functions
-  const handleSelectPlan = async (planId: SubscriptionPlanId) => {
-    setIsProcessingSubscription(true);
-    try {
-      // Create checkout session
-      const response = await secureApiClient.post('/api/subscriptions/checkout', {
-        planId
-      });
-
-      // The response is already the JSON object, not wrapped in .data
-      const checkoutUrl = (response as { url?: string }).url;
-
-      if (!checkoutUrl) {
-        console.error('Response:', response);
-        throw new Error('No checkout URL returned');
-      }
-
-      // Redirect to Stripe Checkout
-      window.location.href = checkoutUrl;
-    } catch (error) {
-      console.error('Subscription error:', error);
-      toast({
-        title: 'Subscription failed',
-        description: error instanceof Error ? error.message : 'Failed to start subscription',
-        variant: 'destructive'
-      });
-      setIsProcessingSubscription(false);
-    }
-    // Don't set loading to false here - we're redirecting away
-  };
-
-  const handleManageSubscription = () => {
-    setShowPlanSelector(true);
-  };
-
-  const handleCancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? You will still have access until the end of your billing period.')) {
-      return;
-    }
-
-    try {
-      await secureApiClient.post('/api/subscriptions/cancel', {
-        immediate: false
-      });
-
-      toast({
-        title: 'Subscription canceled',
-        description: 'Your subscription will end at the end of the current billing period.',
-      });
-
-      // Refresh user data
-      window.location.reload();
-    } catch (error) {
-      console.error('Cancel error:', error);
-      toast({
-        title: 'Cancellation failed',
-        description: error instanceof Error ? error.message : 'Failed to cancel subscription',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleReactivateSubscription = async () => {
-    try {
-      await secureApiClient.post('/api/subscriptions/reactivate', {});
-
-      toast({
-        title: 'Subscription reactivated',
-        description: 'Your subscription has been reactivated successfully.',
-      });
-
-      // Refresh user data
-      window.location.reload();
-    } catch (error) {
-      console.error('Reactivate error:', error);
-      toast({
-        title: 'Reactivation failed',
-        description: error instanceof Error ? error.message : 'Failed to reactivate subscription',
-        variant: 'destructive'
-      });
+    human: {
+      name: '100% Human',
+      icon: Check,
+      description: 'Professional human transcription (3-5 business days)',
+      standardRate: 2.50,
+      packages: [
+        {
+          minutes: 300,
+          price: 750,
+          rate: 2.50,
+          savings: 0,
+          bestFor: 'Legal/Medical',
+          estimatedFiles: '~10 depositions',
+          validity: '30 days',
+          savingsAmount: 0
+        },
+        {
+          minutes: 750,
+          price: 1725,
+          rate: 2.30,
+          savings: 8,
+          popular: true,
+          bestFor: 'Agencies',
+          estimatedFiles: '~25 interviews',
+          validity: '30 days',
+          savingsAmount: 150
+        },
+        {
+          minutes: 1500,
+          price: 3150,
+          rate: 2.10,
+          savings: 16,
+          bestFor: 'Enterprises',
+          estimatedFiles: '~50 recordings',
+          validity: '30 days',
+          savingsAmount: 600
+        }
+      ]
     }
   };
 
@@ -248,331 +227,476 @@ export default function BillingPage() {
       return;
     }
 
-    // Prepare CSV data
-    const headers = ['Date', 'Type', 'Description', 'Amount (Credits)', 'Job ID'];
-    const csvData = transactions.map(transaction => [
-      transaction.createdAt.toLocaleDateString(),
-      transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1),
-      transaction.description,
-      transaction.amount.toString(),
-      transaction.jobId || ''
-    ]);
-
     // Create CSV content
+    const headers = ['Date', 'Type', 'Amount', 'Description'];
+    const rows = transactions.map(tx => {
+      const date = tx.createdAt instanceof Date ? tx.createdAt.toISOString() : tx.createdAt;
+      return [
+        date,
+        tx.type,
+        tx.amount.toString(),
+        tx.description
+      ];
+    });
+
     const csvContent = [
       headers.join(','),
-      ...csvData.map(row => row.map(field => 
-        // Escape fields containing commas, quotes, or newlines
-        /[",\n\r]/.test(field) ? `"${field.replace(/"/g, '""')}"` : field
-      ).join(','))
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `transaction_history_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download CSV
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
 
     toast({
       title: "Export successful",
-      description: "Transaction history has been exported to CSV.",
+      description: "Your transaction history has been downloaded.",
     });
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50">
       <Header />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#003366] mb-2">
-            Billing & Subscriptions
-          </h1>
-          <p className="text-gray-600">
-            Manage your subscription, usage, and credit balance.
-          </p>
+          <h1 className="text-3xl font-bold text-[#003366]">Billing & Wallet</h1>
+          <p className="text-gray-600 mt-2">Purchase transcription minutes and manage your wallet balance</p>
         </div>
 
-        {/* Plan Selector Modal */}
-        {showPlanSelector && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-            <div className="bg-white rounded-lg max-w-full sm:max-w-3xl lg:max-w-5xl xl:max-w-7xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto my-4">
-              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 sm:p-6 flex items-center justify-between">
-                <h2 className="text-xl sm:text-2xl font-bold text-[#003366]">
-                  Select a Subscription Plan
-                </h2>
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowPlanSelector(false)}
-                  className="text-gray-500 hover:text-gray-700 flex-shrink-0"
-                >
-                  ✕ <span className="hidden sm:inline ml-1">Close</span>
-                </Button>
-              </div>
-              <div className="p-4 sm:p-6">
-                <SubscriptionPlanSelector
-                  currentPlan={subscriptionPlan}
-                  onSelectPlan={handleSelectPlan}
-                  isProcessing={isProcessingSubscription}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* How It Works Section */}
+        <Alert className="mb-8 border-blue-200 bg-blue-50">
+          <Info className="h-4 w-4" />
+          <AlertTitle>How Our Prepaid System Works</AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            <p>1. <strong>Add funds to your wallet</strong> or purchase discounted minute packages</p>
+            <p>2. <strong>Upload files for transcription</strong> - costs are automatically deducted from your wallet</p>
+            <p>3. <strong>Save with packages</strong> - Get up to 50% off PLUS free add-ons (rush delivery & multiple speakers included!)</p>
+            <p className="text-sm text-gray-600 mt-3">
+              <strong>Package Benefits:</strong> Better rates + FREE add-ons | <strong>Wallet Top-up:</strong> Standard rates + add-ons cost extra
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              Standard rates: AI $1.20/min • Hybrid $1.50/min • Human $2.50/min
+            </p>
+          </AlertDescription>
+        </Alert>
 
-        {/* Tabs for different sections */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <Repeat className="h-4 w-4" />
-              Overview
+        {/* Account Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <Card className="border-0 shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Wallet Balance
+              </CardTitle>
+              <Wallet className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-[#003366]">CA${walletBalance.toFixed(2)}</div>
+              <p className="text-xs text-gray-500 mt-1">Available for all transcriptions</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">
+                Minutes Used This Month
+              </CardTitle>
+              <Clock className="h-4 w-4 text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-[#003366]">{minutesUsed}</div>
+              <p className="text-xs text-gray-500 mt-1">Reset on billing cycle</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Purchase Options - Only 2 tabs now */}
+        <Tabs defaultValue="packages" className="space-y-4">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="packages" className="relative">
+              Minute Packages
+              <span className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                BEST VALUE
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="credits" className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              Buy Credits
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              History
-            </TabsTrigger>
+            <TabsTrigger value="wallet">Wallet Top-Up</TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            {/* Subscription Status */}
-            <SubscriptionStatus
-              subscriptionPlan={subscriptionPlan}
-              subscriptionStatus={subscriptionStatus}
-              currentPeriodEnd={currentPeriodEnd}
-              trialEnd={trialEnd}
-              cancelAtPeriodEnd={cancelAtPeriodEnd}
-              onManageSubscription={handleManageSubscription}
-              onCancelSubscription={handleCancelSubscription}
-              onReactivateSubscription={handleReactivateSubscription}
-            />
-
-            {/* Usage Meter */}
-            <UsageMeter
-              subscriptionPlan={subscriptionPlan}
-              minutesUsed={minutesUsed}
-              minutesReserved={minutesReserved}
-              includedMinutes={includedMinutes}
-              billingCycleEnd={billingCycleEnd}
-              credits={credits}
-            />
-          </TabsContent>
-
-          {/* Credits Tab */}
-          <TabsContent value="credits" className="space-y-6">
-            {/* Current Balance Card */}
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold text-[#003366] mb-2">
-                      Credit Balance
-                    </h2>
-                    <CreditDisplay amount={credits} size="lg" />
-                    <p className="text-sm text-gray-600 mt-2">
-                      Used for overages and non-subscription modes
-                    </p>
-                  </div>
-                  <div className="w-16 h-16 bg-[#b29dd9] rounded-full flex items-center justify-center">
-                    <CreditCard className="h-8 w-8 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Credit Packages */}
-            <Card className="border-0 shadow-sm">
+          {/* Minute Packages Tab */}
+          <TabsContent value="packages" className="space-y-4">
+            <Card className="border-0 shadow">
               <CardHeader>
-                <CardTitle className="text-2xl font-bold text-[#003366]">
-                  Purchase Credits
-                </CardTitle>
+                <CardTitle className="text-xl">Discounted Minute Packages</CardTitle>
+                <p className="text-sm text-gray-600">Save up to 50% when you purchase minutes in bulk</p>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {packages.map((pkg) => (
-                    <div
-                      key={pkg.id}
-                      className={`border-2 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col ${
-                        pkg.popular ? 'border-[#b29dd9]' : 'border-gray-200'
-                      }`}
-                    >
-                      <div className={`${pkg.popular ? 'bg-[#b29dd9] text-white' : 'bg-gray-50 text-gray-400'} text-center py-2 text-sm font-medium rounded-t-md`}>
-                        {pkg.popular ? 'Most Popular' : '\u00A0'}
+                <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3 mb-6">
+                    <TabsTrigger value="ai" className="flex items-center justify-center gap-1">
+                      <Zap className="h-4 w-4" />
+                      <span className="hidden sm:inline">AI</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="hybrid" className="flex items-center justify-center gap-1">
+                      <Users className="h-4 w-4" />
+                      <span className="hidden sm:inline">Hybrid</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="human" className="flex items-center justify-center gap-1">
+                      <Check className="h-4 w-4" />
+                      <span className="hidden sm:inline">Human</span>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {Object.entries(packageInfo).map(([key, info]) => (
+                    <TabsContent key={key} value={key}>
+                      <div className="text-center mb-6">
+                        <h3 className="text-lg font-semibold text-[#003366]">{info.name} Packages</h3>
+                        <p className="text-sm text-gray-600 mt-1">{info.description}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Standard rate: CA${info.standardRate.toFixed(2)}/minute
+                        </p>
                       </div>
 
-                      <div className="text-center flex-1 px-6 py-6">
-                        <h3 className="text-xl font-bold text-[#003366] mb-2">
-                          {pkg.name}
-                        </h3>
-                        <p className="text-gray-600 text-sm leading-relaxed">{pkg.description}</p>
-
-                        <div className="mt-4">
-                          <div className="flex items-center justify-center space-x-2 flex-wrap">
-                            <span className="text-3xl font-bold text-[#003366] whitespace-nowrap">
-                              CA${pkg.price}
-                            </span>
-                            {pkg.originalPrice && (
-                              <span className="text-lg text-gray-400 line-through whitespace-nowrap">
-                                CA${pkg.originalPrice}
-                              </span>
+                      {/* Package cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        {info.packages.map((pkg, idx) => (
+                          <Card key={idx} className={`border ${pkg.popular ? 'border-[#b29dd9] shadow-lg scale-105' : 'border-gray-200'} relative`}>
+                            {pkg.popular && (
+                              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#b29dd9] text-white text-xs font-semibold px-4 py-1 rounded-full">
+                                MOST POPULAR
+                              </div>
                             )}
-                          </div>
-                          <div className="text-green-600 font-medium text-sm mt-1 min-h-[1.25rem]">
-                            {pkg.savings || '\u00A0'}
-                          </div>
+                            <CardContent className="p-6">
+                              {/* Best for badge */}
+                              <div className="text-center mb-4">
+                                <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full">
+                                  {pkg.bestFor}
+                                </span>
+                              </div>
+
+                              {/* Minutes and price */}
+                              <div className="text-center mb-4">
+                                <div className="text-2xl font-bold text-[#003366]">
+                                  {pkg.minutes.toLocaleString()} minutes
+                                </div>
+                                <div className="text-3xl font-bold text-[#003366] mt-2">
+                                  CA${pkg.price}
+                                </div>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  CA${pkg.rate.toFixed(2)}/minute
+                                </div>
+                              </div>
+
+                              {/* Savings */}
+                              {pkg.savings > 0 ? (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                                  <div className="text-green-700 font-semibold text-sm">
+                                    Save {pkg.savings}%
+                                  </div>
+                                  <div className="text-green-600 text-xs mt-1">
+                                    CA${pkg.savingsAmount} off standard rate
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                                  <div className="text-gray-700 font-semibold text-sm">
+                                    Standard Rate
+                                  </div>
+                                  <div className="text-gray-600 text-xs mt-1">
+                                    No bulk discount
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Additional info */}
+                              <div className="space-y-2 text-xs text-gray-600">
+                                <div className="flex items-center justify-between">
+                                  <span className="flex items-center gap-1">
+                                    <FileAudio className="h-3 w-3" />
+                                    Estimate:
+                                  </span>
+                                  <span className="font-medium">{pkg.estimatedFiles}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    Valid for:
+                                  </span>
+                                  <span className="font-medium">{pkg.validity}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="flex items-center gap-1">
+                                    <TrendingDown className="h-3 w-3" />
+                                    Vs. standard:
+                                  </span>
+                                  <span className="font-medium text-green-600">
+                                    -{((info.standardRate - pkg.rate) / info.standardRate * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* What's included */}
+                              <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="text-xs space-y-1">
+                                  <div className="text-gray-700 font-semibold mb-1">All packages include:</div>
+                                  <div className="text-gray-600">✓ {info.description.split('(')[0].trim()}</div>
+                                  <div className="text-gray-600">✓ Export to DOCX & PDF</div>
+                                  <div className="text-gray-600">✓ Speaker detection</div>
+                                  {(key === 'hybrid' || key === 'human') && (
+                                    <>
+                                      <div className="text-green-600 font-medium">✓ FREE Rush delivery</div>
+                                      <div className="text-green-600 font-medium">✓ FREE Multiple speakers</div>
+                                      <div className="text-xs text-gray-500 italic mt-1">
+                                        (Save up to CA$0.75/min on add-ons)
+                                      </div>
+                                    </>
+                                  )}
+                                  {key === 'ai' && (
+                                    <div className="text-gray-500 italic mt-1">
+                                      Rush delivery not needed (60 min turnaround)
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {scriptsLoaded && publishableKey && (
+                        <div className="stripe-pricing-table-container">
+                          <stripe-pricing-table
+                            pricing-table-id={pricingTables[key as keyof typeof pricingTables]}
+                            publishable-key={publishableKey}
+                            customer-email={user?.email || undefined}
+                          />
                         </div>
-                      </div>
-
-                      <div className="text-center pb-6 px-6">
-                        <CreditDisplay amount={pkg.credits} size="md" className="justify-center mb-6" />
-
-                        <Button
-                          onClick={() => handlePurchase(pkg)}
-                          disabled={purchasingPackage === pkg.id}
-                          className={`w-full ${
-                            pkg.popular
-                              ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
-                              : 'bg-[#003366] hover:bg-[#002244]'
-                          } text-white`}
-                        >
-                          {purchasingPackage === pkg.id ? (
-                            <>
-                              <LoadingSpinner size="sm" className="mr-2" />
-                              Setting up payment...
-                            </>
-                          ) : (
-                            'Purchase'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                      )}
+                    </TabsContent>
                   ))}
-                </div>
+                </Tabs>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Transaction History Tab */}
-          <TabsContent value="history">
-            <Card className="border-0 shadow-sm">
+          {/* Wallet Top-Up Tab */}
+          <TabsContent value="wallet" className="space-y-4">
+            <Card className="border-0 shadow">
+              <CardHeader>
+                <CardTitle className="text-xl">Add Funds to Wallet</CardTitle>
+                <p className="text-sm text-gray-600">
+                  Quick top-up for pay-as-you-go transcriptions at standard rates
+                </p>
+              </CardHeader>
+              <CardContent>
+                <Alert className="mb-6">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Important:</strong> Wallet top-ups use pay-as-you-go rates and add-ons cost extra.
+                    <br />
+                    <strong>Save more with packages</strong> - they include FREE rush delivery & multiple speakers for Hybrid/Human!
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => window.open(walletLinks['50'], '_blank')}>
+                    <CardContent className="p-6 text-center">
+                      <div className="text-3xl font-bold text-[#003366] mb-2">
+                        CA$50
+                      </div>
+                      <p className="text-gray-600 mb-2">Quick Start</p>
+                      <p className="text-xs text-gray-500">
+                        ~41 AI minutes<br/>
+                        ~33 Hybrid minutes<br/>
+                        ~20 Human minutes
+                      </p>
+                      <Button className="w-full mt-4 bg-[#003366] hover:bg-[#002244] text-white">
+                        Add to Wallet
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => window.open(walletLinks['200'], '_blank')}>
+                    <CardContent className="p-6 text-center">
+                      <div className="text-3xl font-bold text-[#003366] mb-2">
+                        CA$200
+                      </div>
+                      <p className="text-gray-600 mb-2">Standard</p>
+                      <p className="text-xs text-gray-500">
+                        ~166 AI minutes<br/>
+                        ~133 Hybrid minutes<br/>
+                        ~80 Human minutes
+                      </p>
+                      <Button className="w-full mt-4 bg-[#003366] hover:bg-[#002244] text-white">
+                        Add to Wallet
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => window.open(walletLinks['500'], '_blank')}>
+                    <CardContent className="p-6 text-center">
+                      <div className="text-3xl font-bold text-[#003366] mb-2">
+                        CA$500
+                      </div>
+                      <p className="text-gray-600 mb-2">Professional</p>
+                      <p className="text-xs text-gray-500">
+                        ~416 AI minutes<br/>
+                        ~333 Hybrid minutes<br/>
+                        ~200 Human minutes
+                      </p>
+                      <Button className="w-full mt-4 bg-[#003366] hover:bg-[#002244] text-white">
+                        Add to Wallet
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-[#003366] mb-2">Standard Per-Minute Rates:</h4>
+                  <div className="space-y-1 text-sm text-gray-700">
+                    <div className="flex justify-between">
+                      <span>AI Transcription:</span>
+                      <span className="font-semibold">CA$1.20/minute</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Hybrid (AI + Human):</span>
+                      <span className="font-semibold">CA$1.50/minute</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>100% Human:</span>
+                      <span className="font-semibold">CA$2.50/minute</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <h4 className="font-semibold text-orange-900 mb-2">⚠️ Add-On Charges (Pay-as-you-go only):</h4>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li>• Rush delivery (24-48 hours): <strong>+CA$0.50/min</strong> (Hybrid) or <strong>+CA$0.75/min</strong> (Human)</li>
+                    <li>• Multiple speakers (3+): <strong>+CA$0.25/min</strong> (Hybrid) or <strong>+CA$0.30/min</strong> (Human)</li>
+                  </ul>
+                  <p className="text-xs text-orange-800 mt-2 font-medium">
+                    💡 These add-ons are FREE with all Hybrid & Human packages!
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Transaction History */}
+        <Card className="mt-8 border-0 shadow">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-xl font-semibold text-[#003366]">
-              Transaction History
-            </CardTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <div>
+              <CardTitle>Transaction History</CardTitle>
+              <p className="text-sm text-gray-600 mt-1">Your recent purchases and usage</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleExportTransactions}
-              className="text-[#b29dd9] hover:text-[#9d87c7]"
             >
-              <Download className="mr-2 h-4 w-4" />
-              Export
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
             </Button>
           </CardHeader>
           <CardContent>
-            {transactions.length > 0 ? (
+            {currentTransactions.length > 0 ? (
               <>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {currentTransactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        transaction.type === 'purchase' ? 'bg-green-100' :
-                        transaction.type === 'consumption' ? 'bg-blue-100' :
-                        transaction.type === 'refund' ? 'bg-yellow-100' :
-                        'bg-gray-100'
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2 rounded-full ${
+                          transaction.type === 'purchase'
+                            ? 'bg-green-100'
+                            : 'bg-blue-100'
+                        }`}>
+                          {transaction.type === 'purchase' ? (
+                            <CreditCard className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {transaction.description}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {transaction.createdAt instanceof Date
+                              ? transaction.createdAt.toLocaleDateString()
+                              : new Date(transaction.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className={`text-sm font-medium ${
+                        transaction.type === 'purchase'
+                          ? 'text-green-600'
+                          : 'text-gray-900'
                       }`}>
-                        {transaction.type === 'purchase' && (
-                          <CreditCard className="h-5 w-5 text-green-600" />
-                        )}
-                        {transaction.type === 'consumption' && (
-                          <Clock className="h-5 w-5 text-blue-600" />
-                        )}
-                        {transaction.type === 'refund' && (
-                          <CheckCircle className="h-5 w-5 text-yellow-600" />
-                        )}
-                        {transaction.type === 'adjustment' && (
-                          <CreditCard className="h-5 w-5 text-gray-600" />
-                        )}
-                      </div>
-                      
-                      <div>
-                        <p className="font-medium text-[#003366]">
-                          {transaction.description}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {transaction.createdAt.toLocaleDateString()} at {transaction.createdAt.toLocaleTimeString()}
-                        </p>
+                        {transaction.type === 'purchase' ? '+CA$' : '-'}
+                        {transaction.amount}{transaction.type === 'purchase' ? '' : ' minutes'}
                       </div>
                     </div>
-                    
-                    <div className={`font-medium ${
-                      transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {transaction.amount > 0 ? '+' : ''}{transaction.amount} credits
-                    </div>
-                  </div>
                   ))}
                 </div>
 
-                {/* Pagination Controls */}
+                {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-                    <div className="text-sm text-gray-600">
-                      Showing {startIndex + 1} to {Math.min(endIndex, transactions.length)} of {transactions.length} transactions
+                  <div className="flex items-center justify-between mt-6">
+                    <div className="text-sm text-gray-700">
+                      Showing {startIndex + 1} to {Math.min(endIndex, transactions.length)} of{' '}
+                      {transactions.length} transactions
                     </div>
-
                     <div className="flex items-center space-x-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => goToPage(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="flex items-center"
                       >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
+                        <ChevronLeft className="h-4 w-4" />
                       </Button>
-
-                      <div className="flex items-center space-x-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => goToPage(page)}
-                            className={`w-8 h-8 p-0 ${
-                              currentPage === page
-                                ? 'bg-[#b29dd9] hover:bg-[#9d87c7] text-white'
-                                : 'text-[#003366] hover:bg-gray-50'
-                            }`}
-                          >
-                            {page}
-                          </Button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(page => {
+                          return page === 1 ||
+                                 page === totalPages ||
+                                 (page >= currentPage - 1 && page <= currentPage + 1);
+                        })
+                        .map((page, index, array) => (
+                          <React.Fragment key={page}>
+                            {index > 0 && array[index - 1] !== page - 1 && (
+                              <span className="text-gray-400">...</span>
+                            )}
+                            <Button
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => goToPage(page)}
+                              className={currentPage === page ? "bg-[#003366]" : ""}
+                            >
+                              {page}
+                            </Button>
+                          </React.Fragment>
                         ))}
-                      </div>
-
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => goToPage(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="flex items-center"
                       >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
+                        <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -580,32 +704,16 @@ export default function BillingPage() {
               </>
             ) : (
               <div className="text-center py-12">
-                <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No transactions yet
-                </h3>
-                <p className="text-gray-600">
-                  Your credit purchases and usage will appear here.
+                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500">No transactions yet</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  Your purchase history will appear here
                 </p>
               </div>
             )}
           </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* Stripe Payment Modal */}
-      {paymentData && (
-        <StripeProvider clientSecret={paymentData.clientSecret}>
-          <StripePaymentForm
-            clientSecret={paymentData.clientSecret}
-            packageInfo={paymentData.packageInfo}
-            onSuccess={handlePaymentSuccess}
-            onCancel={handlePaymentCancel}
-          />
-        </StripeProvider>
-      )}
+        </Card>
+      </main>
 
       <Footer />
     </div>
