@@ -152,7 +152,8 @@ export async function POST(request: NextRequest) {
           speakerSensitivity: 0.6, // Higher sensitivity for better speaker detection
           domain: transcriptionJob.domain || 'general', // Use domain for specialized vocabulary
           removeDisfluencies: !transcriptionJob.includeFiller // Remove filler words if includeFiller is false
-        }
+        },
+        request // Pass the request object for dynamic URL detection
       );
     } else {
       // Use synchronous processing for shorter files
@@ -288,22 +289,39 @@ async function processTranscriptionWithWebhook(
   jobId: string,
   audioBuffer: Buffer,
   filename: string,
-  speechmaticsConfig: Record<string, unknown>
+  speechmaticsConfig: Record<string, unknown>,
+  request?: NextRequest
 ): Promise<{ success: boolean; speechmaticsJobId?: string; error?: string }> {
   try {
     console.log(`[API] Starting webhook-based processing for job ${jobId}`);
 
-    // Create callback URL with job reference
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!baseUrl) {
-      console.error('[API] NEXT_PUBLIC_APP_URL is not configured, using fallback');
-      // Only use localhost in development
-      const fallbackUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3002' : '';
-      if (!fallbackUrl) {
-        throw new Error('NEXT_PUBLIC_APP_URL must be configured in production');
+    // Determine the base URL dynamically
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+    // Try to get the actual domain from request headers (for server-side)
+    if (request) {
+      const host = request.headers.get('host');
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
+      if (host) {
+        baseUrl = `${protocol}://${host}`;
+        console.log(`[API] Using dynamic URL from request headers: ${baseUrl}`);
       }
-      return { success: false, error: 'Application URL not configured' };
     }
+
+    // Fallback logic
+    if (!baseUrl) {
+      console.error('[API] Unable to determine base URL for webhook callback');
+      // Only use localhost in development
+      if (process.env.NODE_ENV === 'development') {
+        baseUrl = 'http://localhost:3002';
+        console.log('[API] Using development fallback URL: http://localhost:3002');
+      } else {
+        return { success: false, error: 'Application URL not configured - webhook callback will fail' };
+      }
+    }
+
+    console.log(`[API] Using base URL for Speechmatics webhook: ${baseUrl}`);
+
     const webhookToken = process.env.SPEECHMATICS_WEBHOOK_TOKEN || 'default-webhook-secret';
     const callbackUrl = `${baseUrl}/api/speechmatics/callback?token=${webhookToken}&jobId=${jobId}`;
 
