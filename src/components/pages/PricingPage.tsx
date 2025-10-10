@@ -8,6 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { usePackages } from '@/contexts/PackageContext';
+import { TranscriptionPackage } from '@/lib/firebase/packages';
 
 // Declare stripe-pricing-table as a valid HTML element
 declare global {
@@ -26,194 +29,16 @@ declare global {
 
 export function PricingPage() {
   const [selectedTab, setSelectedTab] = useState('ai');
+  const { activePackages, loading } = usePackages();
 
-  // Pricing data from CSV files
-  const pricingPlans = {
-    ai: [
-      {
-        name: 'AI Light',
-        minutes: 300,
-        price: 225,
-        pricePerMinute: 0.75,
-        description: 'Perfect for individuals and small projects',
-        features: [
-          '300 AI minutes included',
-          'Fast automated transcription (60 min turnaround)',
-          'Speaker detection & diarization',
-          'Transcript editor with search',
-          'DOCX & PDF export',
-          'English & French support',
-          'Standard email support'
-        ]
-      },
-      {
-        name: 'AI Pro',
-        minutes: 750,
-        price: 488,
-        originalPrice: 562.50,
-        pricePerMinute: 0.65,
-        savings: 'Save CA$74.50',
-        description: 'Most popular for regular users',
-        popular: true,
-        features: [
-          '750 AI minutes included',
-          'Fast automated transcription (60 min turnaround)',
-          'Speaker detection & diarization',
-          'Advanced transcript editor',
-          'DOCX & PDF export',
-          'English & French support',
-          'Priority email support',
-          'Bulk file upload (up to 10 files)'
-        ]
-      },
-      {
-        name: 'AI Enterprise',
-        minutes: 1500,
-        price: 900,
-        originalPrice: 1125,
-        pricePerMinute: 0.60,
-        savings: 'Save CA$225',
-        description: 'Best value for high-volume users',
-        features: [
-          '1,500 AI minutes included',
-          'Fast automated transcription (60 min turnaround)',
-          'Speaker detection & diarization',
-          'Advanced transcript editor',
-          'DOCX & PDF export',
-          'English & French support',
-          'Dedicated support team',
-          'Unlimited bulk uploads',
-          'Custom export templates'
-        ]
-      }
-    ],
-    hybrid: [
-      {
-        name: 'Hybrid Light',
-        minutes: 300,
-        price: 360,
-        pricePerMinute: 1.20,
-        description: 'Great for important recordings',
-        features: [
-          '300 minutes included',
-          'AI + Human review',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '98%+ accuracy guarantee',
-          'Professional formatting',
-          'DOCX & PDF export',
-          'Email support'
-        ]
-      },
-      {
-        name: 'Hybrid Pro',
-        minutes: 750,
-        price: 862.50,
-        originalPrice: 900,
-        pricePerMinute: 1.15,
-        savings: 'Save CA$37.50',
-        description: 'Ideal for business professionals',
-        popular: true,
-        features: [
-          '750 minutes included',
-          'AI + Human review',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '98%+ accuracy guarantee',
-          'Professional formatting',
-          'Priority processing available',
-          'Phone & email support',
-          'Custom vocabulary support'
-        ]
-      },
-      {
-        name: 'Hybrid Enterprise',
-        minutes: 1500,
-        price: 1950,
-        originalPrice: 2250,
-        pricePerMinute: 1.30,
-        savings: 'Save CA$300',
-        description: 'Perfect for organizations',
-        features: [
-          '1,500 minutes included',
-          'AI + Human review',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '98%+ accuracy guarantee',
-          'Professional formatting',
-          'Priority processing included',
-          'Dedicated account manager',
-          'Custom vocabulary & formatting',
-          'Volume discount on add-ons'
-        ]
-      }
-    ],
-    human: [
-      {
-        name: 'Human Light',
-        minutes: 300,
-        price: 750,
-        pricePerMinute: 2.50,
-        description: 'Professional transcription for critical content',
-        features: [
-          '300 minutes included',
-          '100% human transcription',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '99%+ accuracy guarantee',
-          'Verbatim or clean read',
-          'Professional formatting',
-          'Time-coding included',
-          'Email support'
-        ]
-      },
-      {
-        name: 'Human Pro',
-        minutes: 750,
-        price: 1725,
-        originalPrice: 1875,
-        pricePerMinute: 2.30,
-        savings: 'Save CA$150',
-        description: 'For legal, medical, and media professionals',
-        popular: true,
-        features: [
-          '750 minutes included',
-          '100% human transcription',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '99%+ accuracy guarantee',
-          'Verbatim or clean read',
-          'Professional formatting',
-          'Time-coding included',
-          'Priority processing available',
-          'Industry-specific formatting'
-        ]
-      },
-      {
-        name: 'Human Enterprise',
-        minutes: 1500,
-        price: 3150,
-        originalPrice: 3750,
-        pricePerMinute: 2.10,
-        savings: 'Save CA$600',
-        description: 'Maximum accuracy for enterprise needs',
-        features: [
-          '1,500 minutes included',
-          '100% human transcription',
-          '3-5 business days turnaround',
-          '1-2 speakers included',
-          '99%+ accuracy guarantee',
-          'Verbatim or clean read',
-          'Professional formatting',
-          'Time-coding included',
-          'Dedicated transcription team',
-          'Custom style guides',
-          'Quality assurance review'
-        ]
-      }
-    ]
+  // Group packages by type
+  const packagesByType = {
+    ai: activePackages.filter(pkg => pkg.type === 'ai').sort((a, b) => a.minutes - b.minutes),
+    hybrid: activePackages.filter(pkg => pkg.type === 'hybrid').sort((a, b) => a.minutes - b.minutes),
+    human: activePackages.filter(pkg => pkg.type === 'human').sort((a, b) => a.minutes - b.minutes)
   };
 
+  // Add-ons data
   const addOns = [
     {
       type: 'Rush Delivery',
@@ -228,6 +53,34 @@ export function PricingPage() {
       human: '+$0.30/minute'
     }
   ];
+
+  const getTypeInfo = (type: string) => {
+    switch (type) {
+      case 'ai':
+        return {
+          title: 'AI Transcription Packages',
+          subtitle: 'Fast, automated transcription delivered within 60 minutes',
+          icon: Zap,
+          label: 'AI Transcription'
+        };
+      case 'hybrid':
+        return {
+          title: 'Hybrid Transcription Packages',
+          subtitle: 'AI transcription with human review - delivered in 3-5 business days',
+          icon: Users,
+          label: 'Hybrid (AI + Human)'
+        };
+      case 'human':
+        return {
+          title: '100% Human Transcription Packages',
+          subtitle: 'Professional human transcription - delivered in 3-5 business days',
+          icon: Check,
+          label: '100% Human'
+        };
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -259,253 +112,124 @@ export function PricingPage() {
       {/* Main Pricing Section with Tabs */}
       <section className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-            <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 mb-12">
-              <TabsTrigger value="ai" className="flex items-center justify-center">
-                <Zap className="h-4 w-4 mr-2" />
-                AI Transcription
-              </TabsTrigger>
-              <TabsTrigger value="hybrid" className="flex items-center justify-center">
-                <Users className="h-4 w-4 mr-2" />
-                Hybrid (AI + Human)
-              </TabsTrigger>
-              <TabsTrigger value="human" className="flex items-center justify-center">
-                <Check className="h-4 w-4 mr-2" />
-                100% Human
-              </TabsTrigger>
-            </TabsList>
+          {loading ? (
+            <div className="flex justify-center items-center py-24">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : (
+            <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+              <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 mb-12">
+                <TabsTrigger value="ai" className="flex items-center justify-center">
+                  <Zap className="h-4 w-4 mr-2" />
+                  AI Transcription
+                </TabsTrigger>
+                <TabsTrigger value="hybrid" className="flex items-center justify-center">
+                  <Users className="h-4 w-4 mr-2" />
+                  Hybrid (AI + Human)
+                </TabsTrigger>
+                <TabsTrigger value="human" className="flex items-center justify-center">
+                  <Check className="h-4 w-4 mr-2" />
+                  100% Human
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="ai">
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-[#003366] mb-2">AI Transcription Packages</h3>
-                <p className="text-gray-600">Fast, automated transcription delivered within 60 minutes</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {pricingPlans.ai.map((plan, index) => (
-                  <Card
-                    key={index}
-                    className={`relative border-0 shadow-lg hover:shadow-xl transition-shadow flex flex-col h-full ${
-                      plan.popular ? 'ring-2 ring-[#b29dd9] scale-105' : ''
-                    }`}
-                  >
-                    {plan.popular && (
-                      <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <div className="bg-[#b29dd9] text-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
-                          <Star className="h-4 w-4 mr-1" />
-                          Most Popular
-                        </div>
+              {Object.entries(packagesByType).map(([type, packages]) => (
+                <TabsContent key={type} value={type}>
+                  {packages.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No packages available at the moment.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-center mb-8">
+                        <h3 className="text-2xl font-bold text-[#003366] mb-2">
+                          {getTypeInfo(type)?.title}
+                        </h3>
+                        <p className="text-gray-600">
+                          {getTypeInfo(type)?.subtitle}
+                        </p>
                       </div>
-                    )}
 
-                    <CardHeader className="text-center pb-4">
-                      <CardTitle className="text-2xl font-bold text-[#003366]">
-                        {plan.name}
-                      </CardTitle>
-                      <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
-                      <p className="text-xs text-gray-500 mt-2">{plan.minutes} minutes included</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {packages.map((pkg) => (
+                          <Card
+                            key={pkg.id}
+                            className={`relative border-0 shadow-lg hover:shadow-xl transition-shadow flex flex-col h-full ${
+                              pkg.popular ? 'ring-2 ring-[#b29dd9] scale-105' : ''
+                            }`}
+                          >
+                            {pkg.popular && (
+                              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                                <div className="bg-[#b29dd9] text-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
+                                  <Star className="h-4 w-4 mr-1" />
+                                  Most Popular
+                                </div>
+                              </div>
+                            )}
 
-                      <div className="mt-4">
-                        <div className="flex items-center justify-center space-x-2">
-                          <span className="text-4xl font-bold text-[#003366]">
-                            CA${plan.price}
-                          </span>
-                          {plan.originalPrice && (
-                            <span className="text-lg text-gray-400 line-through">
-                              CA${plan.originalPrice}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          CA${plan.pricePerMinute}/minute
-                        </div>
-                        {plan.savings && (
-                          <div className="text-green-600 font-medium text-sm mt-2">
-                            {plan.savings}
-                          </div>
-                        )}
-                      </div>
-                    </CardHeader>
+                            <CardHeader className="text-center pb-4">
+                              <CardTitle className="text-2xl font-bold text-[#003366]">
+                                {pkg.name}
+                              </CardTitle>
+                              <p className="text-sm text-gray-600 mt-1">{pkg.description}</p>
+                              <p className="text-xs text-gray-500 mt-2">{pkg.minutes} minutes included</p>
 
-                    <CardContent className="pt-0 flex-1 flex flex-col">
-                      <ul className="space-y-2 mb-8 flex-1">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-start">
-                            <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                            <span className="text-gray-600 text-sm">{feature}</span>
-                          </li>
+                              <div className="mt-4">
+                                <div className="flex items-center justify-center space-x-2">
+                                  <span className="text-4xl font-bold text-[#003366]">
+                                    CA${pkg.price}
+                                  </span>
+                                  {pkg.savingsPercentage > 0 && (
+                                    <span className="text-lg text-gray-400 line-through">
+                                      CA${(pkg.standardRate * pkg.minutes).toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-500 mt-1">
+                                  CA${pkg.perMinuteRate.toFixed(2)}/minute
+                                </div>
+                                {pkg.savingsPercentage > 0 && (
+                                  <div className="text-green-600 font-medium text-sm mt-2">
+                                    Save CA${pkg.savingsAmount.toFixed(2)} ({pkg.savingsPercentage.toFixed(0)}%)
+                                  </div>
+                                )}
+                              </div>
+                            </CardHeader>
+
+                            <CardContent className="pt-0 flex-1 flex flex-col">
+                              <ul className="space-y-2 mb-8 flex-1">
+                                {pkg.features.map((feature, idx) => (
+                                  <li key={idx} className="flex items-start">
+                                    <Check className={`h-5 w-5 ${
+                                      feature.includes('FREE') ? 'text-green-500' : 'text-green-500'
+                                    } mr-2 flex-shrink-0 mt-0.5`} />
+                                    <span className={`text-gray-600 text-sm ${
+                                      feature.includes('FREE') ? 'font-medium' : ''
+                                    }`}>{feature}</span>
+                                  </li>
+                                ))}
+                              </ul>
+
+                              <Button
+                                asChild
+                                className={`w-full mt-auto ${
+                                  pkg.popular
+                                    ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
+                                    : 'bg-[#003366] hover:bg-[#002244]'
+                                } text-white`}
+                              >
+                                <Link href="/signup">Sign Up Now</Link>
+                              </Button>
+                            </CardContent>
+                          </Card>
                         ))}
-                      </ul>
-
-                      <Button
-                        asChild
-                        className={`w-full mt-auto ${
-                          plan.popular
-                            ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
-                            : 'bg-[#003366] hover:bg-[#002244]'
-                        } text-white`}
-                      >
-                        <Link href="/signup">Sign Up Now</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="hybrid">
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-[#003366] mb-2">Hybrid Transcription Packages</h3>
-                <p className="text-gray-600">AI transcription with human review - delivered in 3-5 business days</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {pricingPlans.hybrid.map((plan, index) => (
-                  <Card
-                    key={index}
-                    className={`relative border-0 shadow-lg hover:shadow-xl transition-shadow flex flex-col h-full ${
-                      plan.popular ? 'ring-2 ring-[#b29dd9] scale-105' : ''
-                    }`}
-                  >
-                    {plan.popular && (
-                      <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <div className="bg-[#b29dd9] text-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
-                          <Star className="h-4 w-4 mr-1" />
-                          Most Popular
-                        </div>
                       </div>
-                    )}
-
-                    <CardHeader className="text-center pb-4">
-                      <CardTitle className="text-2xl font-bold text-[#003366]">
-                        {plan.name}
-                      </CardTitle>
-                      <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
-                      <p className="text-xs text-gray-500 mt-2">{plan.minutes} minutes included</p>
-
-                      <div className="mt-4">
-                        <div className="flex items-center justify-center space-x-2">
-                          <span className="text-4xl font-bold text-[#003366]">
-                            CA${plan.price}
-                          </span>
-                          {plan.originalPrice && (
-                            <span className="text-lg text-gray-400 line-through">
-                              CA${plan.originalPrice}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          CA${plan.pricePerMinute}/minute
-                        </div>
-                        {plan.savings && (
-                          <div className="text-green-600 font-medium text-sm mt-2">
-                            {plan.savings}
-                          </div>
-                        )}
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="pt-0 flex-1 flex flex-col">
-                      <ul className="space-y-2 mb-8 flex-1">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-start">
-                            <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                            <span className="text-gray-600 text-sm">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      <Button
-                        asChild
-                        className={`w-full mt-auto ${
-                          plan.popular
-                            ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
-                            : 'bg-[#003366] hover:bg-[#002244]'
-                        } text-white`}
-                      >
-                        <Link href="/signup">Sign Up Now</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="human">
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-[#003366] mb-2">100% Human Transcription Packages</h3>
-                <p className="text-gray-600">Professional human transcription - delivered in 3-5 business days</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {pricingPlans.human.map((plan, index) => (
-                  <Card
-                    key={index}
-                    className={`relative border-0 shadow-lg hover:shadow-xl transition-shadow flex flex-col h-full ${
-                      plan.popular ? 'ring-2 ring-[#b29dd9] scale-105' : ''
-                    }`}
-                  >
-                    {plan.popular && (
-                      <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <div className="bg-[#b29dd9] text-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
-                          <Star className="h-4 w-4 mr-1" />
-                          Most Popular
-                        </div>
-                      </div>
-                    )}
-
-                    <CardHeader className="text-center pb-4">
-                      <CardTitle className="text-2xl font-bold text-[#003366]">
-                        {plan.name}
-                      </CardTitle>
-                      <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
-                      <p className="text-xs text-gray-500 mt-2">{plan.minutes} minutes included</p>
-
-                      <div className="mt-4">
-                        <div className="flex items-center justify-center space-x-2">
-                          <span className="text-4xl font-bold text-[#003366]">
-                            CA${plan.price}
-                          </span>
-                          {plan.originalPrice && (
-                            <span className="text-lg text-gray-400 line-through">
-                              CA${plan.originalPrice}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          CA${plan.pricePerMinute}/minute
-                        </div>
-                        {plan.savings && (
-                          <div className="text-green-600 font-medium text-sm mt-2">
-                            {plan.savings}
-                          </div>
-                        )}
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="pt-0 flex-1 flex flex-col">
-                      <ul className="space-y-2 mb-8 flex-1">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-start">
-                            <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                            <span className="text-gray-600 text-sm">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      <Button
-                        asChild
-                        className={`w-full mt-auto ${
-                          plan.popular
-                            ? 'bg-[#b29dd9] hover:bg-[#9d87c7]'
-                            : 'bg-[#003366] hover:bg-[#002244]'
-                        } text-white`}
-                      >
-                        <Link href="/signup">Sign Up Now</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-          </Tabs>
+                    </>
+                  )}
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
         </div>
       </section>
 
@@ -735,9 +459,21 @@ export function PricingPage() {
                 </tr>
                 <tr className="border-b">
                   <td className="p-4 font-semibold">Package Starting Price</td>
-                  <td className="p-4 text-center font-bold text-[#b29dd9]">CA$0.60/min</td>
-                  <td className="p-4 text-center font-bold text-[#b29dd9]">CA$1.15/min</td>
-                  <td className="p-4 text-center font-bold text-[#b29dd9]">CA$2.10/min</td>
+                  <td className="p-4 text-center font-bold text-[#b29dd9]">
+                    {packagesByType.ai.length > 0 ?
+                      `CA$${Math.min(...packagesByType.ai.map(p => p.perMinuteRate)).toFixed(2)}/min` :
+                      'N/A'}
+                  </td>
+                  <td className="p-4 text-center font-bold text-[#b29dd9]">
+                    {packagesByType.hybrid.length > 0 ?
+                      `CA$${Math.min(...packagesByType.hybrid.map(p => p.perMinuteRate)).toFixed(2)}/min` :
+                      'N/A'}
+                  </td>
+                  <td className="p-4 text-center font-bold text-[#b29dd9]">
+                    {packagesByType.human.length > 0 ?
+                      `CA$${Math.min(...packagesByType.human.map(p => p.perMinuteRate)).toFixed(2)}/min` :
+                      'N/A'}
+                  </td>
                 </tr>
                 <tr className="border-b bg-gray-50">
                   <td className="p-4 font-semibold">Pay As You Go Price</td>

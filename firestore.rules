@@ -217,6 +217,15 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Packages collection (for pricing tiers and minute bundles)
+    match /packages/{packageId} {
+      // Anyone can read packages (needed for public pricing page)
+      allow read: if true;
+
+      // Only admins can create, update, or delete packages
+      allow create, update, delete: if isAdmin();
+    }
+
     // Remove the overly permissive demo rule - demo users should follow same rules
     // Demo users are identified by email in other rules, not by bypassing security
   }

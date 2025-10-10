@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/Footer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
+import { usePackages } from '@/contexts/PackageContext';
 import { secureApiClient } from '@/lib/secure-api-client';
 import { Timestamp } from 'firebase/firestore';
 import SecureCheckoutButton from '@/components/billing/SecureCheckoutButton';
@@ -40,6 +41,7 @@ declare global {
 export default function BillingPage() {
   const { user, userData } = useAuth();
   const { transactions, purchaseCredits } = useCredits();
+  const { activePackages, loading: packagesLoading } = usePackages();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState('ai');
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
@@ -48,6 +50,13 @@ export default function BillingPage() {
 
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
   const isTestMode = publishableKey.includes('pk_test');
+
+  // Group packages by type from Firebase
+  const packagesByType = {
+    ai: activePackages.filter(pkg => pkg.type === 'ai').sort((a, b) => a.minutes - b.minutes),
+    hybrid: activePackages.filter(pkg => pkg.type === 'hybrid').sort((a, b) => a.minutes - b.minutes),
+    human: activePackages.filter(pkg => pkg.type === 'human').sort((a, b) => a.minutes - b.minutes)
+  };
 
   // Pricing table IDs - different for test and live mode
   const pricingTables = isTestMode ? {
@@ -110,124 +119,32 @@ export default function BillingPage() {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  // Package information for display
-  const packageInfo = {
-    ai: {
-      name: 'AI Transcription',
-      icon: Zap,
-      description: 'Fast automated transcription (60 minute turnaround)',
-      standardRate: 1.20,
-      packages: [
-        {
-          minutes: 300,
-          price: 225,
-          rate: 0.75,
-          savings: 37.5,
-          bestFor: 'Individual creators',
-          estimatedFiles: '~10 podcasts',
-          validity: '30 days',
-          savingsAmount: 135
-        },
-        {
-          minutes: 750,
-          price: 488,
-          rate: 0.65,
-          savings: 46,
-          popular: true,
-          bestFor: 'Regular users',
-          estimatedFiles: '~25 interviews',
-          validity: '30 days',
-          savingsAmount: 412
-        },
-        {
-          minutes: 1500,
-          price: 900,
-          rate: 0.60,
-          savings: 50,
-          bestFor: 'Power users',
-          estimatedFiles: '~50 recordings',
-          validity: '30 days',
-          savingsAmount: 900
-        }
-      ]
-    },
-    hybrid: {
-      name: 'Hybrid Review',
-      icon: Users,
-      description: 'AI + Human review (3-5 business days)',
-      standardRate: 1.50,
-      packages: [
-        {
-          minutes: 300,
-          price: 360,
-          rate: 1.20,
-          savings: 20,
-          bestFor: 'Quality-focused',
-          estimatedFiles: '~10 meetings',
-          validity: '30 days',
-          savingsAmount: 90
-        },
-        {
-          minutes: 750,
-          price: 862.50,
-          rate: 1.15,
-          savings: 23,
-          popular: true,
-          bestFor: 'Professionals',
-          estimatedFiles: '~25 sessions',
-          validity: '30 days',
-          savingsAmount: 262.50
-        },
-        {
-          minutes: 1500,
-          price: 1950,
-          rate: 1.30,
-          savings: 13,
-          bestFor: 'Businesses',
-          estimatedFiles: '~50 recordings',
-          validity: '30 days',
-          savingsAmount: 300
-        }
-      ]
-    },
-    human: {
-      name: '100% Human',
-      icon: Check,
-      description: 'Professional human transcription (3-5 business days)',
-      standardRate: 2.50,
-      packages: [
-        {
-          minutes: 300,
-          price: 750,
-          rate: 2.50,
-          savings: 0,
-          bestFor: 'Legal/Medical',
-          estimatedFiles: '~10 depositions',
-          validity: '30 days',
-          savingsAmount: 0
-        },
-        {
-          minutes: 750,
-          price: 1725,
-          rate: 2.30,
-          savings: 8,
-          popular: true,
-          bestFor: 'Agencies',
-          estimatedFiles: '~25 interviews',
-          validity: '30 days',
-          savingsAmount: 150
-        },
-        {
-          minutes: 1500,
-          price: 3150,
-          rate: 2.10,
-          savings: 16,
-          bestFor: 'Enterprises',
-          estimatedFiles: '~50 recordings',
-          validity: '30 days',
-          savingsAmount: 600
-        }
-      ]
+  // Get package info for display (from Firebase data)
+  const getTypeInfo = (type: string) => {
+    switch (type) {
+      case 'ai':
+        return {
+          name: 'AI Transcription',
+          icon: Zap,
+          description: 'Fast automated transcription (60 minute turnaround)',
+          standardRate: 1.20
+        };
+      case 'hybrid':
+        return {
+          name: 'Hybrid Review',
+          icon: Users,
+          description: 'AI + Human review (3-5 business days)',
+          standardRate: 1.50
+        };
+      case 'human':
+        return {
+          name: '100% Human',
+          icon: Check,
+          description: 'Professional human transcription (3-5 business days)',
+          standardRate: 2.50
+        };
+      default:
+        return null;
     }
   };
 
@@ -351,174 +268,193 @@ export default function BillingPage() {
                 <p className="text-sm text-gray-600">Save up to 50% when you purchase minutes in bulk</p>
               </CardHeader>
               <CardContent>
-                <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-6">
-                    <TabsTrigger value="ai" className="flex items-center justify-center gap-1">
-                      <Zap className="h-4 w-4" />
-                      <span className="hidden sm:inline">AI</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="hybrid" className="flex items-center justify-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span className="hidden sm:inline">Hybrid</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="human" className="flex items-center justify-center gap-1">
-                      <Check className="h-4 w-4" />
-                      <span className="hidden sm:inline">Human</span>
-                    </TabsTrigger>
-                  </TabsList>
+                {packagesLoading ? (
+                  <div className="flex justify-center py-12">
+                    <LoadingSpinner size="lg" />
+                  </div>
+                ) : (
+                  <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 mb-6">
+                      <TabsTrigger value="ai" className="flex items-center justify-center gap-1">
+                        <Zap className="h-4 w-4" />
+                        <span className="hidden sm:inline">AI</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="hybrid" className="flex items-center justify-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span className="hidden sm:inline">Hybrid</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="human" className="flex items-center justify-center gap-1">
+                        <Check className="h-4 w-4" />
+                        <span className="hidden sm:inline">Human</span>
+                      </TabsTrigger>
+                    </TabsList>
 
-                  {Object.entries(packageInfo).map(([key, info]) => (
-                    <TabsContent key={key} value={key}>
-                      <div className="text-center mb-6">
-                        <h3 className="text-lg font-semibold text-[#003366]">{info.name} Packages</h3>
-                        <p className="text-sm text-gray-600 mt-1">{info.description}</p>
-                        <p className="text-xs text-gray-500 mt-2">
-                          Standard rate: CA${info.standardRate.toFixed(2)}/minute
-                        </p>
-                      </div>
+                    {Object.entries(packagesByType).map(([key, packages]) => {
+                      const typeInfo = getTypeInfo(key);
+                      if (!typeInfo) return null;
 
-                      {/* Package cards */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        {info.packages.map((pkg, idx) => (
-                          <Card key={idx} className={`border ${pkg.popular ? 'border-[#b29dd9] shadow-lg scale-105' : 'border-gray-200'} relative`}>
-                            {pkg.popular && (
-                              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#b29dd9] text-white text-xs font-semibold px-4 py-1 rounded-full">
-                                MOST POPULAR
-                              </div>
-                            )}
-                            <CardContent className="p-6">
-                              {/* Best for badge */}
-                              <div className="text-center mb-4">
-                                <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full">
-                                  {pkg.bestFor}
-                                </span>
-                              </div>
-
-                              {/* Minutes and price */}
-                              <div className="text-center mb-4">
-                                <div className="text-2xl font-bold text-[#003366]">
-                                  {pkg.minutes.toLocaleString()} minutes
-                                </div>
-                                <div className="text-3xl font-bold text-[#003366] mt-2">
-                                  CA${pkg.price}
-                                </div>
-                                <div className="text-sm text-gray-600 mt-1">
-                                  CA${pkg.rate.toFixed(2)}/minute
-                                </div>
-                              </div>
-
-                              {/* Savings */}
-                              {pkg.savings > 0 ? (
-                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                                  <div className="text-green-700 font-semibold text-sm">
-                                    Save {pkg.savings}%
-                                  </div>
-                                  <div className="text-green-600 text-xs mt-1">
-                                    CA${pkg.savingsAmount} off standard rate
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
-                                  <div className="text-gray-700 font-semibold text-sm">
-                                    Standard Rate
-                                  </div>
-                                  <div className="text-gray-600 text-xs mt-1">
-                                    No bulk discount
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Additional info */}
-                              <div className="space-y-2 text-xs text-gray-600">
-                                <div className="flex items-center justify-between">
-                                  <span className="flex items-center gap-1">
-                                    <FileAudio className="h-3 w-3" />
-                                    Estimate:
-                                  </span>
-                                  <span className="font-medium">{pkg.estimatedFiles}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    Valid for:
-                                  </span>
-                                  <span className="font-medium">{pkg.validity}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="flex items-center gap-1">
-                                    <TrendingDown className="h-3 w-3" />
-                                    Vs. standard:
-                                  </span>
-                                  <span className="font-medium text-green-600">
-                                    -{((info.standardRate - pkg.rate) / info.standardRate * 100).toFixed(0)}%
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* What's included */}
-                              <div className="mt-4 pt-4 border-t border-gray-200">
-                                <div className="text-xs space-y-1">
-                                  <div className="text-gray-700 font-semibold mb-1">All packages include:</div>
-                                  <div className="text-gray-600">✓ {info.description.split('(')[0].trim()}</div>
-                                  <div className="text-gray-600">✓ Export to DOCX & PDF</div>
-                                  <div className="text-gray-600">✓ Speaker detection</div>
-                                  {(key === 'hybrid' || key === 'human') && (
-                                    <>
-                                      <div className="text-green-600 font-medium">✓ FREE Rush delivery</div>
-                                      <div className="text-green-600 font-medium">✓ FREE Multiple speakers</div>
-                                      <div className="text-xs text-gray-500 italic mt-1">
-                                        (Save up to CA$0.75/min on add-ons)
-                                      </div>
-                                    </>
-                                  )}
-                                  {key === 'ai' && (
-                                    <div className="text-gray-500 italic mt-1">
-                                      Rush delivery not needed (60 min turnaround)
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-
-                      {/* Purchase Buttons - Now using SecureCheckoutButton for foolproof payments */}
-                      <div className="mt-6">
-                        <h4 className="text-lg font-semibold text-[#003366] mb-4 text-center">Select Your Package:</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {info.packages.map((pkg, idx) => (
-                            <div key={idx} className="text-center">
-                              <SecureCheckoutButton
-                                amount={pkg.price}
-                                type="package"
-                                packageData={{
-                                  type: key,
-                                  name: `${info.name} - ${pkg.minutes} minutes`,
-                                  minutes: pkg.minutes,
-                                  rate: pkg.rate,
-                                  price: pkg.price
-                                }}
-                                className={`w-full ${pkg.popular ? 'bg-[#b29dd9] hover:bg-[#9d87c7]' : 'bg-[#003366] hover:bg-[#002244]'} text-white py-3 px-4 rounded-lg font-medium transition-all`}
-                              >
-                                Purchase {pkg.minutes} Minutes
-                                <span className="block text-sm mt-1">CA${pkg.price}</span>
-                              </SecureCheckoutButton>
-                              {pkg.popular && (
-                                <p className="text-xs text-[#b29dd9] font-semibold mt-2">MOST POPULAR CHOICE</p>
-                              )}
+                      return (
+                        <TabsContent key={key} value={key}>
+                          {packages.length === 0 ? (
+                            <div className="text-center py-8">
+                              <p className="text-gray-500">No packages available at the moment.</p>
                             </div>
-                          ))}
-                        </div>
-                        {isTestMode && (
-                          <p className="text-xs text-gray-500 text-center mt-4">
-                            Test Mode Active - Use card 4242 4242 4242 4242
-                          </p>
-                        )}
-                      </div>
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                          ) : (
+                            <>
+                              <div className="text-center mb-6">
+                                <h3 className="text-lg font-semibold text-[#003366]">{typeInfo.name} Packages</h3>
+                                <p className="text-sm text-gray-600 mt-1">{typeInfo.description}</p>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Standard rate: CA${typeInfo.standardRate.toFixed(2)}/minute
+                                </p>
+                              </div>
+
+                              {/* Package cards from Firebase */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                {packages.map((pkg) => (
+                                  <Card key={pkg.id} className={`border ${pkg.popular ? 'border-[#b29dd9] shadow-lg scale-105' : 'border-gray-200'} relative`}>
+                                    {pkg.popular && (
+                                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-[#b29dd9] text-white text-xs font-semibold px-4 py-1 rounded-full">
+                                        MOST POPULAR
+                                      </div>
+                                    )}
+                                    <CardContent className="p-6">
+                                      {/* Best for badge */}
+                                      <div className="text-center mb-4">
+                                        <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-3 py-1 rounded-full">
+                                          {pkg.bestFor}
+                                        </span>
+                                      </div>
+
+                                      {/* Minutes and price */}
+                                      <div className="text-center mb-4">
+                                        <div className="text-2xl font-bold text-[#003366]">
+                                          {pkg.minutes.toLocaleString()} minutes
+                                        </div>
+                                        <div className="text-3xl font-bold text-[#003366] mt-2">
+                                          CA${pkg.price}
+                                        </div>
+                                        <div className="text-sm text-gray-600 mt-1">
+                                          CA${pkg.perMinuteRate.toFixed(2)}/minute
+                                        </div>
+                                      </div>
+
+                                      {/* Savings */}
+                                      {pkg.savingsPercentage > 0 ? (
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                                          <div className="text-green-700 font-semibold text-sm">
+                                            Save {pkg.savingsPercentage.toFixed(0)}%
+                                          </div>
+                                          <div className="text-green-600 text-xs mt-1">
+                                            CA${pkg.savingsAmount.toFixed(0)} off standard rate
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                                          <div className="text-gray-700 font-semibold text-sm">
+                                            Standard Rate
+                                          </div>
+                                          <div className="text-gray-600 text-xs mt-1">
+                                            No bulk discount
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Additional info */}
+                                      <div className="space-y-2 text-xs text-gray-600">
+                                        <div className="flex items-center justify-between">
+                                          <span className="flex items-center gap-1">
+                                            <FileAudio className="h-3 w-3" />
+                                            Estimate:
+                                          </span>
+                                          <span className="font-medium">{pkg.estimatedFiles}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                          <span className="flex items-center gap-1">
+                                            <Calendar className="h-3 w-3" />
+                                            Valid for:
+                                          </span>
+                                          <span className="font-medium">{pkg.validity}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                          <span className="flex items-center gap-1">
+                                            <TrendingDown className="h-3 w-3" />
+                                            Vs. standard:
+                                          </span>
+                                          <span className="font-medium text-green-600">
+                                            -{((typeInfo.standardRate - pkg.perMinuteRate) / typeInfo.standardRate * 100).toFixed(0)}%
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* What's included */}
+                                      <div className="mt-4 pt-4 border-t border-gray-200">
+                                        <div className="text-xs space-y-1">
+                                          <div className="text-gray-700 font-semibold mb-1">All packages include:</div>
+                                          <div className="text-gray-600">✓ {typeInfo.description.split('(')[0].trim()}</div>
+                                          <div className="text-gray-600">✓ Export to DOCX & PDF</div>
+                                          <div className="text-gray-600">✓ Speaker detection</div>
+                                          {pkg.includesAddons && (
+                                            <>
+                                              <div className="text-green-600 font-medium">✓ FREE Rush delivery</div>
+                                              <div className="text-green-600 font-medium">✓ FREE Multiple speakers</div>
+                                              <div className="text-xs text-gray-500 italic mt-1">
+                                                (Save up to CA$0.75/min on add-ons)
+                                              </div>
+                                            </>
+                                          )}
+                                          {key === 'ai' && (
+                                            <div className="text-gray-500 italic mt-1">
+                                              Rush delivery not needed (60 min turnaround)
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                ))}
+                              </div>
+
+                              {/* Purchase Buttons */}
+                              <div className="mt-6">
+                                <h4 className="text-lg font-semibold text-[#003366] mb-4 text-center">Select Your Package:</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  {packages.map((pkg) => (
+                                    <div key={pkg.id} className="text-center">
+                                      <SecureCheckoutButton
+                                        amount={pkg.price}
+                                        type="package"
+                                        packageData={{
+                                          type: key,
+                                          name: `${typeInfo.name} - ${pkg.minutes} minutes`,
+                                          minutes: pkg.minutes,
+                                          rate: pkg.perMinuteRate,
+                                          price: pkg.price
+                                        }}
+                                        className={`w-full ${pkg.popular ? 'bg-[#b29dd9] hover:bg-[#9d87c7]' : 'bg-[#003366] hover:bg-[#002244]'} text-white py-3 px-4 rounded-lg font-medium transition-all`}
+                                      >
+                                        Purchase {pkg.minutes} Minutes
+                                        <span className="block text-sm mt-1">CA${pkg.price}</span>
+                                      </SecureCheckoutButton>
+                                      {pkg.popular && (
+                                        <p className="text-xs text-[#b29dd9] font-semibold mt-2">MOST POPULAR CHOICE</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                {isTestMode && (
+                                  <p className="text-xs text-gray-500 text-center mt-4">
+                                    Test Mode Active - Use card 4242 4242 4242 4242
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

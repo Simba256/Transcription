@@ -3,6 +3,7 @@
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CreditProvider } from '@/contexts/CreditContext';
 import { WalletProvider } from '@/contexts/WalletContext';
+import { PackageProvider } from '@/contexts/PackageContext';
 import NoSSR from '@/components/NoSSR';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -16,8 +17,10 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
       <AuthProvider>
         <CreditProvider>
           <WalletProvider>
-            {children}
-            <Toaster />
+            <PackageProvider>
+              {children}
+              <Toaster />
+            </PackageProvider>
           </WalletProvider>
         </CreditProvider>
       </AuthProvider>

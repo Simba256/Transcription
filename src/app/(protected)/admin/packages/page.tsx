@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Plus, Edit3, Trash2, Package, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit3, Trash2, Package, Star, Zap, Users, Check, TrendingDown, Calendar, FileAudio, Save, X, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,146 +11,82 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-
-interface CreditPackage {
-  id: string;
-  name: string;
-  credits: number;
-  price: number;
-  originalPrice?: number;
-  description: string;
-  popular: boolean;
-  active: boolean;
-  features: string[];
-}
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Info } from 'lucide-react';
+import { usePackages } from '@/contexts/PackageContext';
+import { TranscriptionPackage } from '@/lib/firebase/packages';
 
 export function PackageManager() {
   const { toast } = useToast();
-  const [isCreating, setIsCreating] = useState(false);
-  const [, setEditingPackage] = useState<string | null>(null);
+  const {
+    packages,
+    loading,
+    error,
+    isAdmin,
+    getPackagesByType,
+    updateExistingPackage,
+    deleteExistingPackage,
+    toggleStatus,
+    togglePopular,
+    refreshPackages,
+    initializeDefaults
+  } = usePackages();
+
+  const [selectedTab, setSelectedTab] = useState<'ai' | 'hybrid' | 'human'>('ai');
+  const [editingPackage, setEditingPackage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [packageCounter, setPackageCounter] = useState(4);
+  const [editFormData, setEditFormData] = useState<Partial<TranscriptionPackage>>({});
 
-  // Package data - in a real application, this would come from Firestore
-  const [packages, setPackages] = useState<CreditPackage[]>([
-    {
-      id: 'starter',
-      name: 'Starter Pack',
-      credits: 1000,
-      price: 10,
-      description: 'Perfect for individuals and small projects',
-      popular: false,
-      active: true,
-      features: [
-        '1,000 credits',
-        'AI transcription',
-        'Basic editing tools',
-        'PDF/DOCX export',
-        'Email support'
-      ]
-    },
-    {
-      id: 'professional',
-      name: 'Professional Pack',
-      credits: 5000,
-      price: 45,
-      originalPrice: 50,
-      description: 'Most popular for businesses and professionals',
-      popular: true,
-      active: true,
-      features: [
-        '5,000 credits',
-        'All transcription modes',
-        'Advanced editing tools',
-        'Priority processing',
-        'Redaction tools',
-        'Phone support'
-      ]
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise Pack',
-      credits: 12000,
-      price: 100,
-      originalPrice: 120,
-      description: 'Best value for high-volume users',
-      popular: false,
-      active: true,
-      features: [
-        '12,000 credits',
-        'All transcription modes',
-        'Bulk upload',
-        'Custom formatting',
-        'API access',
-        'Dedicated support'
-      ]
-    }
-  ]);
-
-  const [newPackage, setNewPackage] = useState<Partial<CreditPackage>>({
-    name: '',
-    credits: 0,
-    price: 0,
-    description: '',
-    popular: false,
-    active: true,
-    features: []
-  });
-
-
-  const handleCreatePackage = async () => {
-    if (!newPackage.name || !newPackage.credits || !newPackage.price) {
+  // Check if admin
+  useEffect(() => {
+    if (!isAdmin && !loading) {
       toast({
-        title: "Missing required fields",
-        description: "Please fill in all required fields.",
+        title: "Access Denied",
+        description: "You need admin privileges to access this page.",
         variant: "destructive",
       });
-      return;
     }
+  }, [isAdmin, loading, toast]);
+
+  // Handle errors
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: error,
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
+
+  const handleEditPackage = (packageId: string) => {
+    const pkg = packages.find(p => p.id === packageId);
+    if (pkg) {
+      setEditingPackage(packageId);
+      setEditFormData({ ...pkg });
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPackage || !editFormData) return;
 
     setIsSaving(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const newId = `pkg_${packageCounter + 1}`;
-      setPackageCounter(prev => prev + 1);
-
-      const packageToAdd: CreditPackage = {
-        id: newId,
-        name: newPackage.name!,
-        credits: newPackage.credits!,
-        price: newPackage.price!,
-        originalPrice: newPackage.originalPrice,
-        description: newPackage.description!,
-        popular: newPackage.popular!,
-        active: newPackage.active!,
-        features: newPackage.features || []
-      };
-
-      setPackages(prev => [...prev, packageToAdd]);
-      setNewPackage({
-        name: '',
-        credits: 0,
-        price: 0,
-        description: '',
-        popular: false,
-        active: true,
-        features: []
-      });
-      setIsCreating(false);
+      await updateExistingPackage(editingPackage, editFormData);
+      setEditingPackage(null);
+      setEditFormData({});
 
       toast({
-        title: "Package created",
-        description: "The new credit package has been created successfully.",
+        title: "Package updated",
+        description: "The package has been updated successfully in Firebase.",
       });
     } catch (error) {
-      console.error('Create package error:', error);
+      console.error('Update package error:', error);
       toast({
-        title: "Creation failed",
-        description: "Please try again or contact support.",
+        title: "Update failed",
+        description: "Failed to update package. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -158,54 +94,144 @@ export function PackageManager() {
     }
   };
 
+  const handleCancelEdit = () => {
+    setEditingPackage(null);
+    setEditFormData({});
+  };
+
   const handleToggleActive = async (packageId: string) => {
-    setPackages(prev => prev.map(pkg => 
-      pkg.id === packageId ? { ...pkg, active: !pkg.active } : pkg
-    ));
-
-    toast({
-      title: "Package updated",
-      description: "Package status has been updated.",
-    });
-  };
-
-  const handleTogglePopular = async (packageId: string) => {
-    setPackages(prev => prev.map(pkg => 
-      pkg.id === packageId ? { ...pkg, popular: !pkg.popular } : pkg
-    ));
-
-    toast({
-      title: "Package updated",
-      description: "Package popularity status has been updated.",
-    });
-  };
-
-  const handleEditPackage = (packageId: string) => {
-    setEditingPackage(packageId);
     const pkg = packages.find(p => p.id === packageId);
-    toast({
-      title: "Edit Package",
-      description: `Editing "${pkg?.name}" package. Edit functionality coming soon!`,
-    });
-  };
+    if (!pkg) return;
 
-  const handleDeletePackage = async (packageId: string) => {
-    if (confirm('Are you sure you want to delete this package?')) {
-      setPackages(prev => prev.filter(pkg => pkg.id !== packageId));
-      
+    try {
+      await toggleStatus(packageId, !pkg.active);
       toast({
-        title: "Package deleted",
-        description: "The credit package has been deleted.",
+        title: "Package updated",
+        description: `Package ${pkg.active ? 'deactivated' : 'activated'} successfully.`,
+      });
+    } catch (error) {
+      console.error('Toggle status error:', error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update package status.",
+        variant: "destructive",
       });
     }
   };
 
+  const handleTogglePopular = async (packageId: string) => {
+    const pkg = packages.find(p => p.id === packageId);
+    if (!pkg) return;
 
+    try {
+      await togglePopular(packageId, pkg.type, !pkg.popular);
+      toast({
+        title: "Package updated",
+        description: `Package ${pkg.popular ? 'unmarked' : 'marked'} as popular.`,
+      });
+    } catch (error) {
+      console.error('Toggle popular error:', error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update package popularity.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeletePackage = async (packageId: string) => {
+    const pkg = packages.find(p => p.id === packageId);
+    if (!pkg) return;
+
+    if (confirm(`Are you sure you want to delete "${pkg.name}"? This action cannot be undone.`)) {
+      try {
+        await deleteExistingPackage(packageId);
+        toast({
+          title: "Package deleted",
+          description: "The package has been permanently deleted from Firebase.",
+        });
+      } catch (error) {
+        console.error('Delete package error:', error);
+        toast({
+          title: "Delete failed",
+          description: "Failed to delete package.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleInitializeDefaults = async () => {
+    if (confirm('This will initialize default packages in Firebase. Continue only if the packages collection is empty. Continue?')) {
+      try {
+        await initializeDefaults();
+        toast({
+          title: "Packages initialized",
+          description: "Default packages have been added to Firebase.",
+        });
+      } catch (error) {
+        console.error('Initialize defaults error:', error);
+        toast({
+          title: "Initialization failed",
+          description: "Failed to initialize default packages.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refreshPackages();
+      toast({
+        title: "Packages refreshed",
+        description: "Package data has been refreshed from Firebase.",
+      });
+    } catch (error) {
+      console.error('Refresh error:', error);
+      toast({
+        title: "Refresh failed",
+        description: "Failed to refresh packages.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredPackages = getPackagesByType(selectedTab, false); // Get all packages (not just active)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <Card className="max-w-md">
+            <CardContent className="p-8">
+              <h2 className="text-xl font-semibold text-red-600 mb-2">Access Denied</h2>
+              <p className="text-gray-600">You need admin privileges to access this page.</p>
+            </CardContent>
+          </Card>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -214,240 +240,414 @@ export function PackageManager() {
                 Package Manager
               </h1>
               <p className="text-gray-600">
-                Create and manage credit packages for your customers.
+                Manage transcription packages and pricing in Firebase.
               </p>
             </div>
-            <Button 
-              onClick={() => setIsCreating(true)}
-              className="bg-[#003366] hover:bg-[#002244] text-white"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Package
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                className="text-[#003366] border-[#003366] hover:bg-[#003366] hover:text-white"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </Button>
+              {packages.length === 0 && (
+                <Button
+                  onClick={handleInitializeDefaults}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Initialize Defaults
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Create New Package Form */}
-        {isCreating && (
-          <Card className="border-0 shadow-sm mb-8">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-[#003366]">
-                Create New Package
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="name">Package Name *</Label>
-                  <Input
-                    id="name"
-                    value={newPackage.name}
-                    onChange={(e) => setNewPackage(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Professional Pack"
-                  />
-                </div>
+        {/* Info Alert */}
+        <Alert className="mb-8 border-blue-200 bg-blue-50">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Firebase Connected:</strong> All changes are saved to Firebase in real-time and immediately reflected on pricing and billing pages.
+            Each transcription type (AI, Hybrid, Human) has three tiers. Only one package per type can be marked as "Popular" at a time.
+          </AlertDescription>
+        </Alert>
 
-                <div>
-                  <Label htmlFor="credits">Credits *</Label>
-                  <Input
-                    id="credits"
-                    type="number"
-                    value={newPackage.credits}
-                    onChange={(e) => setNewPackage(prev => ({ ...prev, credits: parseInt(e.target.value) || 0 }))}
-                    placeholder="e.g., 5000"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="price">Price (CAD) *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    value={newPackage.price}
-                    onChange={(e) => setNewPackage(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                    placeholder="e.g., 45.00"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="originalPrice">Original Price (CAD)</Label>
-                  <Input
-                    id="originalPrice"
-                    type="number"
-                    step="0.01"
-                    value={newPackage.originalPrice || ''}
-                    onChange={(e) => setNewPackage(prev => ({ ...prev, originalPrice: parseFloat(e.target.value) || undefined }))}
-                    placeholder="e.g., 50.00"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <Label htmlFor="description">Description *</Label>
-                  <Textarea
-                    id="description"
-                    value={newPackage.description}
-                    onChange={(e) => setNewPackage(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Describe the package benefits..."
-                    rows={3}
-                  />
-                </div>
-
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="popular"
-                    checked={newPackage.popular}
-                    onCheckedChange={(checked) => setNewPackage(prev => ({ ...prev, popular: checked }))}
-                  />
-                  <Label htmlFor="popular">Mark as Popular</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="active"
-                    checked={newPackage.active}
-                    onCheckedChange={(checked) => setNewPackage(prev => ({ ...prev, active: checked }))}
-                  />
-                  <Label htmlFor="active">Active</Label>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-4 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreating(false)}
-                  disabled={isSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreatePackage}
-                  disabled={isSaving}
-                  className="bg-[#003366] hover:bg-[#002244] text-white"
-                >
-                  {isSaving ? (
-                    <>
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    'Create Package'
-                  )}
-                </Button>
-              </div>
+        {packages.length === 0 ? (
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-12 text-center">
+              <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">No Packages Found</h3>
+              <p className="text-gray-500 mb-6">Click "Initialize Defaults" to add the standard packages to Firebase.</p>
+              <Button
+                onClick={handleInitializeDefaults}
+                className="bg-[#003366] hover:bg-[#002244] text-white"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Initialize Default Packages
+              </Button>
             </CardContent>
           </Card>
-        )}
+        ) : (
+          <>
+            {/* Package Tabs */}
+            <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as 'ai' | 'hybrid' | 'human')} className="w-full">
+              <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-3 mb-8">
+                <TabsTrigger value="ai" className="flex items-center justify-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  AI Transcription
+                </TabsTrigger>
+                <TabsTrigger value="hybrid" className="flex items-center justify-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Hybrid (AI + Human)
+                </TabsTrigger>
+                <TabsTrigger value="human" className="flex items-center justify-center gap-2">
+                  <Check className="h-4 w-4" />
+                  100% Human
+                </TabsTrigger>
+              </TabsList>
 
-        {/* Existing Packages */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {packages.map((pkg) => (
-            <Card 
-              key={pkg.id}
-              className={`border-0 shadow-sm hover:shadow-md transition-shadow ${
-                pkg.popular ? 'ring-2 ring-[#b29dd9]' : ''
-              } ${!pkg.active ? 'opacity-60' : ''}`}
-            >
-              {pkg.popular && (
-                <div className="bg-[#b29dd9] text-white text-center py-2 text-sm font-medium flex items-center justify-center">
-                  <Star className="h-4 w-4 mr-1" />
-                  Most Popular
-                </div>
-              )}
-              
-              <CardHeader className="text-center">
-                <div className="flex items-center justify-between mb-2">
-                  <CardTitle className="text-xl font-bold text-[#003366]">
-                    {pkg.name}
-                  </CardTitle>
-                  <div className="flex items-center space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleTogglePopular(pkg.id)}
-                      className={pkg.popular ? 'text-yellow-600' : 'text-gray-400'}
-                    >
-                      <Star className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEditPackage(pkg.id)}
-                      className="text-gray-600 hover:text-[#003366]"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeletePackage(pkg.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                
-                <p className="text-gray-600 text-sm">{pkg.description}</p>
-                
-                <div className="mt-4">
-                  <div className="flex items-center justify-center space-x-2">
-                    <span className="text-3xl font-bold text-[#003366]">
-                      ${pkg.price}
-                    </span>
-                    <span className="text-gray-600">CAD</span>
-                    {pkg.originalPrice && (
-                      <span className="text-lg text-gray-400 line-through">
-                        ${pkg.originalPrice}
-                      </span>
+              {/* Package Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {filteredPackages.map((pkg) => (
+                  <Card
+                    key={pkg.id}
+                    className={`relative border-0 shadow-sm hover:shadow-md transition-shadow ${
+                      pkg.popular ? 'ring-2 ring-[#b29dd9]' : ''
+                    } ${!pkg.active ? 'opacity-60' : ''}`}
+                  >
+                    {pkg.popular && (
+                      <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                        <div className="bg-[#b29dd9] text-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
+                          <Star className="h-4 w-4 mr-1" />
+                          Most Popular
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  {pkg.originalPrice && (
-                    <div className="text-green-600 font-medium text-sm mt-1">
-                      {Math.round((1 - pkg.price / pkg.originalPrice) * 100)}% savings
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              
-              <CardContent>
-                <div className="text-center mb-4">
-                  <CreditDisplay amount={pkg.credits} size="md" className="justify-center" />
-                </div>
 
-                <div className="space-y-2 mb-6">
-                  {pkg.features.map((feature, index) => (
-                    <div key={index} className="flex items-center text-sm text-gray-600">
-                      <Package className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                      {feature}
-                    </div>
-                  ))}
-                </div>
+                    <CardHeader className="pb-4">
+                      {/* Editing Mode */}
+                      {editingPackage === pkg.id ? (
+                        <>
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor={`name-${pkg.id}`}>Package Name</Label>
+                              <Input
+                                id={`name-${pkg.id}`}
+                                value={editFormData.name}
+                                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label htmlFor={`minutes-${pkg.id}`}>Minutes</Label>
+                                <Input
+                                  id={`minutes-${pkg.id}`}
+                                  type="number"
+                                  value={editFormData.minutes}
+                                  onChange={(e) => setEditFormData({ ...editFormData, minutes: parseInt(e.target.value) || 0 })}
+                                  className="mt-1"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={`price-${pkg.id}`}>Price (CAD)</Label>
+                                <Input
+                                  id={`price-${pkg.id}`}
+                                  type="number"
+                                  step="0.01"
+                                  value={editFormData.price}
+                                  onChange={(e) => setEditFormData({ ...editFormData, price: parseFloat(e.target.value) || 0 })}
+                                  className="mt-1"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor={`desc-${pkg.id}`}>Description</Label>
+                              <Textarea
+                                id={`desc-${pkg.id}`}
+                                value={editFormData.description}
+                                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                                className="mt-1"
+                                rows={2}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`bestfor-${pkg.id}`}>Best For</Label>
+                              <Input
+                                id={`bestfor-${pkg.id}`}
+                                value={editFormData.bestFor}
+                                onChange={(e) => setEditFormData({ ...editFormData, bestFor: e.target.value })}
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-xl font-bold text-[#003366]">
+                                {pkg.name}
+                              </CardTitle>
+                              <p className="text-sm text-gray-600 mt-1">{pkg.description}</p>
+                            </div>
+                            <div className="flex items-center space-x-1 ml-2">
+                              {editingPackage === null && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleTogglePopular(pkg.id)}
+                                    className={pkg.popular ? 'text-yellow-600' : 'text-gray-400'}
+                                  >
+                                    <Star className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditPackage(pkg.id)}
+                                    className="text-gray-600 hover:text-[#003366]"
+                                  >
+                                    <Edit3 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeletePackage(pkg.id)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      checked={pkg.active}
-                      onCheckedChange={() => handleToggleActive(pkg.id)}
-                    />
-                    <Label className="text-sm">
-                      {pkg.active ? 'Active' : 'Inactive'}
-                    </Label>
+                          {/* Pricing Information */}
+                          <div className="mt-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-3xl font-bold text-[#003366]">
+                                CA${pkg.price}
+                              </span>
+                              <span className="text-sm text-gray-600">
+                                {pkg.minutes} minutes
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500">Rate:</span>
+                              <span className="font-medium text-[#003366]">
+                                CA${pkg.perMinuteRate.toFixed(2)}/min
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500">Standard:</span>
+                              <span className="text-gray-600 line-through">
+                                CA${pkg.standardRate.toFixed(2)}/min
+                              </span>
+                            </div>
+                            {pkg.savingsPercentage > 0 && (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-2 mt-2">
+                                <div className="text-green-700 font-semibold text-sm">
+                                  Save {pkg.savingsPercentage.toFixed(0)}%
+                                </div>
+                                <div className="text-green-600 text-xs">
+                                  CA${pkg.savingsAmount.toFixed(0)} off standard
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </CardHeader>
+
+                    <CardContent className="pt-0">
+                      {editingPackage === pkg.id ? (
+                        <>
+                          {/* Edit Actions */}
+                          <div className="flex justify-end space-x-2 mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCancelEdit}
+                              disabled={isSaving}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={handleSaveEdit}
+                              disabled={isSaving}
+                              className="bg-[#003366] hover:bg-[#002244] text-white"
+                            >
+                              {isSaving ? (
+                                <>
+                                  <LoadingSpinner size="sm" className="mr-2" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="h-4 w-4 mr-1" />
+                                  Save
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Package Details */}
+                          <div className="space-y-3 mb-4">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-1 text-gray-600">
+                                <FileAudio className="h-3 w-3" />
+                                Estimate:
+                              </span>
+                              <span className="font-medium">{pkg.estimatedFiles}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-1 text-gray-600">
+                                <Calendar className="h-3 w-3" />
+                                Valid for:
+                              </span>
+                              <span className="font-medium">{pkg.validity}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-1 text-gray-600">
+                                <TrendingDown className="h-3 w-3" />
+                                Vs. standard:
+                              </span>
+                              <span className="font-medium text-green-600">
+                                -{((pkg.standardRate - pkg.perMinuteRate) / pkg.standardRate * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-600">Best for:</span>
+                              <span className="font-medium bg-gray-100 px-2 py-1 rounded">
+                                {pkg.bestFor}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Features */}
+                          <div className="border-t pt-4">
+                            <p className="text-xs font-semibold text-gray-700 mb-2">Features:</p>
+                            <ul className="space-y-1">
+                              {pkg.features.slice(0, 5).map((feature, idx) => (
+                                <li key={idx} className="flex items-start text-xs text-gray-600">
+                                  <Check className={`h-3 w-3 ${feature.includes('FREE') ? 'text-green-500' : 'text-gray-400'} mr-1 flex-shrink-0 mt-0.5`} />
+                                  <span className={feature.includes('FREE') ? 'font-medium text-green-700' : ''}>
+                                    {feature}
+                                  </span>
+                                </li>
+                              ))}
+                              {pkg.features.length > 5 && (
+                                <li className="text-xs text-gray-500 italic ml-4">
+                                  +{pkg.features.length - 5} more features...
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+
+                          {/* Status Toggle */}
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <div className="flex items-center space-x-2">
+                              <Switch
+                                checked={pkg.active}
+                                onCheckedChange={() => handleToggleActive(pkg.id)}
+                              />
+                              <Label className="text-sm">
+                                {pkg.active ? 'Active' : 'Inactive'}
+                              </Label>
+                            </div>
+
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              pkg.active
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {pkg.active ? 'Live' : 'Draft'}
+                            </span>
+                          </div>
+
+                          {/* Add-ons indicator */}
+                          {pkg.includesAddons && (
+                            <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                              <p className="text-xs text-blue-800 font-medium">
+                                ✓ FREE Rush & Multi-speaker Add-ons Included
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Firebase ID */}
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-[10px] text-gray-400">
+                              Firebase ID: {pkg.id}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </Tabs>
+
+            {/* Summary Statistics */}
+            <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    Total Active Packages
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-[#003366]">
+                    {packages.filter(p => p.active).length}
                   </div>
-                  
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    pkg.active 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {pkg.active ? 'Live' : 'Draft'}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Live in Firebase
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    Average Discount
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {packages.length > 0 ?
+                      (packages.reduce((acc, pkg) => acc + pkg.savingsPercentage, 0) / packages.length).toFixed(0) : 0}%
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Compared to standard rates
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    Popular Packages
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-[#b29dd9]">
+                    {packages.filter(p => p.popular).length}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Highlighted for customers
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
       </div>
 
       <Footer />
