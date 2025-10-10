@@ -12,6 +12,7 @@ import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { useCredits } from '@/contexts/CreditContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AdminTransaction {
   id: string;
@@ -34,10 +35,26 @@ export function AdminLedger() {
   const [isLoading, setIsLoading] = useState(true);
   const { getAllTransactions } = useCredits();
   const { toast } = useToast();
+  const { userData, loading: authLoading } = useAuth();
 
   // Load real transactions from Firebase
   useEffect(() => {
     const loadAdminTransactions = async () => {
+      // Wait for auth to be ready and ensure user is admin
+      if (authLoading || !userData) {
+        return;
+      }
+
+      if (userData.role !== 'admin') {
+        toast({
+          title: "Access denied",
+          description: "You must be an admin to view this page.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         const transactions = await getAllTransactions();
@@ -49,7 +66,7 @@ export function AdminLedger() {
           type: transaction.type,
           amount: transaction.amount,
           description: transaction.description,
-          date: transaction.date,
+          date: transaction.createdAt instanceof Date ? transaction.createdAt : new Date(transaction.createdAt),
           jobId: transaction.jobId || null,
           revenue: transaction.revenue || 0
         }));
@@ -71,10 +88,20 @@ export function AdminLedger() {
     };
 
     loadAdminTransactions();
-  }, [getAllTransactions, toast]);
+  }, [getAllTransactions, toast, authLoading, userData]);
 
   // Refresh function for manual reload
   const handleRefreshTransactions = async () => {
+    // Check auth status before refreshing
+    if (!userData || userData.role !== 'admin') {
+      toast({
+        title: "Access denied",
+        description: "You must be an admin to perform this action.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsLoading(true);
       const transactions = await getAllTransactions();
@@ -85,7 +112,7 @@ export function AdminLedger() {
         type: transaction.type,
         amount: transaction.amount,
         description: transaction.description,
-        date: transaction.date,
+        date: transaction.createdAt instanceof Date ? transaction.createdAt : new Date(transaction.createdAt),
         jobId: transaction.jobId || null,
         revenue: transaction.revenue || 0
       }));
@@ -216,10 +243,45 @@ export function AdminLedger() {
     totalRefunds: filteredTransactions.filter(t => t.type === 'refund').reduce((sum, t) => sum + t.amount, 0)
   };
 
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex justify-center items-center py-32">
+            <LoadingSpinner size="lg" className="mb-4" />
+            <p className="text-gray-500 ml-4">Authenticating...</p>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!userData || userData.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-12 text-center">
+              <div className="text-red-500 text-6xl mb-4">⚠️</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+              <p className="text-gray-600">You must be an administrator to view the credit ledger.</p>
+            </CardContent>
+          </Card>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -461,11 +523,13 @@ export function AdminLedger() {
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? (
+                  {(isLoading || authLoading) ? (
                     <tr>
                       <td colSpan={7} className="py-12 text-center">
                         <LoadingSpinner size="md" className="mx-auto mb-2" />
-                        <p className="text-gray-500">Loading transactions...</p>
+                        <p className="text-gray-500">
+                          {authLoading ? "Authenticating..." : "Loading transactions..."}
+                        </p>
                       </td>
                     </tr>
                   ) : filteredTransactions.length === 0 ? (
@@ -484,11 +548,11 @@ export function AdminLedger() {
                     <tr key={transaction.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-4">
                         <span className="text-sm text-gray-600">
-                          {transaction.date instanceof Date ? transaction.date.toISOString().slice(0, 10) : String(transaction.date).slice(0, 10)}
+                          {transaction.date.toISOString().slice(0, 10)}
                         </span>
                         <br />
                         <span className="text-xs text-gray-500">
-                          {transaction.date instanceof Date ? transaction.date.toISOString().slice(11, 19) : String(transaction.date).slice(11, 19)}
+                          {transaction.date.toISOString().slice(11, 19)}
                         </span>
                       </td>
                       <td className="py-4 px-4">
