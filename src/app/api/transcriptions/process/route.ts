@@ -349,6 +349,19 @@ async function processTranscriptionWithWebhook(
 
     if (result.success && result.jobId) {
       console.log(`[API] Job ${jobId} submitted to Speechmatics with ID: ${result.jobId}`);
+
+      // Store the webhook URL in the database for debugging
+      try {
+        await updateTranscriptionStatusAdmin(jobId, 'processing', {
+          speechmaticsJobId: result.jobId,
+          webhookUrl: callbackUrl,
+          webhookSubmittedAt: new Date().toISOString()
+        });
+        console.log(`[API] Stored webhook URL in database: ${callbackUrl}`);
+      } catch (error) {
+        console.error(`[API] Failed to store webhook URL:`, error);
+      }
+
       return {
         success: true,
         speechmaticsJobId: result.jobId

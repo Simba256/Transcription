@@ -3,12 +3,20 @@ import { adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(request: NextRequest) {
+  console.log('[Speechmatics Webhook] ========================================');
+  console.log('[Speechmatics Webhook] WEBHOOK RECEIVED at:', new Date().toISOString());
+
   try {
     const url = new URL(request.url);
     const jobIdParam = url.searchParams.get('jobId');
-    console.log('[Speechmatics Webhook] ========================================');
-    console.log('[Speechmatics Webhook] Received callback for jobId:', jobIdParam);
-    console.log('[Speechmatics Webhook] Full URL:', request.url);
+
+    console.log('[Speechmatics Webhook] Request details:', {
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      jobIdParam: jobIdParam,
+      timestamp: new Date().toISOString()
+    });
 
     // Verify webhook token for security
     const token = url.searchParams.get('token');

@@ -299,7 +299,9 @@ export class SpeechmaticsService {
     callbackUrl: string
   ): Promise<{ success: boolean; jobId?: string; error?: string }> {
     try {
-      console.log(`[Speechmatics] Submitting job with webhook callback: ${callbackUrl}`);
+      console.log(`[Speechmatics] ====== SUBMITTING JOB WITH WEBHOOK ======`);
+      console.log(`[Speechmatics] Callback URL: ${callbackUrl}`);
+      console.log(`[Speechmatics] Timestamp: ${new Date().toISOString()}`);
 
       // Create job configuration with webhook and diarization
       const transcriptionConfig: any = {
