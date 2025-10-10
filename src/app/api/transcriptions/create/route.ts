@@ -3,7 +3,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { rateLimiters } from '@/lib/middleware/rate-limit';
 import { CreateTranscriptionJobSchema, validateData } from '@/lib/validation/schemas';
-import { sendTranscriptionNotification } from '@/lib/email/service';
+import { sendSimpleNotification } from '@/lib/email/simple-email';
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting first
@@ -78,31 +78,18 @@ export async function POST(request: NextRequest) {
 
     // Send email notification for human/hybrid transcriptions
     if (validatedBody.mode === 'human' || validatedBody.mode === 'hybrid') {
-      try {
-        // Get user email from the database
-        const userDoc = await adminDb.collection('users').doc(userId).get();
-        const userData = userDoc.data();
+      // Get user email from the database
+      const userDoc = await adminDb.collection('users').doc(userId).get();
+      const userData = userDoc.data();
 
-        if (userData?.email) {
-          await sendTranscriptionNotification({
-            transcriptionId: docRef.id,
-            userId: userId,
-            userEmail: userData.email,
-            fileName: validatedBody.originalFilename,
-            duration: validatedBody.duration / 60, // Convert seconds to minutes
-            mode: validatedBody.mode,
-            language: validatedBody.language || 'en',
-            domain: validatedBody.domain,
-            rushDelivery: validatedBody.rushDelivery,
-            speakerCount: validatedBody.speakerCount,
-            specialInstructions: validatedBody.specialInstructions,
-            submittedAt: new Date(),
-          });
-          console.log(`[API] Email notification sent for ${validatedBody.mode} transcription ${docRef.id}`);
-        }
-      } catch (emailError) {
-        // Don't fail the request if email sending fails
-        console.error('[API] Failed to send email notification:', emailError);
+      if (userData?.email) {
+        // Send simple email to Jennifer
+        await sendSimpleNotification(
+          validatedBody.originalFilename,
+          validatedBody.mode,
+          userData.email,
+          validatedBody.duration / 60 // Convert seconds to minutes
+        );
       }
     }
 
