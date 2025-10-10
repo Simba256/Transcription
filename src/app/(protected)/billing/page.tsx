@@ -640,14 +640,14 @@ export default function BillingPage() {
                     >
                       <div className="flex items-center space-x-3">
                         <div className={`p-2 rounded-full ${
-                          transaction.type === 'purchase'
+                          (transaction.type === 'wallet_topup' || transaction.type === 'package_purchase')
                             ? 'bg-green-100'
-                            : 'bg-blue-100'
+                            : 'bg-red-100'
                         }`}>
-                          {transaction.type === 'purchase' ? (
+                          {(transaction.type === 'wallet_topup' || transaction.type === 'package_purchase') ? (
                             <CreditCard className="h-4 w-4 text-green-600" />
                           ) : (
-                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                            <CheckCircle className="h-4 w-4 text-red-600" />
                           )}
                         </div>
                         <div>
@@ -662,12 +662,25 @@ export default function BillingPage() {
                         </div>
                       </div>
                       <div className={`text-sm font-medium ${
-                        transaction.type === 'purchase'
+                        (transaction.type === 'wallet_topup' || transaction.type === 'package_purchase')
                           ? 'text-green-600'
-                          : 'text-gray-900'
+                          : 'text-red-600'
                       }`}>
-                        {transaction.type === 'purchase' ? '+CA$' : '-'}
-                        {transaction.amount}{transaction.type === 'purchase' ? '' : ' minutes'}
+                        {(() => {
+                          // Format based on transaction type
+                          if (transaction.type === 'wallet_topup') {
+                            return `+CA$${transaction.amount.toFixed(2)}`;
+                          }
+                          if (transaction.type === 'package_purchase') {
+                            return `+${transaction.packageMinutes || transaction.amount} minutes`;
+                          }
+                          if (transaction.type === 'transcription' || transaction.type === 'usage') {
+                            // For transcription costs, show as negative currency
+                            return `-CA$${transaction.amount.toFixed(2)}`;
+                          }
+                          // Fallback
+                          return `CA$${transaction.amount.toFixed(2)}`;
+                        })()}
                       </div>
                     </div>
                   ))}
