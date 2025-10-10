@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Clock } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -183,10 +183,10 @@ function ContactPage() {
                         Get help with your account, billing, or technical issues.
                       </p>
                       <a
-                        href="mailto:support@talktotextcanada.com"
+                        href="mailto:jennifer@talktotext.ca"
                         className="text-[#b29dd9] hover:text-[#9d87c7] font-medium"
                       >
-                        support@talktotextcanada.com
+                        jennifer@talktotext.ca
                       </a>
                     </div>
                   </div>
@@ -207,10 +207,10 @@ function ContactPage() {
                         Speak directly with our support team for urgent matters.
                       </p>
                       <a
-                        href="tel:+1-800-555-0123"
+                        href="tel:+14164529446"
                         className="text-[#b29dd9] hover:text-[#9d87c7] font-medium"
                       >
-                        1-800-555-0123
+                        (416) 452-9446
                       </a>
                     </div>
                   </div>
@@ -228,9 +228,8 @@ function ContactPage() {
                         Business Hours
                       </h3>
                       <div className="text-gray-600 space-y-1">
-                        <p>Monday - Friday: 8:00 AM - 8:00 PM EST</p>
-                        <p>Saturday: 9:00 AM - 5:00 PM EST</p>
-                        <p>Sunday: Closed</p>
+                        <p>Monday - Friday: 9:00 AM - 5:00 PM EST</p>
+                        <p>Saturday - Sunday: Closed</p>
                       </div>
                     </div>
                   </div>
@@ -248,10 +247,36 @@ function ContactPage() {
                         Office Location
                       </h3>
                       <div className="text-gray-600">
-                        <p>123 Business Street</p>
-                        <p>Toronto, ON M5V 3A8</p>
+                        <p>Brampton, ON</p>
                         <p>Canada</p>
                       </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-[#b29dd9] shadow-lg">
+                <CardContent className="p-8">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-12 h-12 bg-[#25D366] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <MessageCircle className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-[#003366] mb-2">
+                        WhatsApp Support
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Quick questions? Chat with us on WhatsApp for instant support.
+                      </p>
+                      <a
+                        href="https://wa.me/14164529446"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-6 py-3 bg-[#25D366] hover:bg-[#22c55e] text-white font-medium rounded-lg transition-colors"
+                      >
+                        <MessageCircle className="h-5 w-5 mr-2" />
+                        Chat on WhatsApp
+                      </a>
                     </div>
                   </div>
                 </CardContent>

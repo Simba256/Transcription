@@ -9,156 +9,140 @@ export default function PrivacyPage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex-1">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h1 className="text-3xl font-bold text-[#003366] mb-4">
-            Talk to Text Canada – Privacy Policy
+          <h1 className="text-3xl font-bold text-[#003366] mb-8">
+            Privacy Policy
           </h1>
-          <p className="text-gray-600 mb-8">
-            <strong>Effective Date:</strong> July 28, 2025
-          </p>
+
+          {/* Plain-language summary */}
+          <div className="bg-[#e9e1f2] border-l-4 border-[#b094c5] rounded-lg p-6 mb-8">
+            <p className="text-gray-700">
+              <strong>Plain-language summary:</strong> We host primary systems and storage in Canada.
+              If you choose AI-assisted transcription, audio/text may be processed by a vetted provider
+              that can operate outside Canada. You control that choice. We encrypt data, minimize retention,
+              and honour your PIPEDA rights.
+            </p>
+          </div>
 
           <div className="prose prose-lg max-w-none">
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              1. Introduction
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Who we are
             </h2>
             <p className="text-gray-700 mb-6">
-              Talk to Text Canada (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your personal information in accordance with the Personal Information Protection and Electronic Documents Act (PIPEDA), applicable Ontario law, and other relevant regulations.
+              Talk to Text Canada ("we", "us") provides transcription and document services to clients
+              in Canada. This policy explains how we collect, use, disclose, store, and protect personal
+              information under Canada's Personal Information Protection and Electronic Documents Act
+              (PIPEDA) and applicable provincial laws.
             </p>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              2. Information We Collect
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              What we collect
             </h2>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Audio and video files, transcripts, and template documents you upload</li>
-              <li>Name, email address, billing and payment details</li>
-              <li>Session data such as IP address, browser type, and usage logs</li>
+              <li>Account details: name, email, organization, billing information.</li>
+              <li>Content you upload: audio/video, transcripts, notes, templates, form responses.</li>
+              <li>Usage data: activity in the client portal, logs for security and support.</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              3. How We Use Information
-            </h2>
-            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Deliver transcription services (AI, human, or hybrid)</li>
-              <li>Communicate service updates, order confirmations, and billing notices</li>
-              <li>Improve and personalize our platform through analytics</li>
-              <li>Comply with legal obligations and resolve disputes</li>
-            </ul>
-
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              4. Data Retention
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Your choices: Canada-only vs AI-assisted
             </h2>
             <p className="text-gray-700 mb-4">
-              We retain personal data only as long as necessary to fulfill the purposes below:
+              You can select the processing path for each job:
             </p>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Transcription files and metadata are retained for 30 days after completion</li>
-              <li>Payment records and account information are retained for 7 years for audit and tax compliance</li>
-              <li>Backup snapshots may persist for up to 90 days</li>
+              <li>
+                <strong>Canada-only Human Transcription:</strong> Processing and storage occur in Canada.
+                No cross-border processing.
+              </li>
+              <li>
+                <strong>AI-assisted Transcription:</strong> We use a vetted speech-to-text provider to
+                speed up transcription. Processing may occur outside Canada. We apply encryption in transit
+                and at rest, strict access controls, and contractual data-protection terms.
+              </li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              5. Third-Party Services and Data Transfers
-            </h2>
-            <p className="text-gray-700 mb-4">
-              We rely on third parties for service functionality:
-            </p>
-            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Speechmatics processes transcription requests under its own privacy practices; files are deleted per their schedule</li>
-              <li>Our servers are hosted in Canada; any cross-border transfers use standard contractual clauses or equivalent safeguards</li>
-            </ul>
-
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              6. Cookies and Tracking Technologies
-            </h2>
-            <p className="text-gray-700 mb-4">
-              We use cookies and similar technologies to enhance site performance. You can disable cookies in your browser settings, but some features may not function correctly.
-            </p>
-
-            <div className="overflow-x-auto mb-6">
-              <table className="w-full border-collapse border border-gray-300 rounded-lg">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-[#003366]">Cookie Type</th>
-                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-[#003366]">Purpose</th>
-                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-[#003366]">Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Session</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Maintain login and session state</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Session</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Analytics</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Collect anonymous usage data (e.g. Google Analytics)</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">2 years</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Functional</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">Remember user preferences and settings</td>
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">1 year</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              7. Data Security
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Purposes of use
             </h2>
             <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Encryption of data at rest with AES-256 and in transit via TLS 1.2+</li>
-              <li>Role-based access controls and multi-factor authentication for staff</li>
-              <li>Quarterly security assessments and prompt vulnerability patching</li>
+              <li>To provide and improve transcription and document services you request.</li>
+              <li>To secure our systems, prevent fraud, and support clients.</li>
+              <li>To meet legal, accounting, and regulatory obligations.</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              8. Your Rights
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Legal basis and consent
             </h2>
-            <p className="text-gray-700 mb-4">
-              Under PIPEDA and other applicable laws, you may:
-            </p>
-            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Access and receive a copy of your personal data</li>
-              <li>Request correction or deletion of inaccurate or outdated information</li>
-              <li>Withdraw consent at any time (subject to legal or contractual restrictions)</li>
-              <li>Lodge a complaint with the Privacy Commissioner of Canada</li>
-            </ul>
             <p className="text-gray-700 mb-6">
-              We will respond to access, correction, and deletion requests within 30 days.
+              We rely on your consent to process personal information for service delivery. You can
+              withdraw consent, subject to legal/contractual limits. We use checkboxes and clear
+              notices on upload pages to capture your choice of processing path.
             </p>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              9. Policy Updates
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Data hosting and transfers
             </h2>
-            <p className="text-gray-700 mb-4">
-              We may update this Privacy Policy to reflect changes in our practices or legal requirements. When we do, we will:
-            </p>
-            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
-              <li>Post the revised policy on our website with a new effective date</li>
-              <li>Notify registered users by email or site banner</li>
-            </ul>
             <p className="text-gray-700 mb-6">
-              Please review this policy periodically.
+              Primary hosting and storage are in Canada. If you select AI-assisted transcription,
+              your content may be processed by a trusted subprocessor operating data centres outside
+              Canada. Transfers occur only to provide the service you request.
             </p>
 
-            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4">
-              10. Contact Information
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Retention and deletion
             </h2>
-            <p className="text-gray-700 mb-4">
-              If you have questions, requests, or complaints, please contact us at:
+            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
+              <li>Raw audio and intermediate files: retained only as long as needed to deliver the job or as you direct.</li>
+              <li>Transcripts and documents: stored per your account settings or contractual terms.</li>
+              <li>You can request deletion at any time; we will act within 30 days unless law requires a different period.</li>
+            </ul>
+
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Security
+            </h2>
+            <p className="text-gray-700 mb-6">
+              Encryption in transit and at rest, least-privilege access, audit logging, and
+              employee/contractor confidentiality agreements. We regularly review security controls
+              and vendor DPAs.
             </p>
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <p className="text-gray-700">
-                Talk to Text Canada<br />
-                Brampton, Ontario<br />
-                Email: <a href="mailto:info@talktotext.ca" className="text-[#003366] hover:underline">info@talktotext.ca</a>
-              </p>
-            </div>
+
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Your rights
+            </h2>
+            <ul className="list-disc pl-6 mb-6 text-gray-700 space-y-2">
+              <li>Access and correction of your personal information.</li>
+              <li>Portability (machine-readable copy on request).</li>
+              <li>Deletion and withdrawal of consent.</li>
+              <li>Complaint: you may contact us or the Office of the Privacy Commissioner of Canada.</li>
+            </ul>
+
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Children
+            </h2>
+            <p className="text-gray-700 mb-6">
+              Our services are for professional use. If you believe a child's data was provided,
+              contact us to remove it.
+            </p>
+
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Contact
+            </h2>
+            <p className="text-gray-700 mb-6">
+              Email: <a href="mailto:privacy@talktotext.ca" className="text-[#003366] hover:underline">privacy@talktotext.ca</a><br />
+              Mailing address available on request.
+            </p>
+
+            <h2 className="text-2xl font-semibold text-[#003366] mt-8 mb-4 border-l-[6px] border-[#b094c5] pl-4">
+              Changes
+            </h2>
+            <p className="text-gray-700 mb-6">
+              We will post updates to this page and modify the "Last updated" date.
+            </p>
           </div>
 
           <footer className="mt-12 pt-8 border-t border-gray-200">
             <p className="text-center text-sm text-gray-500">
-              Last Updated: July 28, 2025
+              Last Updated: October 8, 2025
             </p>
           </footer>
         </div>
