@@ -112,18 +112,18 @@ export default function GuidePage() {
               <video
                 controls
                 className="w-full"
-                poster="/api/placeholder/1280/720"
+                preload="metadata"
                 onError={() => setVideoError(true)}
               >
-                <source src="/demo-video.mp4" type="video/mp4" />
+                <source src="/tutorial-video.mp4" type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
             ) : (
               <div className="flex items-center justify-center h-96 bg-gray-900 text-white">
                 <div className="text-center">
                   <AlertCircle className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
-                  <p className="text-lg mb-2">Video tutorial is being updated</p>
-                  <p className="text-gray-400">Please follow the written guide below</p>
+                  <p className="text-lg mb-2">Video tutorial is temporarily unavailable</p>
+                  <p className="text-gray-400">Please follow the written guide below or try refreshing the page</p>
                 </div>
               </div>
             )}
