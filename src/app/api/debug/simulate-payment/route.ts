@@ -87,13 +87,29 @@ export async function POST(request: NextRequest) {
     const payloadString = JSON.stringify(payload);
     const signedPayload = `${timestamp}.${payloadString}`;
 
+    // Parse the webhook secret properly
+    // Stripe webhook secrets after 'whsec_' are base64 encoded
+    let secretBytes;
+    try {
+      // Remove 'whsec_' prefix and decode from base64
+      const secretPart = webhookSecret.replace('whsec_', '');
+      secretBytes = Buffer.from(secretPart, 'base64');
+    } catch (e) {
+      // If base64 decode fails, try using it as-is
+      console.log('[Simulate] Using webhook secret as-is (not base64)');
+      secretBytes = webhookSecret.replace('whsec_', '');
+    }
+
     // Create signature using webhook secret
     const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret.replace('whsec_', ''))
+      .createHmac('sha256', secretBytes)
       .update(signedPayload, 'utf8')
       .digest('hex');
 
     const signature = `t=${timestamp},v1=${expectedSignature}`;
+
+    console.log('[Simulate] Webhook secret prefix:', webhookSecret.substring(0, 10));
+    console.log('[Simulate] Generated signature:', signature.substring(0, 50) + '...');
 
     // Log what we're about to send
     console.log('[Simulate Payment] Sending webhook to:', webhookUrl);
