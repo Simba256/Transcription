@@ -127,7 +127,6 @@ export default function AdminPage() {
         }, 0);
 
         // Get package statistics from Firestore
-        const db = getFirestore();
         const packagesQuery = query(collection(db, 'packages'));
         const packagesSnapshot = await getDocs(packagesQuery);
         const allPackages = packagesSnapshot.docs.map(doc => ({
