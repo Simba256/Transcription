@@ -251,15 +251,6 @@ export function SignInPage() {
                 </Link>
               </p>
             </div>
-
-            {/* Demo accounts info */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-600 mb-2 font-medium">Demo Accounts:</p>
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>User: user@demo.com / password</p>
-                <p>Admin: admin@demo.com / password</p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>
