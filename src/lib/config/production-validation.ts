@@ -13,10 +13,14 @@ export function validateProductionEnvironment(): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Only validate in production
-  if (process.env.NODE_ENV !== 'production') {
+  // Skip validation for development
+  if (process.env.NODE_ENV === 'development') {
     return { isValid: true, errors: [], warnings: [] };
   }
+
+  // Check if this is a preview deployment (not main production)
+  const isPreview = process.env.VERCEL_ENV === 'preview' ||
+                    process.env.VERCEL_GIT_COMMIT_REF !== 'main';
 
   // Required Firebase Configuration
   const requiredFirebaseVars = [
@@ -50,12 +54,19 @@ export function validateProductionEnvironment(): ValidationResult {
     }
   });
 
-  // Validate Stripe keys are production keys
-  if (process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')) {
-    errors.push('STRIPE_SECRET_KEY is a test key. Production requires live keys.');
-  }
-  if (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_test')) {
-    errors.push('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is a test key. Production requires live keys.');
+  // Validate Stripe keys are production keys (only for main production, not preview)
+  if (!isPreview) {
+    if (process.env.STRIPE_SECRET_KEY?.startsWith('sk_test')) {
+      errors.push('STRIPE_SECRET_KEY is a test key. Production requires live keys.');
+    }
+    if (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_test')) {
+      errors.push('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is a test key. Production requires live keys.');
+    }
+  } else {
+    // For preview environments, warn if using live keys
+    if (process.env.STRIPE_SECRET_KEY?.startsWith('sk_live')) {
+      warnings.push('Using LIVE Stripe keys in preview environment - consider using test keys');
+    }
   }
 
   // Check for Stripe pricing tables (warning if missing)
