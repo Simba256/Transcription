@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { secureApiClient } from '@/lib/secure-api-client';
 import { Timestamp } from 'firebase/firestore';
+import SecureCheckoutButton from '@/components/billing/SecureCheckoutButton';
 import {
   Alert,
   AlertDescription,
@@ -482,66 +483,39 @@ export default function BillingPage() {
                         ))}
                       </div>
 
-                      {/* Stripe Pricing Table or Test Mode Buttons */}
-                      {isTestMode ? (
-                        <div className="mt-6 p-6 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
-                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">🧪 Test Mode Active</h4>
-                          <p className="text-sm text-yellow-700 mb-4">
-                            Pricing tables are not available in test mode. Use the test buttons below to simulate purchases.
-                          </p>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {info.packages.map((pkg, idx) => (
-                              <Button
-                                key={idx}
-                                className={`${pkg.popular ? 'bg-[#b29dd9] hover:bg-[#9d87c7]' : 'bg-[#003366] hover:bg-[#002244]'} text-white`}
-                                onClick={async () => {
-                                  try {
-                                    const result = await secureApiClient.post('/api/test-payment', {
-                                      type: 'package',
-                                      packageData: {
-                                        type: key,
-                                        name: `${info.name} - ${pkg.minutes} minutes`,
-                                        minutes: pkg.minutes,
-                                        rate: pkg.rate,
-                                        price: pkg.price,
-                                      }
-                                    });
-
-                                    toast({
-                                      title: "✅ Test Purchase Complete",
-                                      description: result.message || 'Package added successfully',
-                                    });
-
-                                    // Refresh the page to show updated balance
-                                    window.location.reload();
-                                  } catch (error) {
-                                    toast({
-                                      title: "Test Purchase Failed",
-                                      description: "Could not complete test purchase",
-                                      variant: "destructive",
-                                    });
-                                  }
+                      {/* Purchase Buttons - Now using SecureCheckoutButton for foolproof payments */}
+                      <div className="mt-6">
+                        <h4 className="text-lg font-semibold text-[#003366] mb-4 text-center">Select Your Package:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {info.packages.map((pkg, idx) => (
+                            <div key={idx} className="text-center">
+                              <SecureCheckoutButton
+                                amount={pkg.price}
+                                type="package"
+                                packageData={{
+                                  type: key,
+                                  name: `${info.name} - ${pkg.minutes} minutes`,
+                                  minutes: pkg.minutes,
+                                  rate: pkg.rate,
+                                  price: pkg.price
                                 }}
+                                className={`w-full ${pkg.popular ? 'bg-[#b29dd9] hover:bg-[#9d87c7]' : 'bg-[#003366] hover:bg-[#002244]'} text-white py-3 px-4 rounded-lg font-medium transition-all`}
                               >
-                                Test: {pkg.minutes} min - CA${pkg.price}
-                              </Button>
-                            ))}
-                          </div>
-                          <p className="text-xs text-yellow-600 mt-4">
-                            Use test card: 4242 4242 4242 4242 (any expiry/CVC)
-                          </p>
+                                Purchase {pkg.minutes} Minutes
+                                <span className="block text-sm mt-1">CA${pkg.price}</span>
+                              </SecureCheckoutButton>
+                              {pkg.popular && (
+                                <p className="text-xs text-[#b29dd9] font-semibold mt-2">MOST POPULAR CHOICE</p>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ) : (
-                        scriptsLoaded && publishableKey && pricingTables[key as keyof typeof pricingTables] && (
-                          <div className="stripe-pricing-table-container">
-                            <stripe-pricing-table
-                              pricing-table-id={pricingTables[key as keyof typeof pricingTables]}
-                              publishable-key={publishableKey}
-                              customer-email={user?.email || undefined}
-                            />
-                          </div>
-                        )
-                      )}
+                        {isTestMode && (
+                          <p className="text-xs text-gray-500 text-center mt-4">
+                            Test Mode Active - Use card 4242 4242 4242 4242
+                          </p>
+                        )}
+                      </div>
                     </TabsContent>
                   ))}
                 </Tabs>
@@ -581,34 +555,7 @@ export default function BillingPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {['50', '200', '500'].map((amount) => (
-                    <Card key={amount} className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={async () => {
-                        if (isTestMode) {
-                          // In test mode, actually add funds to wallet
-                          try {
-                            const result = await secureApiClient.post('/api/test-payment', {
-                              type: 'wallet',
-                              amount: parseInt(amount),
-                            });
-
-                            toast({
-                              title: "✅ Test Wallet Top-up Complete",
-                              description: result.message || `CA$${amount} added to wallet`,
-                            });
-
-                            // Refresh the page to show updated balance
-                            window.location.reload();
-                          } catch (error) {
-                            toast({
-                              title: "Test Top-up Failed",
-                              description: "Could not complete test wallet top-up",
-                              variant: "destructive",
-                            });
-                          }
-                        } else {
-                          window.open(walletLinks[amount as keyof typeof walletLinks], '_blank');
-                        }
-                      }}>
+                    <Card key={amount} className="border shadow-sm hover:shadow-md transition-shadow">
                       <CardContent className="p-6 text-center">
                         <div className="text-3xl font-bold text-[#003366] mb-2">
                           CA${amount}
@@ -616,14 +563,18 @@ export default function BillingPage() {
                         <p className="text-gray-600 mb-2">
                           {amount === '50' ? 'Quick Start' : amount === '200' ? 'Standard' : 'Professional'}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 mb-4">
                           ~{Math.floor(parseInt(amount) / 1.20)} AI minutes<br/>
                           ~{Math.floor(parseInt(amount) / 1.50)} Hybrid minutes<br/>
                           ~{Math.floor(parseInt(amount) / 2.50)} Human minutes
                         </p>
-                        <Button className="w-full mt-4 bg-[#003366] hover:bg-[#002244] text-white">
-                          {isTestMode ? 'Test Top-up' : 'Add to Wallet'}
-                        </Button>
+                        <SecureCheckoutButton
+                          amount={parseInt(amount)}
+                          type="wallet"
+                          className="w-full bg-[#003366] hover:bg-[#002244] text-white py-3 rounded-lg font-medium"
+                        >
+                          Add CA${amount} to Wallet
+                        </SecureCheckoutButton>
                       </CardContent>
                     </Card>
                   ))}
