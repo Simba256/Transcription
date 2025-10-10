@@ -115,10 +115,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Manual Retrieve] Created ${timestampedSegments.length} timestamped segments`);
 
+    // Extract plain text transcript
+    const plainTextTranscript = timestampedSegments.map(seg => seg.text).join(' ');
+
     // Update the transcription job
     await updateTranscriptionStatusAdmin(transcriptionJobId, 'complete', {
-      transcript: transcriptData,
-      timestampedTranscript: timestampedSegments
+      transcript: plainTextTranscript,
+      timestampedTranscript: timestampedSegments,
+      manuallyRetrieved: true,
+      speechmaticsJobId: speechmaticsJobId
     });
 
     console.log(`[Manual Retrieve] Updated transcription job ${transcriptionJobId} to complete`);
