@@ -46,6 +46,8 @@ next-env.d.ts
 *.mp4
 *.wav
 *.m4a
+# Exception for tutorial video in public directory
+!public/tutorial-video.mp4
 *.avi
 *.mov
 *.zip
