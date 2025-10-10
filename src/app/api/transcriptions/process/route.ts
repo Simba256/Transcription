@@ -298,13 +298,21 @@ async function processTranscriptionWithWebhook(
     // Determine the base URL dynamically
     let baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
+    // Ensure the URL has a protocol
+    if (baseUrl && !baseUrl.startsWith('http')) {
+      baseUrl = `https://${baseUrl}`;
+      console.log(`[API] Added https:// protocol to base URL: ${baseUrl}`);
+    }
+
     // Try to get the actual domain from request headers (for server-side)
     if (request) {
       const host = request.headers.get('host');
       const protocol = request.headers.get('x-forwarded-proto') || 'https';
       if (host) {
-        baseUrl = `${protocol}://${host}`;
-        console.log(`[API] Using dynamic URL from request headers: ${baseUrl}`);
+        const dynamicUrl = `${protocol}://${host}`;
+        console.log(`[API] Request headers indicate URL: ${dynamicUrl}`);
+        // Use dynamic URL if available
+        baseUrl = dynamicUrl;
       }
     }
 
@@ -320,7 +328,7 @@ async function processTranscriptionWithWebhook(
       }
     }
 
-    console.log(`[API] Using base URL for Speechmatics webhook: ${baseUrl}`);
+    console.log(`[API] Final base URL for Speechmatics webhook: ${baseUrl}`);
 
     const webhookToken = process.env.SPEECHMATICS_WEBHOOK_TOKEN || 'default-webhook-secret';
     const callbackUrl = `${baseUrl}/api/speechmatics/callback?token=${webhookToken}&jobId=${jobId}`;
