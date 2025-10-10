@@ -74,21 +74,45 @@ export async function POST(request: NextRequest) {
           metadata: session.metadata,
         });
 
-        const userId = session.metadata?.userId;
-        const paymentType = session.metadata?.type || 'package'; // Default to package
+        let userId = session.metadata?.userId;
+        const paymentType = session.metadata?.type || 'wallet'; // Default to wallet for payment links
         const amount = (session.amount_total || 0) / 100; // Convert cents to dollars
 
         if (!userId) {
           console.error('[WEBHOOK] ❌ Missing userId in checkout session metadata:', {
             metadata: session.metadata,
             sessionId: session.id,
-            customerEmail: session.customer_email,
+            customerEmail: session.customer_details?.email,
           });
+
           // Try to find user by email as fallback
-          if (session.customer_email) {
-            console.log('[WEBHOOK] Attempting to find user by email:', session.customer_email);
+          const customerEmail = session.customer_details?.email || session.customer_email;
+          if (customerEmail) {
+            console.log('[WEBHOOK] Attempting to find user by email:', customerEmail);
+
+            try {
+              const usersQuery = await adminDb.collection('users')
+                .where('email', '==', customerEmail)
+                .limit(1)
+                .get();
+
+              if (!usersQuery.empty) {
+                const userDoc = usersQuery.docs[0];
+                userId = userDoc.id;
+                console.log('[WEBHOOK] ✅ Found user by email:', customerEmail, 'userId:', userId);
+              } else {
+                console.error('[WEBHOOK] ❌ No user found with email:', customerEmail);
+                console.error('[WEBHOOK] Payment cannot be processed - no user identified');
+                break;
+              }
+            } catch (error) {
+              console.error('[WEBHOOK] ❌ Error looking up user by email:', error);
+              break;
+            }
+          } else {
+            console.error('[WEBHOOK] ❌ No email available to identify user');
+            break;
           }
-          break;
         }
 
         console.log('[WEBHOOK] Processing payment for user:', {
