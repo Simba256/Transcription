@@ -17,6 +17,7 @@ import { Footer } from '@/components/layout/Footer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
+import { useWallet } from '@/contexts/WalletContext';
 import { generateFilePath } from '@/lib/firebase/storage';
 import { createTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
 import { TranscriptionMode, TranscriptionJob, TranscriptionDomain } from '@/lib/firebase/transcriptions';
@@ -46,8 +47,19 @@ export default function UploadPage() {
   const [location, setLocation] = useState('');
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [includeFiller, setIncludeFiller] = useState(false);
+  // Add-on options
+  const [rushDelivery, setRushDelivery] = useState(false);
+  const [multipleSpeakers, setMultipleSpeakers] = useState(false);
+  const [speakerCount, setSpeakerCount] = useState(2);
   const { user, userData } = useAuth();
   const { consumeCredits } = useCredits();
+  const {
+    walletBalance,
+    packages,
+    checkSufficientBalance,
+    deductForTranscription,
+    getActivePackageForMode
+  } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -154,10 +166,49 @@ export default function UploadPage() {
   const totalDurationSeconds = uploadedFiles.reduce((sum, file) => sum + file.duration, 0);
   const totalBillingMinutes = uploadedFiles.reduce((sum, file) => sum + getBillingMinutes(file.duration), 0);
 
-  // Calculate cost based on minutes and mode
-  const walletBalance = userData ? (userData.walletBalance || 0) + (userData.credits || 0) : 0; // Combine legacy credits with wallet
-  const totalCost = totalBillingMinutes * selectedMode.costPerMinute;
-  const hasInsufficientBalance = userData ? totalCost > walletBalance : false;
+  // Calculate cost based on minutes, mode, and packages
+  const activePackage = getActivePackageForMode(transcriptionMode as TranscriptionMode);
+  const hasPackage = !!activePackage;
+
+  // Check balance and calculate costs
+  const balanceCheck = checkSufficientBalance(
+    transcriptionMode as TranscriptionMode,
+    totalBillingMinutes
+  );
+
+  // Calculate costs based on package or standard rates
+  let baseCost = 0;
+  let packageMinutesUsed = 0;
+  let walletMinutesUsed = 0;
+
+  if (activePackage && totalBillingMinutes > 0) {
+    // Calculate how many minutes from package vs wallet
+    packageMinutesUsed = Math.min(totalBillingMinutes, activePackage.minutesRemaining);
+    walletMinutesUsed = totalBillingMinutes - packageMinutesUsed;
+
+    // Calculate cost: package minutes at package rate, rest at standard rate
+    baseCost = (packageMinutesUsed * activePackage.rate) + (walletMinutesUsed * selectedMode.costPerMinute);
+  } else {
+    // No package, use standard rate for all minutes
+    baseCost = totalBillingMinutes * selectedMode.costPerMinute;
+    walletMinutesUsed = totalBillingMinutes;
+  }
+
+  // Calculate add-on costs (only if no package AND using wallet minutes)
+  let addOnCostPerMinute = 0;
+  if (!hasPackage && (transcriptionMode === 'hybrid' || transcriptionMode === 'human')) {
+    if (rushDelivery) {
+      addOnCostPerMinute += transcriptionMode === 'hybrid' ? 0.50 : 0.75;
+    }
+    if (multipleSpeakers) {
+      addOnCostPerMinute += transcriptionMode === 'hybrid' ? 0.25 : 0.30;
+    }
+  }
+
+  const addOnCost = walletMinutesUsed * addOnCostPerMinute; // Add-ons only apply to wallet minutes
+  const totalCost = baseCost + addOnCost;
+  const walletAmountNeeded = (walletMinutesUsed * selectedMode.costPerMinute) + addOnCost;
+  const hasInsufficientBalance = walletAmountNeeded > walletBalance;
 
   // Function to get accurate duration from audio/video files
   const getMediaDuration = (file: File): Promise<number> => {
@@ -294,7 +345,7 @@ export default function UploadPage() {
     if (hasInsufficientBalance) {
       toast({
         title: "Insufficient Wallet Balance",
-        description: `You need CA$${totalCost.toFixed(2)} but only have CA$${walletBalance.toFixed(2)} in your wallet. Please top up your wallet to continue.`,
+        description: `You need CA$${walletAmountNeeded.toFixed(2)} from your wallet but only have CA$${walletBalance.toFixed(2)}. Please top up your wallet to continue.`,
         variant: "destructive",
       });
       return;
@@ -349,7 +400,19 @@ export default function UploadPage() {
 
         // Create transcription job in Firestore
         const billingMinutes = getBillingMinutes(uploadFile.duration);
-        const costForFile = billingMinutes * modeDetails.costPerMinute;
+
+        // Calculate add-on cost for this file
+        let fileAddOnCost = 0;
+        if (!hasPackage && (transcriptionMode === 'hybrid' || transcriptionMode === 'human')) {
+          if (rushDelivery) {
+            fileAddOnCost += billingMinutes * (transcriptionMode === 'hybrid' ? 0.50 : 0.75);
+          }
+          if (multipleSpeakers) {
+            fileAddOnCost += billingMinutes * (transcriptionMode === 'hybrid' ? 0.25 : 0.30);
+          }
+        }
+
+        const costForFile = (billingMinutes * modeDetails.costPerMinute) + fileAddOnCost;
         
         // Set initial status based on transcription mode
         let initialStatus: 'processing' | 'pending-transcription';
@@ -376,7 +439,13 @@ export default function UploadPage() {
           patientName: patientName.trim() || undefined,
           location: location.trim() || undefined,
           // Filler words option
-          includeFiller
+          includeFiller,
+          // Add-on options
+          rushDelivery: (transcriptionMode === 'hybrid' || transcriptionMode === 'human') ? rushDelivery : false,
+          multipleSpeakers: (transcriptionMode === 'hybrid' || transcriptionMode === 'human') ? multipleSpeakers : false,
+          speakerCount: multipleSpeakers ? speakerCount : 2,
+          addOnCost: fileAddOnCost,
+          hasPackage: hasPackage
         };
 
         // Only add specialInstructions if it has content
@@ -397,12 +466,26 @@ export default function UploadPage() {
         });
 
         // Deduct from wallet balance
-        if (costForFile > 0) {
-          const modeDisplayName = modeDetails.name;
-          const description = `${modeDisplayName}: ${uploadFile.file.name} (${billingMinutes} min)`;
-          // TODO: Implement wallet deduction when WalletContext is created
-          // await deductFromWallet(costForFile, jobId, description);
-          totalCostProcessed += costForFile;
+        if (billingMinutes > 0) {
+          const deductionResult = await deductForTranscription(
+            transcriptionMode as TranscriptionMode,
+            billingMinutes,
+            jobId
+          );
+
+          if (!deductionResult.success) {
+            // If deduction fails, we should probably delete the job or mark it as failed
+            console.error('Failed to deduct payment:', deductionResult.error);
+            toast({
+              title: "Payment failed",
+              description: deductionResult.error || "Failed to process payment for transcription",
+              variant: "destructive",
+            });
+            // TODO: Consider deleting the created job or marking it as payment_failed
+            throw new Error(deductionResult.error || 'Payment failed');
+          }
+
+          totalCostProcessed += deductionResult.costDeducted;
         }
 
         // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
@@ -939,6 +1022,143 @@ export default function UploadPage() {
             </CardContent>
           </Card>
 
+          {/* Add-on Options (for Hybrid and Human only) */}
+          {(transcriptionMode === 'hybrid' || transcriptionMode === 'human') && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-[#003366]">
+                  ⚡ Premium Add-ons
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-2">
+                  {userData?.hasActivePackage
+                    ? "✨ These add-ons are FREE with your package!"
+                    : "Select optional add-ons (additional charges apply)"}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Rush Delivery Option */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">🚀</span>
+                        <h4 className="font-medium text-gray-900">Rush Delivery</h4>
+                        {!userData?.hasActivePackage && (
+                          <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                            +CA${transcriptionMode === 'hybrid' ? '0.50' : '0.75'}/min
+                          </span>
+                        )}
+                        {userData?.hasActivePackage && (
+                          <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                            FREE with package
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Get your transcription in 24-48 hours instead of 3-5 business days
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={rushDelivery}
+                        onChange={(e) => setRushDelivery(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#b29dd9]/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#b29dd9]"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Multiple Speakers Option */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">👥</span>
+                        <h4 className="font-medium text-gray-900">Multiple Speakers (3+)</h4>
+                        {!userData?.hasActivePackage && (
+                          <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                            +CA${transcriptionMode === 'hybrid' ? '0.25' : '0.30'}/min
+                          </span>
+                        )}
+                        {userData?.hasActivePackage && (
+                          <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                            FREE with package
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Enhanced speaker identification for recordings with 3 or more speakers
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={multipleSpeakers}
+                        onChange={(e) => setMultipleSpeakers(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#b29dd9]/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#b29dd9]"></div>
+                    </label>
+                  </div>
+
+                  {/* Speaker count input when multiple speakers is selected */}
+                  {multipleSpeakers && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                      <label className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">Number of speakers:</span>
+                        <input
+                          type="number"
+                          min="3"
+                          max="10"
+                          value={speakerCount}
+                          onChange={(e) => setSpeakerCount(Math.max(3, Math.min(10, parseInt(e.target.value) || 3)))}
+                          className="w-20 px-3 py-1 border border-gray-300 rounded-md text-center focus:outline-none focus:ring-2 focus:ring-[#b29dd9] focus:border-transparent"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cost Summary for Add-ons */}
+                {(rushDelivery || multipleSpeakers) && !userData?.hasActivePackage && (
+                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-amber-600 mt-0.5">💰</div>
+                      <div>
+                        <p className="text-sm text-amber-800 font-medium">Add-on Charges</p>
+                        <div className="text-sm text-amber-700 mt-1 space-y-1">
+                          {rushDelivery && (
+                            <div>• Rush Delivery: +CA${(transcriptionMode === 'hybrid' ? 0.50 : 0.75).toFixed(2)}/min</div>
+                          )}
+                          {multipleSpeakers && (
+                            <div>• Multiple Speakers: +CA${(transcriptionMode === 'hybrid' ? 0.25 : 0.30).toFixed(2)}/min</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Package Benefit Notice */}
+                {(rushDelivery || multipleSpeakers) && userData?.hasActivePackage && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-green-600 mt-0.5">✨</div>
+                      <div>
+                        <p className="text-sm text-green-800 font-medium">Package Benefits Active!</p>
+                        <p className="text-sm text-green-700 mt-1">
+                          Your selected add-ons are included FREE with your package. No additional charges!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Special Instructions */}
           <Card className="border-0 shadow-sm">
             <CardHeader>
@@ -966,48 +1186,125 @@ export default function UploadPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Billable Minutes */}
                 <div className="flex justify-between items-center py-2">
                   <span className="text-gray-600">Billable Minutes:</span>
                   <span className="font-medium text-lg">{totalBillingMinutes} {totalBillingMinutes === 1 ? 'minute' : 'minutes'}</span>
                 </div>
                 {totalDurationSeconds > 0 && totalBillingMinutes !== Math.floor(totalDurationSeconds / 60) && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 -mt-2">
                     Actual duration: {formatDuration(totalDurationSeconds)} (partial minutes rounded up)
                   </p>
                 )}
 
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">Rate ({selectedMode.name}):</span>
-                  <span className="font-semibold text-[#b29dd9]">CA${selectedMode.costPerMinute.toFixed(2)}/min</span>
-                </div>
+                {/* Payment Method Section */}
+                {activePackage && packageMinutesUsed > 0 && (
+                  <>
+                    {/* Package covers everything */}
+                    {walletMinutesUsed === 0 ? (
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-green-700 font-medium">✓ Using {activePackage.name}</span>
+                          <span className="text-sm font-semibold text-green-800">
+                            {packageMinutesUsed} min × CA${activePackage.rate.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-green-600 mt-2">
+                          {activePackage.minutesRemaining - packageMinutesUsed} minutes will remain • No wallet needed
+                        </div>
+                      </div>
+                    ) : (
+                      /* Package + Wallet needed */
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="text-xs text-amber-700 font-medium mb-2">Package insufficient, using both:</div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-amber-700">{activePackage.name}:</span>
+                            <span className="text-sm font-semibold text-amber-800">
+                              {packageMinutesUsed} min × CA${activePackage.rate.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-amber-700">From Wallet:</span>
+                            <span className="text-sm font-semibold text-amber-800">
+                              {walletMinutesUsed} min × CA${selectedMode.costPerMinute.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
 
-                <div className="border-t pt-4">
+                {/* No package available - wallet only */}
+                {!activePackage && walletMinutesUsed > 0 && (
                   <div className="flex justify-between items-center py-2">
-                    <span className="font-semibold text-[#003366] text-lg">Total Cost:</span>
-                    <span className="font-bold text-[#003366] text-lg">CA${totalCost.toFixed(2)}</span>
+                    <span className="text-gray-600">Rate ({selectedMode.name}):</span>
+                    <span className="font-semibold text-[#b29dd9]">
+                      {walletMinutesUsed} min × CA${selectedMode.costPerMinute.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Add-on costs */}
+                {addOnCost > 0 && (
+                  <div className="pl-4 space-y-1 border-l-2 border-gray-200">
+                    {rushDelivery && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">+ Rush Delivery:</span>
+                        <span className="text-sm text-gray-700">CA${(walletMinutesUsed * (transcriptionMode === 'hybrid' ? 0.50 : 0.75)).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {multipleSpeakers && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">+ Multiple Speakers:</span>
+                        <span className="text-sm text-gray-700">CA${(walletMinutesUsed * (transcriptionMode === 'hybrid' ? 0.25 : 0.30)).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Total Cost - Always at the bottom */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-[#003366] text-xl">Total Cost:</span>
+                    <span className="font-bold text-[#003366] text-xl">CA${totalCost.toFixed(2)}</span>
                   </div>
                 </div>
 
+                {/* Account Balance Info */}
                 {userData && (
-                  <div className="border-t pt-4 space-y-2">
-                    <div className="flex justify-between items-center py-2 text-sm">
-                      <span className="text-gray-600">Wallet Balance:</span>
-                      <span className={`font-medium ${walletBalance >= totalCost ? 'text-green-600' : 'text-red-600'}`}>
-                        CA${walletBalance.toFixed(2)}
-                      </span>
+                  <div className="pt-2 space-y-2">
+                    {/* Show current balances */}
+                    <div className="text-sm space-y-1">
+                      {activePackage && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Package Balance:</span>
+                          <span className="text-gray-700">{activePackage.minutesRemaining} minutes</span>
+                        </div>
+                      )}
+                      {walletMinutesUsed > 0 && (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Wallet Balance:</span>
+                            <span className={walletBalance >= walletAmountNeeded ? 'text-gray-700' : 'text-red-600 font-medium'}>
+                              CA${walletBalance.toFixed(2)}
+                            </span>
+                          </div>
+                          {walletBalance >= walletAmountNeeded && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500">After Transaction:</span>
+                              <span className="text-gray-700">CA${(walletBalance - walletAmountNeeded).toFixed(2)}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {walletBalance >= totalCost && (
-                      <div className="flex justify-between items-center py-2 text-sm">
-                        <span className="text-gray-600">Balance After:</span>
-                        <span className="font-medium">CA${(walletBalance - totalCost).toFixed(2)}</span>
-                      </div>
-                    )}
-                    {/* Package benefits notice */}
-                    {userData.hasActivePackage && (
-                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-sm text-green-800">
-                          ✓ Package rate applied • Rush delivery & multiple speakers included FREE
-                        </p>
+
+                    {/* Package benefits for add-ons */}
+                    {activePackage && (rushDelivery || multipleSpeakers) && (transcriptionMode === 'hybrid' || transcriptionMode === 'human') && (
+                      <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                        ✓ Add-ons included FREE with your package
                       </div>
                     )}
                   </div>
@@ -1022,7 +1319,11 @@ export default function UploadPage() {
                           Insufficient Wallet Balance
                         </p>
                         <p className="text-red-700">
-                          You need CA${totalCost.toFixed(2)} but only have CA${walletBalance.toFixed(2)} in your wallet.
+                          {activePackage && walletMinutesUsed > 0 ? (
+                            <>Your package can cover {packageMinutesUsed} minutes, but you need CA${walletAmountNeeded.toFixed(2)} from your wallet for the remaining {walletMinutesUsed} minutes. You only have CA${walletBalance.toFixed(2)}.</>
+                          ) : (
+                            <>You need CA${walletAmountNeeded.toFixed(2)} but only have CA${walletBalance.toFixed(2)} in your wallet.</>
+                          )}
                         </p>
                         <Link href="/billing" className="text-red-800 underline mt-2 inline-block">
                           Top up your wallet

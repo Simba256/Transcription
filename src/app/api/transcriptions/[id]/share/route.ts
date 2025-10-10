@@ -62,7 +62,7 @@ export async function POST(
       success: true,
       isShared,
       shareId,
-      shareUrl: shareId ? `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/share/${shareId}` : null
+      shareUrl: shareId ? `${process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3002' : '')}/share/${shareId}` : null
     });
 
   } catch (error) {

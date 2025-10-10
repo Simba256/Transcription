@@ -3,8 +3,15 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ClientWrapper from "@/components/ClientWrapper";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { validateProductionEnvironment, logValidationResults } from "@/lib/config/production-validation";
 
 const inter = Inter({ subsets: ["latin"] });
+
+// Run production validation on server startup
+if (typeof window === 'undefined') {
+  const validationResult = validateProductionEnvironment();
+  logValidationResults(validationResult);
+}
 
 export const metadata: Metadata = {
   title: "Talk to Text Canada",

@@ -33,6 +33,12 @@ export interface TranscriptionJob {
   createdAt: FirebaseFirestore.Timestamp;
   updatedAt: FirebaseFirestore.Timestamp;
   completedAt?: FirebaseFirestore.Timestamp;
+  // Add-on options
+  rushDelivery?: boolean; // Whether rush delivery (24-48hr) was requested
+  multipleSpeakers?: boolean; // Whether multiple speakers (3+) option was selected
+  speakerCount?: number; // Number of speakers in the recording
+  addOnCost?: number; // Additional cost for add-ons in CAD
+  hasPackage?: boolean; // Whether user has active package (add-ons are free)
 }
 
 const TRANSCRIPTIONS_COLLECTION = 'transcriptions';

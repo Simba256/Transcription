@@ -50,6 +50,12 @@ export interface TranscriptionJob {
   speakerNames?: Record<string, string>; // Custom names for speakers (e.g., {"S1": "John", "S2": "Mary"})
   // Filler words option
   includeFiller?: boolean; // Whether to include filler words (um, uh, etc.) in the transcript
+  // Add-on options
+  rushDelivery?: boolean; // Whether rush delivery (24-48hr) was requested
+  multipleSpeakers?: boolean; // Whether multiple speakers (3+) option was selected
+  speakerCount?: number; // Number of speakers in the recording
+  addOnCost?: number; // Additional cost for add-ons in CAD
+  hasPackage?: boolean; // Whether user has active package (add-ons are free)
 }
 
 const TRANSCRIPTIONS_COLLECTION = 'transcriptions';

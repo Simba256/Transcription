@@ -32,19 +32,20 @@ service cloud.firestore {
     match /users/{userId} {
       // Users can read their own profile, admins can read all profiles
       allow read: if isOwnerOrAdmin(userId);
-      
+
       // Users can create their own profile during signup
-      allow create: if isSignedIn() && isOwner(userId) && 
+      allow create: if isSignedIn() && isOwner(userId) &&
                        request.resource.data.keys().hasAll(['email', 'role', 'createdAt']) &&
                        request.resource.data.role in ['user', 'admin'] &&
                        request.resource.data.email == request.auth.token.email;
-      
+
       // Users can update their own profile (except role), admins can update anyone's profile
-      allow update: if isOwner(userId) && 
-                       (!('role' in request.resource.data) || 
+      // Now allows walletBalance and packages fields
+      allow update: if isOwner(userId) &&
+                       (!('role' in request.resource.data) ||
                         request.resource.data.role == resource.data.role) ||
                        isAdmin();
-      
+
       // Only admins can delete user profiles
       allow delete: if isAdmin();
     }
@@ -61,14 +62,15 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.keys().hasAll(['userId', 'filename', 'status', 'mode']) &&
-                       // Allow additional optional fields including sharing fields
+                       // Allow additional optional fields including sharing fields and add-ons
                        request.resource.data.keys().hasOnly([
                          'userId', 'filename', 'originalFilename', 'filePath', 'downloadURL',
                          'status', 'mode', 'duration', 'creditsUsed', 'specialInstructions',
                          'transcript', 'timestampedTranscript', 'transcriptStoragePath',
                          'segmentCount', 'transcriptLength', 'createdAt', 'updatedAt', 'completedAt',
                          'clientName', 'projectName', 'providerName', 'patientName', 'location', 'recordingTime',
-                         'isShared', 'shareId', 'sharedAt', 'domain'
+                         'isShared', 'shareId', 'sharedAt', 'domain', 'language', 'includeFiller', 'speakerNames',
+                         'rushDelivery', 'multipleSpeakers', 'speakerCount', 'addOnCost', 'hasPackage'
                        ]);
 
       // Users can update their own transcriptions, admins can update any transcription

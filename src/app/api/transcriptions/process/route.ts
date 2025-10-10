@@ -294,7 +294,16 @@ async function processTranscriptionWithWebhook(
     console.log(`[API] Starting webhook-based processing for job ${jobId}`);
 
     // Create callback URL with job reference
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+      console.error('[API] NEXT_PUBLIC_APP_URL is not configured, using fallback');
+      // Only use localhost in development
+      const fallbackUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3002' : '';
+      if (!fallbackUrl) {
+        throw new Error('NEXT_PUBLIC_APP_URL must be configured in production');
+      }
+      return { success: false, error: 'Application URL not configured' };
+    }
     const webhookToken = process.env.SPEECHMATICS_WEBHOOK_TOKEN || 'default-webhook-secret';
     const callbackUrl = `${baseUrl}/api/speechmatics/callback?token=${webhookToken}&jobId=${jobId}`;
 

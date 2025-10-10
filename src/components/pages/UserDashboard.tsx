@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Upload, FileText, CreditCard, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, CreditCard, Clock, CheckCircle, AlertCircle, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Header } from '@/components/layout/Header';
@@ -10,6 +10,7 @@ import { Footer } from '@/components/layout/Footer';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
+import { useWallet } from '@/contexts/WalletContext';
 import { getTranscriptionsByUser, TranscriptionJob } from '@/lib/firebase/transcriptions';
 import { Timestamp } from 'firebase/firestore';
 
@@ -19,6 +20,10 @@ import { Timestamp } from 'firebase/firestore';
 export function UserDashboard() {
   const { user, userData } = useAuth();
   const { transactions } = useCredits();
+  const {
+    walletBalance: contextWalletBalance,
+    packages
+  } = useWallet();
 
   const [allJobs, setAllJobs] = useState<TranscriptionJob[]>([]);
   const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
@@ -46,10 +51,12 @@ export function UserDashboard() {
 
   // Real transaction data now comes from CreditContext
 
-  // Wallet balance - combining legacy credits with wallet balance
-  const legacyCredits = userData?.credits || 0;
-  const existingWallet = userData?.walletBalance || 0;
-  const walletBalance = existingWallet + legacyCredits;
+  // Use wallet balance from context (it already combines legacy credits)
+  const walletBalance = contextWalletBalance;
+
+  // Get active packages
+  const activePackages = packages.filter(pkg => pkg.active);
+  const totalPackageMinutes = activePackages.reduce((sum, pkg) => sum + pkg.minutesRemaining, 0);
 
   // Calculate real average turnaround time from user's completed jobs
   const calculateAvgTurnaround = (jobs: TranscriptionJob[]) => {
@@ -126,8 +133,58 @@ export function UserDashboard() {
           </p>
         </div>
 
-        {/* Subscription Status (if active) */}
-        {userData?.subscriptionStatus === 'active' ? (
+        {/* Active Packages Display */}
+        {activePackages.length > 0 && (
+          <Card className="border-0 shadow-sm mb-6 bg-gradient-to-r from-[#003366] to-[#004488]">
+            <CardContent className="p-6">
+              <div className="text-white">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold flex items-center">
+                    <Package className="h-5 w-5 mr-2" />
+                    Active Packages
+                  </h3>
+                  <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
+                    {totalPackageMinutes} total minutes available
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activePackages.map((pkg) => {
+                    const daysRemaining = Math.ceil((new Date(pkg.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    const usagePercent = ((pkg.minutesUsed / pkg.minutesTotal) * 100).toFixed(0);
+
+                    return (
+                      <div key={pkg.id} className="bg-white/10 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium capitalize">{pkg.type} Package</span>
+                          {daysRemaining <= 7 && (
+                            <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">
+                              {daysRemaining}d left
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-2xl font-bold mb-1">
+                          {pkg.minutesRemaining} / {pkg.minutesTotal} min
+                        </div>
+                        <div className="text-xs text-white/70 mb-2">
+                          CA${pkg.rate.toFixed(2)}/min • {usagePercent}% used
+                        </div>
+                        <div className="w-full bg-white/20 rounded-full h-2">
+                          <div
+                            className="bg-[#b29dd9] h-2 rounded-full transition-all"
+                            style={{ width: `${usagePercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Legacy Subscription Status (kept for backward compatibility) */}
+        {!activePackages.length && userData?.subscriptionStatus === 'active' ? (
           <Card className="border-0 shadow-sm mb-6 bg-gradient-to-r from-[#003366] to-[#004488]">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
@@ -189,6 +246,11 @@ export function UserDashboard() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Wallet Balance</p>
                   <p className="text-2xl font-bold text-[#003366]">CA${walletBalance.toFixed(2)}</p>
+                  {totalPackageMinutes > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      + {totalPackageMinutes} pkg minutes
+                    </p>
+                  )}
                 </div>
                 <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
                   <CreditCard className="h-6 w-6 text-white" />

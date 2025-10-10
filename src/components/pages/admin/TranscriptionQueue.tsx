@@ -239,18 +239,25 @@ export function TranscriptionQueue() {
     const matchesSearch = filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          userEmail.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
-    
+
     // Filter out completed jobs and AI-only jobs that don't need admin intervention
     // Only show jobs that need admin action:
     // - Human mode jobs (except completed/cancelled)
     // - Hybrid mode jobs that need review (pending-review, under-review)
     // - Failed AI/Hybrid jobs that might need retry
-    const needsAdminAction = (item.mode === 'human' && !['complete', 'cancelled'].includes(item.status)) || 
+    const needsAdminAction = (item.mode === 'human' && !['complete', 'cancelled'].includes(item.status)) ||
                             (item.mode === 'hybrid' && ['pending-review', 'under-review'].includes(item.status)) ||
                             (item.mode === 'ai' && item.status === 'failed') ||
                             (item.mode === 'hybrid' && item.status === 'failed');
-    
+
     return matchesSearch && matchesStatus && needsAdminAction;
+  }).sort((a, b) => {
+    // Sort by priority: Rush delivery jobs first
+    if (a.rushDelivery && !b.rushDelivery) return -1;
+    if (!a.rushDelivery && b.rushDelivery) return 1;
+
+    // Then sort by creation date (oldest first)
+    return (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0);
   });
 
   // Calculate stats only for jobs that need admin action
@@ -370,13 +377,28 @@ export function TranscriptionQueue() {
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
-                  className="p-4 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors"
+                  className={`p-4 rounded-lg border transition-colors ${
+                    item.rushDelivery
+                      ? 'bg-orange-50 border-orange-300 hover:bg-orange-100'
+                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
                         <h3 className="font-medium text-[#003366]">{item.originalFilename || item.filename || 'Unknown file'}</h3>
                         <StatusBadge status={item.status} />
+                        {/* Add-on indicators */}
+                        {item.rushDelivery && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            🚀 Rush
+                          </span>
+                        )}
+                        {item.multipleSpeakers && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            👥 {item.speakerCount || 3}+ Speakers
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-4 text-sm text-gray-600">
                         <span>{userEmails[item.userId] || 'Loading...'}</span>
