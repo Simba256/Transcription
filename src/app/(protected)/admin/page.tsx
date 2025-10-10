@@ -1,24 +1,26 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Users, FileText, DollarSign, TrendingUp, Clock, CheckCircle, Repeat, ArrowRight } from 'lucide-react';
+import { Users, FileText, DollarSign, TrendingUp, Clock, CheckCircle, Package, Wallet, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
+import { useWallet } from '@/contexts/WalletContext';
+import { usePackages } from '@/contexts/PackageContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { TranscriptionJob } from '@/lib/firebase/transcriptions';
 import { UserData } from '@/lib/firebase/auth';
-import { collection, getDocs, query, orderBy, limit, getFirestore } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, getFirestore, where } from 'firebase/firestore';
 
 export default function AdminPage() {
   const { userData, loading: authLoading } = useAuth();
-  const { getAllUsers } = useCredits();
+  const { getAllUsers, getAllTransactions } = useCredits();
+  const { packages } = usePackages();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [recentJobs, setRecentJobs] = useState<TranscriptionJob[]>([]);
@@ -29,9 +31,10 @@ export default function AdminPage() {
     activeJobs: 0,
     totalRevenue: 0,
     avgProcessingTime: '2.5hrs',
-    totalSubscribers: 0,
-    activeSubscriptions: 0,
-    monthlyRecurringRevenue: 0
+    totalWalletBalance: 0,
+    totalPackagesSold: 0,
+    activePackages: 0,
+    totalWalletTopups: 0
   });
   
   const [systemHealth, setSystemHealth] = useState({
@@ -96,41 +99,44 @@ export default function AdminPage() {
         
         setRecentJobs(jobs);
 
+        // Get all transactions for revenue calculations
+        const allTransactions = await getAllTransactions();
+
         // Calculate system statistics
         const activeJobs = jobs.filter(j => j.status === 'processing' || j.status === 'queued').length;
-        const totalRevenue = users.reduce((sum, user) => {
-          // Calculate revenue based on credit purchases - in a real system,
-          // this would come from payment transaction data
-          return sum + (user.totalSpent || 0);
-        }, 0);
 
-        // Calculate subscription metrics
-        const subscribedUsers = users.filter(user =>
-          user.subscriptionPlan &&
-          user.subscriptionPlan !== 'none' &&
-          user.subscriptionStatus === 'active'
+        // Calculate total revenue from transactions
+        // Filter for revenue-generating transactions
+        const walletTopups = allTransactions.filter(t =>
+          t.type === 'wallet_topup' || t.type === 'purchase' // 'purchase' for legacy compatibility
         );
-        const totalSubscribers = subscribedUsers.length;
+        const packagePurchases = allTransactions.filter(t =>
+          t.type === 'package_purchase'
+        );
 
-        // Calculate active subscriptions (active or trialing)
-        const activeSubscriptions = users.filter(user =>
-          user.subscriptionPlan &&
-          user.subscriptionPlan !== 'none' &&
-          (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')
-        ).length;
+        // Calculate totals - wallet topups and package purchases are positive amounts
+        const totalWalletTopups = walletTopups.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const totalPackageRevenue = packagePurchases.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const totalRevenue = totalWalletTopups + totalPackageRevenue;
 
-        // Calculate Monthly Recurring Revenue (MRR)
-        const { SUBSCRIPTION_PLANS } = await import('@/lib/subscriptions/plans');
-        const monthlyRecurringRevenue = users.reduce((sum, user) => {
-          if (user.subscriptionPlan && user.subscriptionPlan !== 'none' &&
-              (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')) {
-            const plan = SUBSCRIPTION_PLANS[user.subscriptionPlan];
-            if (plan) {
-              return sum + plan.price;
-            }
-          }
-          return sum;
+        // Calculate total wallet balance across all users
+        const totalWalletBalance = users.reduce((sum, user) => {
+          const wallet = user.walletBalance || 0;
+          const credits = (user.credits || 0) / 100; // Convert legacy credits to dollars
+          return sum + wallet + credits;
         }, 0);
+
+        // Get package statistics from Firestore
+        const db = getFirestore();
+        const packagesQuery = query(collection(db, 'packages'));
+        const packagesSnapshot = await getDocs(packagesQuery);
+        const allPackages = packagesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        const activePackagesCount = allPackages.filter(p => p.active).length;
+        const totalPackagesSold = packagePurchases.length;
 
         // Calculate actual processing times from completed jobs
         const completedJobs = jobs.filter(j => j.status === 'complete' && j.createdAt && j.completedAt);
@@ -171,9 +177,10 @@ export default function AdminPage() {
           activeJobs,
           totalRevenue,
           avgProcessingTime,
-          totalSubscribers,
-          activeSubscriptions,
-          monthlyRecurringRevenue
+          totalWalletBalance,
+          totalPackagesSold,
+          activePackages: activePackagesCount,
+          totalWalletTopups
         });
 
         // Calculate system health metrics
@@ -261,12 +268,12 @@ export default function AdminPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Active Subscriptions</p>
-                  <p className="text-2xl font-bold text-[#003366]">{systemStats.activeSubscriptions}</p>
-                  <p className="text-xs text-gray-500 mt-1">{systemStats.totalSubscribers} paid</p>
+                  <p className="text-sm font-medium text-gray-600">Active Packages</p>
+                  <p className="text-2xl font-bold text-[#003366]">{systemStats.activePackages}</p>
+                  <p className="text-xs text-gray-500 mt-1">{systemStats.totalPackagesSold} sold</p>
                 </div>
                 <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
-                  <Repeat className="h-6 w-6 text-white" />
+                  <Package className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -276,12 +283,12 @@ export default function AdminPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Monthly Recurring</p>
-                  <p className="text-2xl font-bold text-[#003366]">${systemStats.monthlyRecurringRevenue.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500 mt-1">MRR</p>
+                  <p className="text-sm font-medium text-gray-600">Total Wallet Balance</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${systemStats.totalWalletBalance.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500 mt-1">All users</p>
                 </div>
                 <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-white" />
+                  <Wallet className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -292,8 +299,8 @@ export default function AdminPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-[#003366]">${systemStats.totalRevenue.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500 mt-1">All-time</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${systemStats.totalRevenue.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Topups: CA${systemStats.totalWalletTopups.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-white" />
@@ -333,15 +340,15 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          {/* Subscription Analytics Link */}
-          <Link href="/admin/subscriptions">
+          {/* Package Management Link */}
+          <Link href="/admin/packages">
             <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-gradient-to-br from-[#b29dd9] to-[#9d87c7]">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-white/90">View Analytics</p>
-                    <p className="text-lg font-bold text-white">Subscription Details</p>
-                    <p className="text-xs text-white/80 mt-1">Plans, conversion & churn</p>
+                    <p className="text-sm font-medium text-white/90">Manage Packages</p>
+                    <p className="text-lg font-bold text-white">Package Settings</p>
+                    <p className="text-xs text-white/80 mt-1">Configure pricing & minutes</p>
                   </div>
                   <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
                     <ArrowRight className="h-6 w-6 text-white" />
@@ -385,7 +392,10 @@ export default function AdminPage() {
                         <span>{job.userEmail || ''}</span>
                         <span>{job.mode || 'AI'}</span>
                         <span>{job.duration || 0} min</span>
-                        <CreditDisplay amount={job.creditsUsed || 0} size="sm" />
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="h-3 w-3" />
+                          {((job.creditsUsed || 0) / 100).toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -426,7 +436,10 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <CreditDisplay amount={user.credits || 0} size="sm" />
+                      <span className="flex items-center gap-1 text-[#003366] font-medium">
+                        <DollarSign className="h-3 w-3" />
+                        {((user.walletBalance || 0) + ((user.credits || 0) / 100)).toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 ))}

@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +23,7 @@ import { getAllUsers } from '@/lib/firebase/firestore';
 import { UserData } from '@/lib/firebase/auth';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { DollarSign } from 'lucide-react';
 
 export default function UserManagementPage() {
   const { user, userData, loading: authLoading } = useAuth();
@@ -35,8 +35,8 @@ export default function UserManagementPage() {
   const [filterSubscription, setFilterSubscription] = useState('all');
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-  const [creditAmount, setCreditAmount] = useState('');
-  const [creditReason, setCreditReason] = useState('');
+  const [walletAmount, setWalletAmount] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -70,14 +70,14 @@ export default function UserManagementPage() {
     }
   }, [userData, authLoading, router, toast]);
 
-  const handleUpdateCredits = async () => {
+  const handleUpdateWalletBalance = async () => {
     if (!selectedUser?.id) return;
 
-    const credits = parseInt(creditAmount);
-    if (isNaN(credits) || credits < 0) {
+    const amount = parseFloat(walletAmount);
+    if (isNaN(amount) || amount < 0) {
       toast({
         title: "Invalid amount",
-        description: "Please enter a valid credit amount.",
+        description: "Please enter a valid wallet amount.",
         variant: "destructive",
       });
       return;
@@ -86,21 +86,21 @@ export default function UserManagementPage() {
     setUpdating(true);
     try {
       const token = await user?.getIdToken();
-      const response = await fetch(`/api/admin/users/${selectedUser.id}/credits`, {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/wallet`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          credits,
-          reason: creditReason.trim() || `Admin updated credits to ${credits}`,
+          walletBalance: amount,
+          reason: adjustmentReason.trim() || `Admin updated wallet balance to CA$${amount.toFixed(2)}`,
         }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to update credits');
+        throw new Error(error.error || 'Failed to update wallet balance');
       }
 
       const result = await response.json();
@@ -108,24 +108,24 @@ export default function UserManagementPage() {
       // Update the user in the local state
       setUsers(prevUsers =>
         prevUsers.map(u =>
-          u.id === selectedUser.id ? { ...u, credits } : u
+          u.id === selectedUser.id ? { ...u, walletBalance: amount } : u
         )
       );
 
       toast({
-        title: "Credits updated",
+        title: "Wallet balance updated",
         description: result.message,
       });
 
       // Close modal and reset form
       setSelectedUser(null);
-      setCreditAmount('');
-      setCreditReason('');
+      setWalletAmount('');
+      setAdjustmentReason('');
     } catch (error) {
-      console.error('Error updating credits:', error);
+      console.error('Error updating wallet balance:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to update credits',
+        description: error instanceof Error ? error.message : 'Failed to update wallet balance',
         variant: "destructive",
       });
     } finally {
@@ -229,7 +229,7 @@ export default function UserManagementPage() {
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Role</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Subscription</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600 hidden md:table-cell">Usage</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Credits</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Wallet</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600 hidden lg:table-cell">Jobs</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600 hidden lg:table-cell">Joined</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
@@ -314,7 +314,10 @@ export default function UserManagementPage() {
                           )}
                         </td>
                         <td className="py-4 px-4">
-                          <CreditDisplay amount={user.credits || 0} size="sm" />
+                          <div className="flex items-center gap-1 text-[#003366] font-medium">
+                            <DollarSign className="h-3 w-3" />
+                            <span>{((user.walletBalance || 0) + ((user.credits || 0) / 100)).toFixed(2)}</span>
+                          </div>
                         </td>
                         <td className="py-4 px-4 hidden lg:table-cell">
                           <span className="text-[#003366] font-medium">{user.totalJobs || 0}</span>
@@ -343,11 +346,12 @@ export default function UserManagementPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               setSelectedUser(user);
-                              setCreditAmount(String(user.credits || 0));
-                              setCreditReason('');
+                              const currentBalance = (user.walletBalance || 0) + ((user.credits || 0) / 100);
+                              setWalletAmount(currentBalance.toFixed(2));
+                              setAdjustmentReason('');
                             }}>
-                              <Coins className="mr-2 h-4 w-4" />
-                              Edit Credits
+                              <DollarSign className="mr-2 h-4 w-4" />
+                              Edit Wallet Balance
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               toast({
@@ -380,22 +384,22 @@ export default function UserManagementPage() {
         </Card>
       </div>
 
-      {/* Credit Edit Modal */}
+      {/* Wallet Balance Edit Modal */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-[#003366]">
-                  Edit Credits
+                  Edit Wallet Balance
                 </h3>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setSelectedUser(null);
-                    setCreditAmount('');
-                    setCreditReason('');
+                    setWalletAmount('');
+                    setAdjustmentReason('');
                   }}
                 >
                   <XCircle className="h-4 w-4" />
@@ -410,43 +414,60 @@ export default function UserManagementPage() {
                   <strong>Email:</strong> {selectedUser.email}
                 </div>
                 <div className="text-sm text-gray-600 flex items-center gap-2">
-                  <strong>Current Credits:</strong> <CreditDisplay amount={selectedUser.credits || 0} size="sm" />
+                  <strong>Current Balance:</strong>
+                  <div className="flex items-center gap-1 text-[#003366] font-medium">
+                    <DollarSign className="h-3 w-3" />
+                    <span>{((selectedUser.walletBalance || 0) + ((selectedUser.credits || 0) / 100)).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="creditAmount" className="text-sm font-medium text-gray-700">
-                    New Credit Amount
+                  <Label htmlFor="walletAmount" className="text-sm font-medium text-gray-700">
+                    New Wallet Balance (CA$)
                   </Label>
-                  <Input
-                    id="creditAmount"
-                    type="number"
-                    min="0"
-                    value={creditAmount}
-                    onChange={(e) => setCreditAmount(e.target.value)}
-                    placeholder="Enter credit amount"
-                    className="mt-1"
-                  />
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="walletAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={walletAmount}
+                      onChange={(e) => setWalletAmount(e.target.value)}
+                      placeholder="Enter wallet balance"
+                      className="mt-1 pl-10"
+                    />
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Current: {selectedUser.credits || 0} credits
-                    {creditAmount && !isNaN(parseInt(creditAmount)) && (
-                      <span className="ml-2">
-                        → Change: {parseInt(creditAmount) - (selectedUser.credits || 0) >= 0 ? '+' : ''}{parseInt(creditAmount) - (selectedUser.credits || 0)} credits
-                      </span>
-                    )}
+                    {(() => {
+                      const currentBalance = (selectedUser.walletBalance || 0) + ((selectedUser.credits || 0) / 100);
+                      const newBalance = parseFloat(walletAmount) || 0;
+                      const change = newBalance - currentBalance;
+                      return (
+                        <>
+                          Current: CA${currentBalance.toFixed(2)}
+                          {walletAmount && !isNaN(parseFloat(walletAmount)) && (
+                            <span className="ml-2">
+                              → Change: {change >= 0 ? '+' : ''}CA${change.toFixed(2)}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="creditReason" className="text-sm font-medium text-gray-700">
+                  <Label htmlFor="adjustmentReason" className="text-sm font-medium text-gray-700">
                     Reason (Optional)
                   </Label>
                   <Textarea
-                    id="creditReason"
-                    value={creditReason}
-                    onChange={(e) => setCreditReason(e.target.value)}
-                    placeholder="Enter reason for credit adjustment..."
+                    id="adjustmentReason"
+                    value={adjustmentReason}
+                    onChange={(e) => setAdjustmentReason(e.target.value)}
+                    placeholder="Enter reason for wallet balance adjustment..."
                     rows={3}
                     className="mt-1"
                   />
@@ -461,8 +482,8 @@ export default function UserManagementPage() {
                   variant="outline"
                   onClick={() => {
                     setSelectedUser(null);
-                    setCreditAmount('');
-                    setCreditReason('');
+                    setWalletAmount('');
+                    setAdjustmentReason('');
                   }}
                   disabled={updating}
                   className="flex-1"
@@ -470,8 +491,8 @@ export default function UserManagementPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleUpdateCredits}
-                  disabled={updating || !creditAmount || isNaN(parseInt(creditAmount))}
+                  onClick={handleUpdateWalletBalance}
+                  disabled={updating || !walletAmount || isNaN(parseFloat(walletAmount)) || parseFloat(walletAmount) < 0}
                   className="flex-1 bg-[#003366] hover:bg-[#004080]"
                 >
                   {updating ? (
@@ -480,7 +501,7 @@ export default function UserManagementPage() {
                       Updating...
                     </>
                   ) : (
-                    'Update Credits'
+                    'Update Balance'
                   )}
                 </Button>
               </div>

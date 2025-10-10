@@ -6,7 +6,7 @@ import { collection, addDoc, query, orderBy, limit, getDocs, getFirestore, where
 
 interface CreditTransaction {
   id: string;
-  type: 'purchase' | 'consumption' | 'refund' | 'adjustment';
+  type: 'wallet_topup' | 'package_purchase' | 'transcription' | 'refund' | 'adjustment' | 'purchase' | 'consumption';
   amount: number;
   description: string;
   createdAt: Date;

@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface AdminTransaction {
   id: string;
   user: string;
-  type: 'purchase' | 'consumption' | 'refund' | 'adjustment';
+  type: 'wallet_topup' | 'package_purchase' | 'transcription' | 'refund' | 'adjustment' | 'purchase' | 'consumption';
   amount: number;
   description: string;
   date: Date;
@@ -411,8 +411,9 @@ export function AdminLedger() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="purchase">Purchases</SelectItem>
-                    <SelectItem value="consumption">Consumption</SelectItem>
+                    <SelectItem value="wallet_topup">Wallet Topups</SelectItem>
+                    <SelectItem value="package_purchase">Package Purchases</SelectItem>
+                    <SelectItem value="transcription">Transcriptions</SelectItem>
                     <SelectItem value="refund">Refunds</SelectItem>
                     <SelectItem value="adjustment">Adjustments</SelectItem>
                   </SelectContent>
@@ -562,12 +563,19 @@ export function AdminLedger() {
                       </td>
                       <td className="py-4 px-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          transaction.type === 'purchase' ? 'bg-green-100 text-green-800' :
-                          transaction.type === 'consumption' ? 'bg-blue-100 text-blue-800' :
+                          transaction.type === 'wallet_topup' ? 'bg-green-100 text-green-800' :
+                          transaction.type === 'package_purchase' ? 'bg-purple-100 text-purple-800' :
+                          transaction.type === 'transcription' ? 'bg-blue-100 text-blue-800' :
                           transaction.type === 'refund' ? 'bg-yellow-100 text-yellow-800' :
+                          transaction.type === 'adjustment' ? 'bg-orange-100 text-orange-800' :
+                          transaction.type === 'purchase' ? 'bg-green-100 text-green-800' : // legacy
+                          transaction.type === 'consumption' ? 'bg-blue-100 text-blue-800' : // legacy
                           'bg-gray-100 text-gray-800'
                         }`}>
-                          {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                          {transaction.type === 'wallet_topup' ? 'Wallet Topup' :
+                           transaction.type === 'package_purchase' ? 'Package' :
+                           transaction.type === 'transcription' ? 'Transcription' :
+                           transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
                         </span>
                       </td>
                       <td className="py-4 px-4">

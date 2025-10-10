@@ -27,7 +27,10 @@ export interface UserData {
   createdAt: any;
   lastLogin: any;
 
-  // Credits (pay-as-you-go)
+  // Wallet system
+  walletBalance?: number;
+
+  // Credits (legacy - being migrated to wallet)
   credits?: number;
   totalSpent?: number;
 
@@ -42,6 +45,9 @@ export interface UserData {
   currentPeriodStart?: Timestamp;
   currentPeriodEnd?: Timestamp;
   lifetimeMinutesUsed?: number;
+  totalJobs?: number;
+  includedMinutesPerMonth?: number;
+  minutesUsedThisMonth?: number;
 
   // User profile
   name?: string;
