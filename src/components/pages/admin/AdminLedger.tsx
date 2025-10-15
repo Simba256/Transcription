@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { CreditDisplay } from '@/components/ui/CreditDisplay';
 import { useCredits } from '@/contexts/CreditContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useToast } from '@/components/ui/use-toast';
@@ -237,10 +236,10 @@ export function AdminLedger() {
   });
 
   const stats = {
-    totalRevenue: filteredTransactions.filter(t => t.type === 'purchase').reduce((sum, t) => sum + t.revenue, 0),
-    totalCreditsIssued: filteredTransactions.filter(t => t.type === 'purchase').reduce((sum, t) => sum + t.amount, 0),
-    totalCreditsConsumed: Math.abs(filteredTransactions.filter(t => t.type === 'consumption').reduce((sum, t) => sum + t.amount, 0)),
-    totalRefunds: filteredTransactions.filter(t => t.type === 'refund').reduce((sum, t) => sum + t.amount, 0)
+    totalRevenue: filteredTransactions.filter(t => t.type === 'wallet_topup' || t.type === 'package_purchase' || t.type === 'purchase').reduce((sum, t) => sum + Math.abs(t.amount), 0),
+    totalFundsAdded: filteredTransactions.filter(t => t.type === 'wallet_topup' || t.type === 'purchase').reduce((sum, t) => sum + Math.abs(t.amount), 0),
+    totalFundsUsed: Math.abs(filteredTransactions.filter(t => t.type === 'transcription' || t.type === 'consumption').reduce((sum, t) => sum + t.amount, 0)),
+    totalRefunds: filteredTransactions.filter(t => t.type === 'refund').reduce((sum, t) => sum + Math.abs(t.amount), 0)
   };
 
   // Show loading state while auth is initializing
@@ -335,7 +334,7 @@ export function AdminLedger() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">${stats.totalRevenue}</p>
+                  <p className="text-2xl font-bold text-green-600">CA${stats.totalRevenue.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-white" />
@@ -348,8 +347,8 @@ export function AdminLedger() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Credits Issued</p>
-                  <CreditDisplay amount={stats.totalCreditsIssued} size="lg" showIcon={false} />
+                  <p className="text-sm font-medium text-gray-600">Funds Added</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${stats.totalFundsAdded.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-[#b29dd9] rounded-lg flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-white" />
@@ -362,8 +361,8 @@ export function AdminLedger() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Credits Consumed</p>
-                  <CreditDisplay amount={stats.totalCreditsConsumed} size="lg" showIcon={false} />
+                  <p className="text-sm font-medium text-gray-600">Funds Used</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${stats.totalFundsUsed.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-[#003366] rounded-lg flex items-center justify-center">
                   <TrendingDown className="h-6 w-6 text-white" />
@@ -376,8 +375,8 @@ export function AdminLedger() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Credits Refunded</p>
-                  <CreditDisplay amount={stats.totalRefunds} size="lg" showIcon={false} />
+                  <p className="text-sm font-medium text-gray-600">Funds Refunded</p>
+                  <p className="text-2xl font-bold text-[#003366]">CA${stats.totalRefunds.toFixed(2)}</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-500 rounded-lg flex items-center justify-center">
                   <TrendingDown className="h-6 w-6 text-white" />
