@@ -188,7 +188,7 @@ export function UserDashboard() {
 
                   <div className="mt-4">
                     <Link href="/upload">
-                      <Button className="bg-[#b29dd9] hover:bg-[#9d87c7] text-white font-semibold">
+                      <Button className="bg-white hover:bg-gray-100 text-[#003366] font-semibold shadow-md">
                         Start Free Transcription →
                       </Button>
                     </Link>
