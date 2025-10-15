@@ -12,6 +12,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCredits } from '@/contexts/CreditContext';
 import { usePackages } from '@/contexts/PackageContext';
+import { useWallet } from '@/contexts/WalletContext';
 import { secureApiClient } from '@/lib/secure-api-client';
 import { Timestamp } from 'firebase/firestore';
 import SecureCheckoutButton from '@/components/billing/SecureCheckoutButton';
@@ -42,6 +43,7 @@ export default function BillingPage() {
   const { user, userData } = useAuth();
   const { transactions, purchaseCredits } = useCredits();
   const { activePackages, loading: packagesLoading } = usePackages();
+  const { freeTrialMinutes, freeTrialActive, freeTrialUsed, freeTrialTotal } = useWallet();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState('ai');
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
@@ -218,7 +220,31 @@ export default function BillingPage() {
         </Alert>
 
         {/* Account Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* FREE TRIAL Card - Only show if trial is active */}
+          {freeTrialActive && freeTrialMinutes > 0 && (
+            <Card className="border-2 border-purple-300 shadow-lg bg-gradient-to-br from-purple-50 to-blue-50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-purple-700">
+                  🎉 Free Trial
+                </CardTitle>
+                <Star className="h-4 w-4 text-purple-400" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-700">{freeTrialMinutes} minutes</div>
+                <p className="text-xs text-purple-600 mt-1">
+                  Used: {freeTrialUsed} of {freeTrialTotal} minutes
+                </p>
+                <div className="w-full bg-purple-200 rounded-full h-2 mt-2">
+                  <div
+                    className="bg-purple-600 h-2 rounded-full transition-all"
+                    style={{ width: `${((freeTrialTotal - freeTrialMinutes) / freeTrialTotal) * 100}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-0 shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">

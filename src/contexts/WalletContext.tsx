@@ -52,6 +52,11 @@ interface WalletContextType {
   packages: Package[];
   transactions: WalletTransaction[];
   loading: boolean;
+  // Free Trial
+  freeTrialMinutes: number;
+  freeTrialActive: boolean;
+  freeTrialUsed: number;
+  freeTrialTotal: number;
   refreshWallet: () => Promise<void>;
   deductForTranscription: (
     mode: TranscriptionMode,
@@ -60,6 +65,7 @@ interface WalletContextType {
   ) => Promise<{
     success: boolean;
     costDeducted: number;
+    freeTrialMinutesUsed: number;
     packageMinutesUsed: number;
     walletUsed: number;
     error?: string
@@ -69,9 +75,11 @@ interface WalletContextType {
   checkSufficientBalance: (mode: TranscriptionMode, minutes: number) => {
     sufficient: boolean;
     totalCost: number;
+    freeTrialMinutes: number;
     packageMinutes: number;
     walletNeeded: number;
     hasPackage: boolean;
+    hasFreeTrialMinutes: boolean;
   };
   refundTransaction: (jobId: string, amount: number, minutes: number) => Promise<void>;
   getActivePackageForMode: (mode: TranscriptionMode) => Package | null;
@@ -104,6 +112,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [packages, setPackages] = useState<Package[]>([]);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  // Free Trial state
+  const [freeTrialMinutes, setFreeTrialMinutes] = useState(0);
+  const [freeTrialActive, setFreeTrialActive] = useState(false);
+  const [freeTrialUsed, setFreeTrialUsed] = useState(0);
+  const [freeTrialTotal, setFreeTrialTotal] = useState(0);
 
   // Load wallet data
   const loadWalletData = useCallback(async () => {
@@ -111,6 +124,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setWalletBalance(0);
       setPackages([]);
       setTransactions([]);
+      setFreeTrialMinutes(0);
+      setFreeTrialActive(false);
+      setFreeTrialUsed(0);
+      setFreeTrialTotal(0);
       setLoading(false);
       return;
     }
@@ -125,6 +142,16 @@ export function WalletProvider({ children }: WalletProviderProps) {
         // Get wallet balance (new system only)
         const wallet = data.walletBalance || 0;
         setWalletBalance(wallet);
+
+        // Load free trial data
+        const trialMinutes = data.freeTrialMinutes || 0;
+        const trialActive = data.freeTrialActive || false;
+        const trialUsed = data.freeTrialMinutesUsed || 0;
+        const trialTotal = data.freeTrialMinutesTotal || 0;
+        setFreeTrialMinutes(trialMinutes);
+        setFreeTrialActive(trialActive && trialMinutes > 0);
+        setFreeTrialUsed(trialUsed);
+        setFreeTrialTotal(trialTotal);
 
         // Load packages
         if (data.packages && Array.isArray(data.packages)) {
@@ -195,33 +222,41 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const activePackage = getActivePackageForMode(mode);
     const standardRate = MODE_PRICING[mode].standardRate;
 
+    let remainingMinutes = minutes;
+    let freeTrialMinutesUsed = 0;
     let packageMinutes = 0;
     let walletNeeded = 0;
     let totalCost = 0;
 
-    if (activePackage) {
-      // Use package minutes first
-      packageMinutes = Math.min(minutes, activePackage.minutesRemaining);
-      const remainingMinutes = minutes - packageMinutes;
+    // PRIORITY 1: Use free trial minutes first (universal - works for any mode)
+    if (freeTrialActive && freeTrialMinutes > 0) {
+      freeTrialMinutesUsed = Math.min(remainingMinutes, freeTrialMinutes);
+      remainingMinutes -= freeTrialMinutesUsed;
+      // Free trial is FREE - no cost
+    }
 
+    // PRIORITY 2: Use package minutes for remaining (mode-specific)
+    if (remainingMinutes > 0 && activePackage) {
+      packageMinutes = Math.min(remainingMinutes, activePackage.minutesRemaining);
+      remainingMinutes -= packageMinutes;
       // Calculate cost for package minutes (for tracking purposes)
-      const packageCost = packageMinutes * activePackage.rate;
+      totalCost += packageMinutes * activePackage.rate;
+    }
 
-      // Calculate wallet needed for remaining minutes
+    // PRIORITY 3: Use wallet for any remaining minutes
+    if (remainingMinutes > 0) {
       walletNeeded = remainingMinutes * standardRate;
-      totalCost = packageCost + walletNeeded;
-    } else {
-      // No package, use wallet at standard rate
-      walletNeeded = minutes * standardRate;
-      totalCost = walletNeeded;
+      totalCost += walletNeeded;
     }
 
     return {
       sufficient: walletBalance >= walletNeeded,
       totalCost,
+      freeTrialMinutes: freeTrialMinutesUsed,
       packageMinutes,
       walletNeeded,
-      hasPackage: !!activePackage
+      hasPackage: !!activePackage,
+      hasFreeTrialMinutes: freeTrialMinutesUsed > 0
     };
   };
 
@@ -230,9 +265,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
     mode: TranscriptionMode,
     minutes: number,
     jobId: string
-  ): Promise<{ success: boolean; costDeducted: number; packageMinutesUsed: number; walletUsed: number; error?: string }> => {
+  ): Promise<{ success: boolean; costDeducted: number; freeTrialMinutesUsed: number; packageMinutesUsed: number; walletUsed: number; error?: string }> => {
     if (!user) {
-      return { success: false, costDeducted: 0, packageMinutesUsed: 0, walletUsed: 0, error: 'User not authenticated' };
+      return { success: false, costDeducted: 0, freeTrialMinutesUsed: 0, packageMinutesUsed: 0, walletUsed: 0, error: 'User not authenticated' };
     }
 
     try {
@@ -247,6 +282,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
         const userData = userDoc.data();
         const currentWallet = userData.walletBalance || 0;
         const currentPackages = userData.packages || [];
+        const currentFreeTrial = userData.freeTrialMinutes || 0;
+        const currentFreeTrialActive = userData.freeTrialActive || false;
+        const currentFreeTrialUsed = userData.freeTrialMinutesUsed || 0;
         const now = new Date();
 
         // Find best package for this mode
@@ -259,11 +297,19 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
         let remainingMinutes = minutes;
         let totalCostDeducted = 0;
+        let freeTrialMinutesUsed = 0;
         let packageMinutesUsed = 0;
         let walletUsed = 0;
         const updatedPackages = [...currentPackages];
 
-        // Use package minutes first (FIFO by purchase date)
+        // PRIORITY 1: Use free trial minutes first (universal - works for ANY mode)
+        if (currentFreeTrialActive && currentFreeTrial > 0) {
+          freeTrialMinutesUsed = Math.min(remainingMinutes, currentFreeTrial);
+          remainingMinutes -= freeTrialMinutesUsed;
+          // Free trial is FREE - no cost added to totalCostDeducted
+        }
+
+        // PRIORITY 2: Use package minutes (mode-specific, FIFO by purchase date)
         for (const pkg of eligiblePackages) {
           if (remainingMinutes <= 0) break;
 
@@ -281,7 +327,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           remainingMinutes -= minutesToUse;
         }
 
-        // Use wallet for remaining minutes
+        // PRIORITY 3: Use wallet for remaining minutes
         if (remainingMinutes > 0) {
           const standardRate = MODE_PRICING[mode].standardRate;
           const walletCost = remainingMinutes * standardRate;
@@ -294,13 +340,26 @@ export function WalletProvider({ children }: WalletProviderProps) {
           totalCostDeducted += walletCost;
         }
 
-        // Update user document
-        const newWalletBalance = currentWallet - walletUsed;
-        transaction.update(userRef, {
-          walletBalance: newWalletBalance,
+        // Prepare updates
+        const updates: any = {
+          walletBalance: currentWallet - walletUsed,
           packages: updatedPackages,
           updatedAt: serverTimestamp()
-        });
+        };
+
+        // Update free trial if used
+        if (freeTrialMinutesUsed > 0) {
+          const newFreeTrialMinutes = currentFreeTrial - freeTrialMinutesUsed;
+          updates.freeTrialMinutes = newFreeTrialMinutes;
+          updates.freeTrialMinutesUsed = currentFreeTrialUsed + freeTrialMinutesUsed;
+          // Deactivate trial if no minutes left
+          if (newFreeTrialMinutes <= 0) {
+            updates.freeTrialActive = false;
+          }
+        }
+
+        // Update user document
+        transaction.update(userRef, updates);
 
         // Record transaction
         const transactionRef = doc(collection(db, 'transactions'));
@@ -308,8 +367,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
           userId: user.uid,
           type: 'transcription',
           amount: -totalCostDeducted,
-          description: `${MODE_PRICING[mode].name}: ${minutes} minutes`,
+          description: `${MODE_PRICING[mode].name}: ${minutes} minutes${freeTrialMinutesUsed > 0 ? ` (${freeTrialMinutesUsed} FREE trial minutes used)` : ''}`,
           jobId,
+          freeTrialMinutesUsed,
           packageMinutesUsed,
           walletUsed,
           minutesUsed: minutes,
@@ -319,6 +379,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         return {
           success: true,
           costDeducted: totalCostDeducted,
+          freeTrialMinutesUsed,
           packageMinutesUsed,
           walletUsed,
           error: undefined
@@ -329,6 +390,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       return {
         success: false,
         costDeducted: 0,
+        freeTrialMinutesUsed: 0,
         packageMinutesUsed: 0,
         walletUsed: 0,
         error: error.message || 'Failed to process payment'
@@ -456,6 +518,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
     packages,
     transactions,
     loading,
+    // Free Trial
+    freeTrialMinutes,
+    freeTrialActive,
+    freeTrialUsed,
+    freeTrialTotal,
     refreshWallet,
     deductForTranscription,
     addPackage,

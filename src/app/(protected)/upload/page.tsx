@@ -56,6 +56,10 @@ export default function UploadPage() {
   const {
     walletBalance,
     packages,
+    freeTrialMinutes,
+    freeTrialActive,
+    freeTrialUsed,
+    freeTrialTotal,
     checkSufficientBalance,
     deductForTranscription,
     getActivePackageForMode
@@ -170,31 +174,18 @@ export default function UploadPage() {
   const activePackage = getActivePackageForMode(transcriptionMode as TranscriptionMode);
   const hasPackage = !!activePackage;
 
-  // Check balance and calculate costs
+  // Check balance and calculate costs (includes FREE TRIAL logic)
   const balanceCheck = checkSufficientBalance(
     transcriptionMode as TranscriptionMode,
     totalBillingMinutes
   );
 
-  // Calculate costs based on package or standard rates
-  let baseCost = 0;
-  let packageMinutesUsed = 0;
-  let walletMinutesUsed = 0;
+  // Extract from balanceCheck (already calculated with FREE TRIAL priority)
+  const freeTrialMinutesUsed = balanceCheck.freeTrialMinutes;
+  const packageMinutesUsed = balanceCheck.packageMinutes;
+  const walletMinutesUsed = totalBillingMinutes - freeTrialMinutesUsed - packageMinutesUsed;
 
-  if (activePackage && totalBillingMinutes > 0) {
-    // Calculate how many minutes from package vs wallet
-    packageMinutesUsed = Math.min(totalBillingMinutes, activePackage.minutesRemaining);
-    walletMinutesUsed = totalBillingMinutes - packageMinutesUsed;
-
-    // Calculate cost: package minutes at package rate, rest at standard rate
-    baseCost = (packageMinutesUsed * activePackage.rate) + (walletMinutesUsed * selectedMode.costPerMinute);
-  } else {
-    // No package, use standard rate for all minutes
-    baseCost = totalBillingMinutes * selectedMode.costPerMinute;
-    walletMinutesUsed = totalBillingMinutes;
-  }
-
-  // Calculate add-on costs (only if no package AND using wallet minutes)
+  // Calculate add-on costs (only if NOT using package or free trial for those minutes)
   let addOnCostPerMinute = 0;
   if (!hasPackage && (transcriptionMode === 'hybrid' || transcriptionMode === 'human')) {
     if (rushDelivery) {
@@ -205,9 +196,12 @@ export default function UploadPage() {
     }
   }
 
-  const addOnCost = walletMinutesUsed * addOnCostPerMinute; // Add-ons only apply to wallet minutes
-  const totalCost = baseCost + addOnCost;
-  const walletAmountNeeded = (walletMinutesUsed * selectedMode.costPerMinute) + addOnCost;
+  // Add-ons only apply to wallet minutes (not free trial or package)
+  const addOnCost = walletMinutesUsed * addOnCostPerMinute;
+
+  // Total cost from balanceCheck + add-ons
+  const totalCost = balanceCheck.totalCost + addOnCost;
+  const walletAmountNeeded = balanceCheck.walletNeeded + addOnCost;
   const hasInsufficientBalance = walletAmountNeeded > walletBalance;
 
   // Function to get accurate duration from audio/video files
@@ -1197,6 +1191,26 @@ export default function UploadPage() {
                   </p>
                 )}
 
+                {/* FREE TRIAL Section - Shows first if using free trial */}
+                {freeTrialMinutesUsed > 0 && (
+                  <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg mb-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">🎉</span>
+                      <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">FREE TRIAL</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-purple-700 font-medium">Using FREE trial minutes:</span>
+                      <span className="text-lg font-bold text-purple-800">
+                        {freeTrialMinutesUsed} minutes FREE
+                      </span>
+                    </div>
+                    <div className="text-xs text-purple-600 mt-2 flex justify-between items-center">
+                      <span>After this: {freeTrialMinutes - freeTrialMinutesUsed} FREE minutes remain</span>
+                      <span className="font-semibold">CA$0.00</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Payment Method Section */}
                 {activePackage && packageMinutesUsed > 0 && (
                   <>
@@ -1277,6 +1291,13 @@ export default function UploadPage() {
                   <div className="pt-2 space-y-2">
                     {/* Show current balances */}
                     <div className="text-sm space-y-1">
+                      {/* Free Trial Balance */}
+                      {freeTrialActive && freeTrialMinutes > 0 && (
+                        <div className="flex justify-between items-center bg-purple-50 p-2 rounded">
+                          <span className="text-purple-700 font-medium">🎉 Free Trial Balance:</span>
+                          <span className="text-purple-800 font-bold">{freeTrialMinutes} minutes</span>
+                        </div>
+                      )}
                       {activePackage && (
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500">Package Balance:</span>

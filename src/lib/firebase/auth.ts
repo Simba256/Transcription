@@ -31,6 +31,12 @@ export interface UserData {
   walletBalance?: number;
   totalSpent?: number;
 
+  // Free Trial system - Universal 60 minutes for new users
+  freeTrialMinutes?: number;           // Remaining free trial minutes
+  freeTrialMinutesTotal?: number;      // Total free trial minutes granted (60)
+  freeTrialMinutesUsed?: number;       // Minutes used from free trial
+  freeTrialActive?: boolean;           // Whether free trial is active
+
   // Subscription info
   subscriptionPlan?: PlanId;
   subscriptionStatus?: SubscriptionStatus;
@@ -56,7 +62,7 @@ export const signUp = async (email: string, password: string, name?: string) => 
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Create user document in Firestore
+    // Create user document in Firestore with FREE TRIAL
     await setDoc(doc(db, 'users', user.uid), {
       uid: user.uid,
       email: user.email,
@@ -66,6 +72,11 @@ export const signUp = async (email: string, password: string, name?: string) => 
       lastLogin: serverTimestamp(),
       walletBalance: 0,
       totalSpent: 0,
+      // Free Trial - 60 universal minutes for all new users
+      freeTrialMinutes: 60,
+      freeTrialMinutesTotal: 60,
+      freeTrialMinutesUsed: 0,
+      freeTrialActive: true,
     });
 
     // Get ID token and set cookie
