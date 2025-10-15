@@ -66,20 +66,28 @@ export default function UserManagementPage() {
         const packagesData: Record<string, { total: number; ai: number; hybrid: number; human: number }> = {};
 
         for (const u of allUsers) {
-          const packagesRef = collection(db, 'users', u.uid, 'packages');
-          const activePackagesQuery = query(packagesRef, where('active', '==', true));
-          const snapshot = await getDocs(activePackagesQuery);
+          try {
+            // Use id (document ID) not uid for subcollection access
+            const userId = u.id || u.uid;
+            const packagesRef = collection(db, 'users', userId, 'packages');
+            const activePackagesQuery = query(packagesRef, where('active', '==', true));
+            const snapshot = await getDocs(activePackagesQuery);
 
-          const counts = { total: 0, ai: 0, hybrid: 0, human: 0 };
-          snapshot.forEach(doc => {
-            const pkg = doc.data();
-            counts.total++;
-            if (pkg.type === 'ai') counts.ai++;
-            else if (pkg.type === 'hybrid') counts.hybrid++;
-            else if (pkg.type === 'human') counts.human++;
-          });
+            const counts = { total: 0, ai: 0, hybrid: 0, human: 0 };
+            snapshot.forEach(doc => {
+              const pkg = doc.data();
+              counts.total++;
+              if (pkg.type === 'ai') counts.ai++;
+              else if (pkg.type === 'hybrid') counts.hybrid++;
+              else if (pkg.type === 'human') counts.human++;
+            });
 
-          packagesData[u.uid] = counts;
+            packagesData[userId] = counts;
+          } catch (pkgError) {
+            // If package loading fails for a user, just set empty counts
+            console.warn(`Failed to load packages for user ${u.id}:`, pkgError);
+            packagesData[u.id || u.uid] = { total: 0, ai: 0, hybrid: 0, human: 0 };
+          }
         }
 
         setUserPackages(packagesData);
@@ -101,7 +109,8 @@ export default function UserManagementPage() {
   }, [userData, authLoading, router, toast]);
 
   const handleUpdateWalletBalance = async () => {
-    if (!selectedUser?.uid) return;
+    if (!selectedUser) return;
+    const userId = selectedUser.id || selectedUser.uid;
 
     const amount = parseFloat(walletAmount);
     if (isNaN(amount) || amount < 0) {
@@ -116,7 +125,7 @@ export default function UserManagementPage() {
     setUpdating(true);
     try {
       const token = await user?.getIdToken();
-      const response = await fetch(`/api/admin/users/${selectedUser.uid}/wallet`, {
+      const response = await fetch(`/api/admin/users/${userId}/wallet`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -137,9 +146,10 @@ export default function UserManagementPage() {
 
       // Update the user in the local state
       setUsers(prevUsers =>
-        prevUsers.map(u =>
-          u.uid === selectedUser.uid ? { ...u, walletBalance: amount } : u
-        )
+        prevUsers.map(u => {
+          const uId = u.id || u.uid;
+          return uId === userId ? { ...u, walletBalance: amount } : u;
+        })
       );
 
       toast({
@@ -164,7 +174,8 @@ export default function UserManagementPage() {
   };
 
   const handleUpdateFreeTrial = async () => {
-    if (!freeTrialModalUser?.uid) return;
+    if (!freeTrialModalUser) return;
+    const userId = freeTrialModalUser.id || freeTrialModalUser.uid;
 
     const minutes = parseFloat(freeTrialMinutes);
     if (isNaN(minutes) || minutes < 0) {
@@ -179,7 +190,7 @@ export default function UserManagementPage() {
     setUpdating(true);
     try {
       const token = await user?.getIdToken();
-      const response = await fetch(`/api/admin/users/${freeTrialModalUser.uid}/free-trial`, {
+      const response = await fetch(`/api/admin/users/${userId}/free-trial`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -200,13 +211,14 @@ export default function UserManagementPage() {
 
       // Update the user in the local state
       setUsers(prevUsers =>
-        prevUsers.map(u =>
-          u.uid === freeTrialModalUser.uid ? {
+        prevUsers.map(u => {
+          const uId = u.id || u.uid;
+          return uId === userId ? {
             ...u,
             freeTrialMinutes: minutes,
             freeTrialActive: minutes > 0,
-          } : u
-        )
+          } : u;
+        })
       );
 
       toast({
@@ -345,14 +357,15 @@ export default function UserManagementPage() {
                   )}
 
                   {filteredUsers.map((user) => {
+                    const userId = user.id || user.uid;
                     const freeTrialRemaining = user.freeTrialMinutes || 0;
                     const freeTrialUsed = user.freeTrialMinutesUsed || 0;
                     const freeTrialTotal = user.freeTrialMinutesTotal || 60;
                     const freeTrialPercent = (freeTrialUsed / freeTrialTotal) * 100;
-                    const packages = userPackages[user.uid] || { total: 0, ai: 0, hybrid: 0, human: 0 };
+                    const packages = userPackages[userId] || { total: 0, ai: 0, hybrid: 0, human: 0 };
 
                     return (
-                      <tr key={user.uid} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr key={userId} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-4">
                           <div className="min-w-[150px]">
                             <p className="font-medium text-[#003366] truncate">{user.name || 'Unnamed User'}</p>
