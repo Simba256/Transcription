@@ -157,33 +157,7 @@ export const ForgotPasswordSchema = z.object({
 // BILLING API SCHEMAS
 // =============================================================================
 
-/**
- * Schema for creating payment intents
- * POST /api/billing/create-payment-intent
- */
-export const CreatePaymentIntentSchema = z.object({
-  packageId: z.enum(['starter', 'professional', 'enterprise'], {
-    errorMap: () => ({ message: 'Invalid package ID' }),
-  }),
-  credits: z.number()
-    .int('Credits must be an integer')
-    .min(100, 'Minimum 100 credits')
-    .max(50000, 'Maximum 50,000 credits'),
-  amount: z.number()
-    .min(5, 'Minimum amount $5.00')
-    .max(5000, 'Maximum amount $5,000.00'),
-  currency: z.string()
-    .length(3, 'Currency must be 3 characters')
-    .default('cad'),
-});
-
-/**
- * Schema for confirming payments
- * POST /api/billing/confirm-payment
- */
-export const ConfirmPaymentSchema = z.object({
-  paymentIntentId: RequiredString.max(255),
-});
+// Legacy payment intent schemas removed - now using Stripe Checkout Sessions
 
 // =============================================================================
 // SUBSCRIPTION API SCHEMAS
