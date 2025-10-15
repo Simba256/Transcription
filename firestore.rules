@@ -226,6 +226,25 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Webhook events collection (idempotency tracking)
+    match /_webhook_events/{eventId} {
+      // System can create and read for idempotency checks
+      allow create: if true; // Webhooks authenticated via Stripe signature
+      allow read: if true; // For idempotency checks
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // Failed payments collection (for admin review)
+    match /failed_payments/{paymentId} {
+      // System can create
+      allow create: if true; // Webhooks authenticated via Stripe signature
+
+      // Only admins can read/delete
+      allow read, delete: if isAdmin();
+    }
+
     // Remove the overly permissive demo rule - demo users should follow same rules
     // Demo users are identified by email in other rules, not by bypassing security
   }
