@@ -52,18 +52,21 @@ export async function POST(request: NextRequest) {
 }
 
 async function createCheckoutSession(request: NextRequest, decodedToken: any) {
-  const { amount, type = 'wallet', packageData } = await request.json();
+  try {
+    const { amount, type = 'wallet', packageData } = await request.json();
 
-  if (!amount || amount < 1) {
-    return NextResponse.json({
-      error: 'Invalid amount'
-    }, { status: 400 });
-  }
+    console.log('[Create Checkout] Request:', { amount, type, packageData });
 
-  const userId = decodedToken.uid;
-  const userEmail = decodedToken.email;
+    if (!amount || amount < 1) {
+      return NextResponse.json({
+        error: 'Invalid amount'
+      }, { status: 400 });
+    }
 
-  console.log(`[Create Checkout] Creating session for user ${userId} (${userEmail})`);
+    const userId = decodedToken.uid;
+    const userEmail = decodedToken.email;
+
+    console.log(`[Create Checkout] Creating session for user ${userId} (${userEmail})`);
 
   // Create line items based on type
   const lineItems = type === 'package' && packageData ? [{
@@ -88,50 +91,57 @@ async function createCheckoutSession(request: NextRequest, decodedToken: any) {
     quantity: 1,
   }];
 
-  // Create Stripe checkout session with userId ALWAYS included
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ['card'],
-    line_items: lineItems,
-    mode: 'payment',
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL || getBaseUrl(request)}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || getBaseUrl(request)}/billing?canceled=true`,
-    customer_email: userEmail, // Pre-fill with account email
-    metadata: {
-      // ALWAYS include these - this is foolproof!
-      userId: userId,
-      userEmail: userEmail,
-      type: type,
-      // Package-specific metadata
-      ...(type === 'package' && packageData ? {
-        packageType: packageData.type,
-        packageMinutes: String(packageData.minutes),
-        packageRate: String(packageData.rate),
-        packageName: packageData.name
+    // Create Stripe checkout session with userId ALWAYS included
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: lineItems,
+      mode: 'payment',
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || getBaseUrl(request)}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || getBaseUrl(request)}/billing?canceled=true`,
+      customer_email: userEmail, // Pre-fill with account email
+      metadata: {
+        // ALWAYS include these - this is foolproof!
+        userId: userId,
+        userEmail: userEmail,
+        type: type,
+        // Package-specific metadata
+        ...(type === 'package' && packageData ? {
+          packageType: packageData.type,
+          packageMinutes: String(packageData.minutes),
+          packageRate: String(packageData.rate),
+          packageName: packageData.name
+        } : {})
+      },
+      // Prevent customer from changing email during checkout
+      customer_creation: 'always',
+      billing_address_collection: 'required',
+      // Add customer's name if available
+      ...(decodedToken.name ? {
+        customer_data: {
+          name: decodedToken.name
+        }
       } : {})
-    },
-    // Prevent customer from changing email during checkout
-    customer_creation: 'always',
-    billing_address_collection: 'required',
-    // Add customer's name if available
-    ...(decodedToken.name ? {
-      customer_data: {
-        name: decodedToken.name
+    });
+
+    console.log(`[Create Checkout] Session created: ${session.id} with metadata:`, session.metadata);
+
+    return NextResponse.json({
+      checkoutUrl: session.url,
+      sessionId: session.id,
+      message: 'Redirecting to secure checkout...',
+      metadata: {
+        userId: userId,
+        email: userEmail,
+        amount: amount
       }
-    } : {})
-  });
-
-  console.log(`[Create Checkout] Session created: ${session.id} with metadata:`, session.metadata);
-
-  return NextResponse.json({
-    checkoutUrl: session.url,
-    sessionId: session.id,
-    message: 'Redirecting to secure checkout...',
-    metadata: {
-      userId: userId,
-      email: userEmail,
-      amount: amount
-    }
-  });
+    });
+  } catch (error) {
+    console.error('[Create Checkout] Session creation failed:', error);
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Failed to create checkout session',
+      details: error instanceof Error ? error.stack : undefined
+    }, { status: 500 });
+  }
 }
 
 function getBaseUrl(request: NextRequest): string {

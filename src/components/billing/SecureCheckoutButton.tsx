@@ -41,6 +41,8 @@ export default function SecureCheckoutButton({
       // Get auth token
       const token = await user.getIdToken();
 
+      console.log('[SecureCheckout] Creating checkout for:', { amount, type, packageData });
+
       // Create checkout session with userId always included
       const response = await fetch('/api/create-checkout', {
         method: 'POST',
@@ -55,24 +57,33 @@ export default function SecureCheckoutButton({
         })
       });
 
+      console.log('[SecureCheckout] Response status:', response.status);
+
+      // Check if response has content before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('[SecureCheckout] Non-JSON response:', text);
+        throw new Error(`Server returned invalid response (${response.status}): ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+      console.log('[SecureCheckout] Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create checkout session');
       }
 
-      // Log for debugging
-      console.log('Checkout session created with metadata:', data.metadata);
-
       // Redirect to Stripe checkout
       if (data.checkoutUrl) {
+        console.log('[SecureCheckout] Redirecting to:', data.checkoutUrl);
         window.location.href = data.checkoutUrl;
       } else {
         throw new Error('No checkout URL received');
       }
 
     } catch (err) {
-      console.error('Checkout error:', err);
+      console.error('[SecureCheckout] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to start checkout');
       setIsLoading(false);
     }
