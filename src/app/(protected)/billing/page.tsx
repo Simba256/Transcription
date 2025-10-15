@@ -489,15 +489,22 @@ export default function BillingPage() {
                   </Alert>
                 ) : null}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {['50', '200', '500'].map((amount) => (
-                    <Card key={amount} className="border shadow-sm hover:shadow-md transition-shadow">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {['1', '50', '200', '500'].map((amount) => (
+                    <Card key={amount} className={`border shadow-sm hover:shadow-md transition-shadow ${amount === '1' ? 'border-yellow-400 bg-yellow-50' : ''}`}>
                       <CardContent className="p-6 text-center">
+                        {amount === '1' && (
+                          <div className="mb-2">
+                            <span className="inline-block bg-yellow-500 text-white text-xs font-bold px-2 py-1 rounded">
+                              TEST ONLY
+                            </span>
+                          </div>
+                        )}
                         <div className="text-3xl font-bold text-[#003366] mb-2">
                           CA${amount}
                         </div>
                         <p className="text-gray-600 mb-2">
-                          {amount === '50' ? 'Quick Start' : amount === '200' ? 'Standard' : 'Professional'}
+                          {amount === '1' ? 'Test Payment' : amount === '50' ? 'Quick Start' : amount === '200' ? 'Standard' : 'Professional'}
                         </p>
                         <p className="text-xs text-gray-500 mb-4">
                           ~{Math.floor(parseInt(amount) / 1.20)} AI minutes<br/>
@@ -507,9 +514,9 @@ export default function BillingPage() {
                         <SecureCheckoutButton
                           amount={parseInt(amount)}
                           type="wallet"
-                          className="w-full bg-[#003366] hover:bg-[#002244] text-white py-3 rounded-lg font-medium"
+                          className={`w-full py-3 rounded-lg font-medium ${amount === '1' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-[#003366] hover:bg-[#002244]'} text-white`}
                         >
-                          Add CA${amount} to Wallet
+                          {amount === '1' ? 'Test CA$1' : `Add CA${amount} to Wallet`}
                         </SecureCheckoutButton>
                       </CardContent>
                     </Card>
