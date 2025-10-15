@@ -316,7 +316,7 @@ export default function UserManagementPage() {
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-1 text-[#003366] font-medium">
                             <DollarSign className="h-3 w-3" />
-                            <span>{((user.walletBalance || 0) + ((user.credits || 0) / 100)).toFixed(2)}</span>
+                            <span>{(user.walletBalance || 0).toFixed(2)}</span>
                           </div>
                         </td>
                         <td className="py-4 px-4 hidden lg:table-cell">
@@ -346,7 +346,7 @@ export default function UserManagementPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               setSelectedUser(user);
-                              const currentBalance = (user.walletBalance || 0) + ((user.credits || 0) / 100);
+                              const currentBalance = user.walletBalance || 0;
                               setWalletAmount(currentBalance.toFixed(2));
                               setAdjustmentReason('');
                             }}>

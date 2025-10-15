@@ -166,30 +166,30 @@ export function CreditProvider({ children }: CreditProviderProps) {
 
   const purchaseCredits = async (packageId: string, amount: number, cost: number) => {
     if (!user || !userData) return;
-    
+
     try {
-      // Calculate new credit balance and update totalSpent
-      const currentCredits = userData.credits || 0;
+      // Calculate new wallet balance and update totalSpent
+      const currentWallet = userData.walletBalance || 0;
       const currentTotalSpent = userData.totalSpent || 0;
-      const newCreditBalance = currentCredits + amount;
+      const newWalletBalance = currentWallet + amount;
       const newTotalSpent = currentTotalSpent + cost;
-      
-      // Update user's credit balance and totalSpent in Firestore
-      await updateUserData({ 
-        credits: newCreditBalance,
+
+      // Update user's wallet balance and totalSpent in Firestore
+      await updateUserData({
+        walletBalance: newWalletBalance,
         totalSpent: newTotalSpent
       });
-      
+
       // Record transaction to Firestore and local state with revenue information
       await addTransaction({
         type: 'purchase',
         amount,
-        description: `Purchased ${packageId} package - ${amount} credits for $${cost} CAD`,
+        description: `Purchased ${packageId} package - ${amount} for $${cost} CAD`,
         revenue: cost
       });
-      
+
     } catch (error) {
-      console.error('Error processing credit purchase:', error);
+      console.error('Error processing purchase:', error);
       throw error;
     }
   };
@@ -207,25 +207,25 @@ export function CreditProvider({ children }: CreditProviderProps) {
 
   const consumeCredits = async (amount: number, jobId: string, description?: string) => {
     if (!user || !userData) return;
-    
+
     try {
-      // Calculate new credit balance
-      const currentCredits = userData.credits || 0;
-      const newCreditBalance = currentCredits - amount;
-      
-      // Update user's credit balance in Firestore
-      await updateUserData({ credits: newCreditBalance });
-      
+      // Calculate new wallet balance
+      const currentWallet = userData.walletBalance || 0;
+      const newWalletBalance = currentWallet - amount;
+
+      // Update user's wallet balance in Firestore
+      await updateUserData({ walletBalance: newWalletBalance });
+
       // Add the transaction
       await addTransaction({
         type: 'consumption',
         amount: -amount,
-        description: description || `Credits consumed for transcription`,
+        description: description || `Wallet deduction for transcription`,
         jobId
       });
-      
+
     } catch (error) {
-      console.error('Error consuming credits:', error);
+      console.error('Error consuming from wallet:', error);
       throw error;
     }
   };
@@ -256,25 +256,25 @@ export function CreditProvider({ children }: CreditProviderProps) {
         throw new Error('Unable to get user data for refund');
       }
       
-      // Calculate new credit balance
-      const currentCredits = targetUserData.credits || 0;
-      const newCreditBalance = currentCredits + amount;
-      
-      // Update target user's credit balance in Firestore
+      // Calculate new wallet balance
+      const currentWallet = targetUserData.walletBalance || 0;
+      const newWalletBalance = currentWallet + amount;
+
+      // Update target user's wallet balance in Firestore
       if (targetUserId && targetUserId !== user.uid) {
-        // Admin updating another user's credits
+        // Admin updating another user's wallet
         const userRef = doc(db, 'users', targetUserId);
-        await updateDoc(userRef, { credits: newCreditBalance });
+        await updateDoc(userRef, { walletBalance: newWalletBalance });
       } else {
-        // Update current user's credits
-        await updateUserData({ credits: newCreditBalance });
+        // Update current user's wallet
+        await updateUserData({ walletBalance: newWalletBalance });
       }
-      
+
       // Record the refund transaction with proper user information
       await addTransaction({
         type: 'refund',
         amount,
-        description: 'Credits refunded for cancelled/failed transcription',
+        description: 'Refund for cancelled/failed transcription',
         jobId,
         userId: userIdToRefund,
         userEmail: targetUserData.email

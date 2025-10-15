@@ -104,10 +104,8 @@ export default function BillingPage() {
 
   // Extract user data
   const minutesUsed = userData?.minutesUsedThisMonth || 0;
-  // Combine credits and wallet balance into a single wallet balance
-  const legacyCredits = userData?.credits || 0;
-  const existingWallet = userData?.walletBalance || 0;
-  const walletBalance = existingWallet + legacyCredits; // Combined balance
+  // Get wallet balance (new system only)
+  const walletBalance = userData?.walletBalance || 0;
 
   // Calculate pagination
   const totalPages = Math.ceil(transactions.length / transactionsPerPage);

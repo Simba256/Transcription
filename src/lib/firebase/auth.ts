@@ -29,9 +29,6 @@ export interface UserData {
 
   // Wallet system
   walletBalance?: number;
-
-  // Credits (legacy - being migrated to wallet)
-  credits?: number;
   totalSpent?: number;
 
   // Subscription info
@@ -67,7 +64,7 @@ export const signUp = async (email: string, password: string, name?: string) => 
       role: 'user', // Default role
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
-      credits: 0,
+      walletBalance: 0,
       totalSpent: 0,
     });
 

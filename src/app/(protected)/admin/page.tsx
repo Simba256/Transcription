@@ -122,8 +122,7 @@ export default function AdminPage() {
         // Calculate total wallet balance across all users
         const totalWalletBalance = users.reduce((sum, user) => {
           const wallet = user.walletBalance || 0;
-          const credits = (user.credits || 0) / 100; // Convert legacy credits to dollars
-          return sum + wallet + credits;
+          return sum + wallet;
         }, 0);
 
         // Get package statistics from Firestore
@@ -437,7 +436,7 @@ export default function AdminPage() {
                     <div className="text-right">
                       <span className="flex items-center gap-1 text-[#003366] font-medium">
                         <DollarSign className="h-3 w-3" />
-                        {((user.walletBalance || 0) + ((user.credits || 0) / 100)).toFixed(2)}
+                        {(user.walletBalance || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>

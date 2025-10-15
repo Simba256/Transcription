@@ -365,7 +365,6 @@ async function processWalletTopup(
 
   transaction.update(userRef, {
     walletBalance: newBalance,
-    credits: 0, // Clear legacy credits field
     updatedAt: FieldValue.serverTimestamp(),
   });
 

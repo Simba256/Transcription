@@ -122,10 +122,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
       if (userDoc.exists()) {
         const data = userDoc.data();
 
-        // Combine legacy credits with wallet balance (1 credit = $0.01)
-        const legacyCredits = (data.credits || 0) / 100;
+        // Get wallet balance (new system only)
         const wallet = data.walletBalance || 0;
-        setWalletBalance(wallet + legacyCredits);
+        setWalletBalance(wallet);
 
         // Load packages
         if (data.packages && Array.isArray(data.packages)) {
@@ -246,7 +245,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         }
 
         const userData = userDoc.data();
-        const currentWallet = (userData.walletBalance || 0) + ((userData.credits || 0) / 100);
+        const currentWallet = userData.walletBalance || 0;
         const currentPackages = userData.packages || [];
         const now = new Date();
 
@@ -299,7 +298,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
         const newWalletBalance = currentWallet - walletUsed;
         transaction.update(userRef, {
           walletBalance: newWalletBalance,
-          credits: 0, // Clear legacy credits after combining
           packages: updatedPackages,
           updatedAt: serverTimestamp()
         });
@@ -391,7 +389,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
         transaction.update(userRef, {
           walletBalance: currentBalance + amount,
-          credits: 0, // Clear legacy credits
           updatedAt: serverTimestamp()
         });
 
