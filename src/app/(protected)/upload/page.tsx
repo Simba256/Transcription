@@ -51,7 +51,7 @@ export default function UploadPage() {
   const [rushDelivery, setRushDelivery] = useState(false);
   const [multipleSpeakers, setMultipleSpeakers] = useState(false);
   const [speakerCount, setSpeakerCount] = useState(2);
-  const { user, userData } = useAuth();
+  const { user, userData, refreshUser } = useAuth();
   const { consumeCredits } = useCredits();
   const {
     walletBalance,
@@ -62,7 +62,8 @@ export default function UploadPage() {
     freeTrialTotal,
     checkSufficientBalance,
     deductForTranscription,
-    getActivePackageForMode
+    getActivePackageForMode,
+    refreshWallet
   } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
@@ -480,6 +481,9 @@ export default function UploadPage() {
           }
 
           totalCostProcessed += deductionResult.costDeducted;
+
+          // Refresh wallet and user data to show updated balances (including free trial usage)
+          await Promise.all([refreshWallet(), refreshUser()]);
         }
 
         // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
@@ -1193,20 +1197,20 @@ export default function UploadPage() {
 
                 {/* FREE TRIAL Section - Shows first if using free trial */}
                 {freeTrialMinutesUsed > 0 && (
-                  <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg mb-3">
+                  <div className="p-4 bg-green-50 border-2 border-green-500 rounded-lg mb-3">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-2xl">🎉</span>
-                      <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">FREE TRIAL</span>
+                      <span className="text-sm font-bold text-green-700 uppercase tracking-wide">FREE TRIAL</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-purple-700 font-medium">Using FREE trial minutes:</span>
-                      <span className="text-lg font-bold text-purple-800">
+                      <span className="text-sm text-green-700 font-medium">Using FREE trial minutes:</span>
+                      <span className="text-lg font-bold text-green-800">
                         {freeTrialMinutesUsed} minutes FREE
                       </span>
                     </div>
-                    <div className="text-xs text-purple-600 mt-2 flex justify-between items-center">
+                    <div className="text-xs text-gray-600 mt-2 flex justify-between items-center">
                       <span>After this: {freeTrialMinutes - freeTrialMinutesUsed} FREE minutes remain</span>
-                      <span className="font-semibold">CA$0.00</span>
+                      <span className="font-semibold text-green-700">CA$0.00</span>
                     </div>
                   </div>
                 )}
@@ -1293,9 +1297,9 @@ export default function UploadPage() {
                     <div className="text-sm space-y-1">
                       {/* Free Trial Balance */}
                       {freeTrialActive && freeTrialMinutes > 0 && (
-                        <div className="flex justify-between items-center bg-purple-50 p-2 rounded">
-                          <span className="text-purple-700 font-medium">🎉 Free Trial Balance:</span>
-                          <span className="text-purple-800 font-bold">{freeTrialMinutes} minutes</span>
+                        <div className="flex justify-between items-center bg-green-50 p-2 rounded border border-green-200">
+                          <span className="text-green-700 font-medium">🎉 Free Trial Balance:</span>
+                          <span className="text-green-800 font-bold">{freeTrialMinutes} minutes</span>
                         </div>
                       )}
                       {activePackage && (

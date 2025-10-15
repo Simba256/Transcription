@@ -139,48 +139,48 @@ export function UserDashboard() {
 
         {/* FREE TRIAL Display - Prominent banner at top */}
         {freeTrialActive && freeTrialMinutes > 0 && (
-          <Card className="border-2 border-purple-300 shadow-lg mb-6 bg-gradient-to-br from-purple-50 via-blue-50 to-purple-50">
+          <Card className="border-2 border-[#b29dd9] shadow-lg mb-6 bg-gradient-to-r from-[#003366] to-[#004488]">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-4xl">🎉</span>
                     <div>
-                      <h3 className="text-2xl font-bold text-purple-700">
+                      <h3 className="text-2xl font-bold text-white">
                         Free Trial Active!
                       </h3>
-                      <p className="text-sm text-purple-600 mt-1">
+                      <p className="text-sm text-white/80 mt-1">
                         Use your free minutes for ANY transcription mode or add-ons
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                    <div className="bg-white/60 rounded-lg p-4">
-                      <p className="text-sm text-purple-600 mb-1">Remaining</p>
-                      <p className="text-3xl font-bold text-purple-700">{freeTrialMinutes}</p>
-                      <p className="text-xs text-purple-500">FREE minutes</p>
+                    <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+                      <p className="text-sm text-white/70 mb-1">Remaining</p>
+                      <p className="text-3xl font-bold text-white">{freeTrialMinutes}</p>
+                      <p className="text-xs text-green-400 font-semibold">FREE minutes</p>
                     </div>
-                    <div className="bg-white/60 rounded-lg p-4">
-                      <p className="text-sm text-purple-600 mb-1">Used</p>
-                      <p className="text-3xl font-bold text-purple-700">{freeTrialUsed}</p>
-                      <p className="text-xs text-purple-500">of {freeTrialTotal} minutes</p>
+                    <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+                      <p className="text-sm text-white/70 mb-1">Used</p>
+                      <p className="text-3xl font-bold text-white">{freeTrialUsed}</p>
+                      <p className="text-xs text-white/60">of {freeTrialTotal} minutes</p>
                     </div>
-                    <div className="bg-white/60 rounded-lg p-4">
-                      <p className="text-sm text-purple-600 mb-1">Savings</p>
-                      <p className="text-3xl font-bold text-green-600">CA${(freeTrialMinutes * 2.5).toFixed(0)}</p>
-                      <p className="text-xs text-purple-500">value available</p>
+                    <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+                      <p className="text-sm text-white/70 mb-1">Savings</p>
+                      <p className="text-3xl font-bold text-green-400">CA${(freeTrialMinutes * 2.5).toFixed(0)}</p>
+                      <p className="text-xs text-white/60">value available</p>
                     </div>
                   </div>
 
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-purple-600 font-medium">Trial Progress</span>
-                      <span className="text-sm text-purple-600">{((freeTrialUsed / freeTrialTotal) * 100).toFixed(0)}% used</span>
+                      <span className="text-sm text-white/80 font-medium">Trial Progress</span>
+                      <span className="text-sm text-white/80">{((freeTrialUsed / freeTrialTotal) * 100).toFixed(0)}% used</span>
                     </div>
-                    <div className="w-full bg-purple-200 rounded-full h-3">
+                    <div className="w-full bg-white/20 rounded-full h-3">
                       <div
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full transition-all"
+                        className="bg-[#b29dd9] h-3 rounded-full transition-all"
                         style={{ width: `${(freeTrialUsed / freeTrialTotal) * 100}%` }}
                       />
                     </div>
@@ -188,7 +188,7 @@ export function UserDashboard() {
 
                   <div className="mt-4">
                     <Link href="/upload">
-                      <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white">
+                      <Button className="bg-[#b29dd9] hover:bg-[#9d87c7] text-white font-semibold">
                         Start Free Transcription →
                       </Button>
                     </Link>
@@ -314,7 +314,7 @@ export function UserDashboard() {
                   <p className="text-2xl font-bold text-[#003366]">CA${walletBalance.toFixed(2)}</p>
                   <div className="space-y-0.5 mt-1">
                     {freeTrialActive && freeTrialMinutes > 0 && (
-                      <p className="text-xs text-purple-600 font-semibold">
+                      <p className="text-xs text-green-600 font-semibold">
                         🎉 + {freeTrialMinutes} FREE trial minutes
                       </p>
                     )}
