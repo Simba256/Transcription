@@ -59,17 +59,12 @@ export async function PATCH(
 
     const userData = userDoc.data();
     const currentWalletBalance = userData?.walletBalance || 0;
-    const currentCredits = userData?.credits || 0;
+    const balanceChange = walletBalance - currentWalletBalance;
 
-    // Calculate the combined current balance for comparison
-    const combinedCurrentBalance = currentWalletBalance + (currentCredits / 100);
-    const balanceChange = walletBalance - combinedCurrentBalance;
-
-    // Update user wallet balance and clear legacy credits
+    // Update user wallet balance
     await adminDb.runTransaction(async (transaction) => {
       transaction.update(userRef, {
         walletBalance: walletBalance,
-        credits: 0, // Clear legacy credits after combining
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -87,7 +82,7 @@ export async function PATCH(
       });
     });
 
-    console.log(`[Admin] ${decodedToken.email} updated wallet balance for user ${userId}: CA$${combinedCurrentBalance.toFixed(2)} → CA$${walletBalance.toFixed(2)} (${balanceChange >= 0 ? '+' : ''}CA$${balanceChange.toFixed(2)})`);
+    console.log(`[Admin] ${decodedToken.email} updated wallet balance for user ${userId}: CA$${currentWalletBalance.toFixed(2)} → CA$${walletBalance.toFixed(2)} (${balanceChange >= 0 ? '+' : ''}CA$${balanceChange.toFixed(2)})`);
 
     return NextResponse.json({
       success: true,
