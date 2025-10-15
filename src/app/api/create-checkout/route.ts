@@ -115,12 +115,6 @@ async function createCheckoutSession(request: NextRequest, decodedToken: any) {
       // Prevent customer from changing email during checkout
       customer_creation: 'always',
       billing_address_collection: 'required',
-      // Add customer's name if available
-      ...(decodedToken.name ? {
-        customer_data: {
-          name: decodedToken.name
-        }
-      } : {})
     });
 
     console.log(`[Create Checkout] Session created: ${session.id} with metadata:`, session.metadata);
