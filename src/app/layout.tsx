@@ -4,6 +4,7 @@ import "./globals.css";
 import ClientWrapper from "@/components/ClientWrapper";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { validateProductionEnvironment, logValidationResults } from "@/lib/config/production-validation";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
+        {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
+          <GoogleAnalytics GA_MEASUREMENT_ID={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
+        )}
         <ClientWrapper>{children}</ClientWrapper>
         <SpeedInsights />
       </body>
