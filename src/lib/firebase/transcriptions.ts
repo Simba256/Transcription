@@ -183,7 +183,7 @@ export const getModeDetails = (mode: TranscriptionMode) => {
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
       creditsPerMinute: 100, // Legacy support
-      costPerMinute: 1.20, // Pay as you go rate in CAD
+      costPerMinute: 0.40, // Pay as you go rate in CAD
       turnaround: '60 minutes'
     },
     hybrid: {

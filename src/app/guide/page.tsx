@@ -51,7 +51,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: "How does pricing work?",
-    answer: "We use a wallet-based system. You can purchase discounted minute packages (300, 750, or 1500 minutes) or add funds to your wallet for pay-as-you-go. Packages include FREE rush delivery and multiple speaker detection. Standard rates: AI CA$1.20/min, Hybrid CA$1.50/min, Human CA$2.50/min. Package rates are significantly lower, starting at CA$0.60/min for AI."
+    answer: "We use a wallet-based system. You can purchase discounted minute packages (300, 750, or 1500 minutes) or add funds to your wallet for pay-as-you-go. Packages include FREE rush delivery and multiple speaker detection. Standard rates: AI CA$0.40/min, Hybrid CA$1.50/min, Human CA$2.50/min. Package rates are significantly lower, starting at CA$0.30/min for AI."
   },
   {
     question: "Can I edit the transcript after it's completed?",
@@ -275,7 +275,7 @@ export default function GuidePage() {
                           <p className="text-gray-600 text-sm mt-1">Fast automated transcription with 95%+ accuracy</p>
                           <div className="flex gap-4 mt-2 text-sm">
                             <span className="text-green-600">✓ 60 minutes turnaround</span>
-                            <span className="text-green-600">✓ From CA$0.60/minute</span>
+                            <span className="text-green-600">✓ From CA$0.30/minute</span>
                             <span className="text-green-600">✓ Speaker detection</span>
                           </div>
                         </div>
@@ -290,7 +290,7 @@ export default function GuidePage() {
                           <p className="text-gray-600 text-sm mt-1">AI transcription with human quality check</p>
                           <div className="flex gap-4 mt-2 text-sm">
                             <span className="text-blue-600">✓ 3-5 business days</span>
-                            <span className="text-blue-600">✓ From CA$1.15/minute</span>
+                            <span className="text-blue-600">✓ From CA$1.20/minute</span>
                             <span className="text-blue-600">✓ 98%+ accuracy</span>
                           </div>
                         </div>
@@ -305,7 +305,7 @@ export default function GuidePage() {
                           <p className="text-gray-600 text-sm mt-1">Professional transcribers for maximum accuracy</p>
                           <div className="flex gap-4 mt-2 text-sm">
                             <span className="text-purple-600">✓ 3-5 business days</span>
-                            <span className="text-purple-600">✓ From CA$2.10/minute</span>
+                            <span className="text-purple-600">✓ From CA$2.00/minute</span>
                             <span className="text-purple-600">✓ 99%+ accuracy</span>
                           </div>
                         </div>
@@ -445,15 +445,15 @@ export default function GuidePage() {
                     <div className="space-y-2 mt-4">
                       <div className="flex justify-between items-center">
                         <span>AI Transcription</span>
-                        <span className="font-semibold">CA$0.60-$1.20/minute</span>
+                        <span className="font-semibold">CA$0.30-$0.40/minute</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Hybrid Review</span>
-                        <span className="font-semibold">CA$1.15-$1.50/minute</span>
+                        <span className="font-semibold">CA$1.20-$1.50/minute</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Human Transcription</span>
-                        <span className="font-semibold">CA$2.10-$2.50/minute</span>
+                        <span className="font-semibold">CA$2.00-$2.50/minute</span>
                       </div>
                     </div>
                   </div>
@@ -471,9 +471,9 @@ export default function GuidePage() {
                         Best value with FREE add-ons included!
                       </p>
                       <ul className="text-sm mt-3 space-y-1">
-                        <li>• 300 minutes: From CA$225 (AI)</li>
-                        <li>• 750 minutes: From CA$488 (AI)</li>
-                        <li>• 1500 minutes: From CA$900 (AI)</li>
+                        <li>• 300 minutes: From CA$100 (AI)</li>
+                        <li>• 750 minutes: From CA$240 (AI)</li>
+                        <li>• 1500 minutes: From CA$450 (AI)</li>
                         <li className="text-green-600 font-semibold">✓ FREE rush delivery</li>
                         <li className="text-green-600 font-semibold">✓ FREE multiple speakers</li>
                       </ul>

@@ -101,7 +101,7 @@ interface WalletProviderProps {
 
 // Mode pricing configuration (standard rates)
 const MODE_PRICING = {
-  ai: { standardRate: 1.20, name: 'AI Transcription' },
+  ai: { standardRate: 0.40, name: 'AI Transcription' },
   hybrid: { standardRate: 1.50, name: 'Hybrid Review' },
   human: { standardRate: 2.50, name: 'Human Transcription' }
 };

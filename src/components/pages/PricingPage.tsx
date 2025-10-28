@@ -252,7 +252,7 @@ export function PricingPage() {
                   AI Only
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  CA$1.20
+                  CA$0.40
                 </div>
                 <div className="text-gray-600">/minute</div>
                 <p className="text-sm text-gray-500 mt-4">
@@ -477,7 +477,7 @@ export function PricingPage() {
                 </tr>
                 <tr className="border-b bg-gray-50">
                   <td className="p-4 font-semibold">Pay As You Go Price</td>
-                  <td className="p-4 text-center">CA$1.20/min</td>
+                  <td className="p-4 text-center">CA$0.40/min</td>
                   <td className="p-4 text-center">CA$1.50/min</td>
                   <td className="p-4 text-center">CA$2.50/min</td>
                 </tr>

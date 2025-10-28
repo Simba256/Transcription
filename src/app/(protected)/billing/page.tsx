@@ -127,7 +127,7 @@ export default function BillingPage() {
           name: 'AI Transcription',
           icon: Zap,
           description: 'Fast automated transcription (60 minute turnaround)',
-          standardRate: 1.20
+          standardRate: 0.40
         };
       case 'hybrid':
         return {
@@ -214,7 +214,7 @@ export default function BillingPage() {
               <strong>Package Benefits:</strong> Better rates + FREE add-ons | <strong>Wallet Top-up:</strong> Standard rates + add-ons cost extra
             </p>
             <p className="text-sm text-gray-500 mt-1">
-              Standard rates: AI $1.20/min • Hybrid $1.50/min • Human $2.50/min
+              Standard rates: AI $0.40/min • Hybrid $1.50/min • Human $2.50/min
             </p>
           </AlertDescription>
         </Alert>
@@ -524,7 +524,7 @@ export default function BillingPage() {
                           {amount === '50' ? 'Quick Start' : amount === '200' ? 'Standard' : 'Professional'}
                         </p>
                         <p className="text-xs text-gray-500 mb-4">
-                          ~{Math.floor(parseInt(amount) / 1.20)} AI minutes<br/>
+                          ~{Math.floor(parseInt(amount) / 0.40)} AI minutes<br/>
                           ~{Math.floor(parseInt(amount) / 1.50)} Hybrid minutes<br/>
                           ~{Math.floor(parseInt(amount) / 2.50)} Human minutes
                         </p>
@@ -545,7 +545,7 @@ export default function BillingPage() {
                   <div className="space-y-1 text-sm text-gray-700">
                     <div className="flex justify-between">
                       <span>AI Transcription:</span>
-                      <span className="font-semibold">CA$1.20/minute</span>
+                      <span className="font-semibold">CA$0.40/minute</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Hybrid (AI + Human):</span>

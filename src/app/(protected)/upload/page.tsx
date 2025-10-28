@@ -143,7 +143,7 @@ export default function UploadPage() {
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
       creditsPerMinute: 100, // Legacy support
-      costPerMinute: 1.20, // CA$ per minute
+      costPerMinute: 0.40, // CA$ per minute
       turnaround: '60 mins',
       icon: '/ai_transcription.jpg'
     },
