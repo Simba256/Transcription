@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PricingSettings, getPricingSettings } from '@/lib/firebase/settings';
 import {
   PlayCircle,
   Upload,
@@ -36,7 +37,7 @@ interface FAQItem {
   answer: string;
 }
 
-const faqItems: FAQItem[] = [
+const getFaqItems = (pricingSettings: PricingSettings | null): FAQItem[] => [
   {
     question: "What audio and video formats are supported?",
     answer: "We support most common audio formats (MP3, WAV, M4A, FLAC) and video formats (MP4, MOV, AVI). Files up to 1GB can be uploaded."
@@ -51,7 +52,7 @@ const faqItems: FAQItem[] = [
   },
   {
     question: "How does pricing work?",
-    answer: "We use a wallet-based system. You can purchase discounted minute packages (300, 750, or 1500 minutes) or add funds to your wallet for pay-as-you-go. Packages include FREE rush delivery and multiple speaker detection. Standard rates: AI CA$0.40/min, Hybrid CA$1.50/min, Human CA$2.50/min. Package rates are significantly lower, starting at CA$0.30/min for AI."
+    answer: `We use a wallet-based system. You can purchase discounted minute packages (300, 750, or 1500 minutes) or add funds to your wallet for pay-as-you-go. Packages include FREE rush delivery and multiple speaker detection. Standard rates: AI CA$${(pricingSettings?.payAsYouGo.ai || 0.40).toFixed(2)}/min, Hybrid CA$${(pricingSettings?.payAsYouGo.hybrid || 1.50).toFixed(2)}/min, Human CA$${(pricingSettings?.payAsYouGo.human || 2.50).toFixed(2)}/min. Package rates are significantly lower, starting at CA$0.30/min for AI.`
   },
   {
     question: "Can I edit the transcript after it's completed?",
@@ -74,6 +75,22 @@ const faqItems: FAQItem[] = [
 export default function GuidePage() {
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
   const [videoError, setVideoError] = useState(false);
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+
+  // Load pricing settings from database
+  useEffect(() => {
+    const loadPricing = async () => {
+      try {
+        const settings = await getPricingSettings();
+        setPricingSettings(settings);
+      } catch (error) {
+        console.error('Error loading pricing settings:', error);
+      }
+    };
+    loadPricing();
+  }, []);
+
+  const faqItems = getFaqItems(pricingSettings);
 
   const toggleFAQ = (index: number) => {
     setExpandedFAQ(expandedFAQ === index ? null : index);
@@ -445,15 +462,15 @@ export default function GuidePage() {
                     <div className="space-y-2 mt-4">
                       <div className="flex justify-between items-center">
                         <span>AI Transcription</span>
-                        <span className="font-semibold">CA$0.30-$0.40/minute</span>
+                        <span className="font-semibold">CA$0.30-${(pricingSettings?.payAsYouGo.ai || 0.40).toFixed(2)}/minute</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Hybrid Review</span>
-                        <span className="font-semibold">CA$1.20-$1.50/minute</span>
+                        <span className="font-semibold">CA$1.20-${(pricingSettings?.payAsYouGo.hybrid || 1.50).toFixed(2)}/minute</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Human Transcription</span>
-                        <span className="font-semibold">CA$2.00-$2.50/minute</span>
+                        <span className="font-semibold">CA$2.00-${(pricingSettings?.payAsYouGo.human || 2.50).toFixed(2)}/minute</span>
                       </div>
                     </div>
                   </div>

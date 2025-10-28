@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/Footer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { usePackages } from '@/contexts/PackageContext';
 import { TranscriptionPackage } from '@/lib/firebase/packages';
+import { PricingSettings, getPricingSettings } from '@/lib/firebase/settings';
 
 // Declare stripe-pricing-table as a valid HTML element
 declare global {
@@ -30,6 +31,20 @@ declare global {
 export function PricingPage() {
   const [selectedTab, setSelectedTab] = useState('ai');
   const { activePackages, loading } = usePackages();
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+
+  // Load pricing settings from database
+  useEffect(() => {
+    const loadPricing = async () => {
+      try {
+        const settings = await getPricingSettings();
+        setPricingSettings(settings);
+      } catch (error) {
+        console.error('Error loading pricing settings:', error);
+      }
+    };
+    loadPricing();
+  }, []);
 
   // Group packages by type
   const packagesByType = {
@@ -252,7 +267,7 @@ export function PricingPage() {
                   AI Only
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  CA$0.40
+                  CA${(pricingSettings?.payAsYouGo.ai || 0.40).toFixed(2)}
                 </div>
                 <div className="text-gray-600">/minute</div>
                 <p className="text-sm text-gray-500 mt-4">
@@ -270,7 +285,7 @@ export function PricingPage() {
                   Hybrid
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  CA$1.50
+                  CA${(pricingSettings?.payAsYouGo.hybrid || 1.50).toFixed(2)}
                 </div>
                 <div className="text-gray-600">/minute</div>
                 <p className="text-sm text-gray-500 mt-4">
@@ -288,7 +303,7 @@ export function PricingPage() {
                   100% Human
                 </h3>
                 <div className="text-3xl font-bold text-[#b29dd9] mb-1">
-                  CA$2.50
+                  CA${(pricingSettings?.payAsYouGo.human || 2.50).toFixed(2)}
                 </div>
                 <div className="text-gray-600">/minute</div>
                 <p className="text-sm text-gray-500 mt-4">
@@ -477,9 +492,9 @@ export function PricingPage() {
                 </tr>
                 <tr className="border-b bg-gray-50">
                   <td className="p-4 font-semibold">Pay As You Go Price</td>
-                  <td className="p-4 text-center">CA$0.40/min</td>
-                  <td className="p-4 text-center">CA$1.50/min</td>
-                  <td className="p-4 text-center">CA$2.50/min</td>
+                  <td className="p-4 text-center">CA${(pricingSettings?.payAsYouGo.ai || 0.40).toFixed(2)}/min</td>
+                  <td className="p-4 text-center">CA${(pricingSettings?.payAsYouGo.hybrid || 1.50).toFixed(2)}/min</td>
+                  <td className="p-4 text-center">CA${(pricingSettings?.payAsYouGo.human || 2.50).toFixed(2)}/min</td>
                 </tr>
               </tbody>
             </table>

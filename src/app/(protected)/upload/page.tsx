@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -22,6 +22,7 @@ import { generateFilePath } from '@/lib/firebase/storage';
 import { createTranscriptionJobAPI, getModeDetails } from '@/lib/api/transcriptions';
 import { TranscriptionMode, TranscriptionJob, TranscriptionDomain } from '@/lib/firebase/transcriptions';
 import { formatDuration, getBillingMinutes } from '@/lib/utils';
+import { PricingSettings, getPricingSettings } from '@/lib/firebase/settings';
 
 interface UploadFile {
   file: File;
@@ -47,6 +48,23 @@ export default function UploadPage() {
   const [location, setLocation] = useState('');
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [includeFiller, setIncludeFiller] = useState(false);
+
+  // Pricing settings from database
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+
+  // Load pricing settings
+  useEffect(() => {
+    const loadPricing = async () => {
+      try {
+        const settings = await getPricingSettings();
+        setPricingSettings(settings);
+      } catch (error) {
+        console.error('Error loading pricing settings:', error);
+      }
+    };
+    loadPricing();
+  }, []);
+
   // Add-on options
   const [rushDelivery, setRushDelivery] = useState(false);
   const [multipleSpeakers, setMultipleSpeakers] = useState(false);
@@ -143,7 +161,7 @@ export default function UploadPage() {
       name: 'AI Transcription',
       description: 'Fast, automated transcription with good accuracy',
       creditsPerMinute: 100, // Legacy support
-      costPerMinute: 0.40, // CA$ per minute
+      costPerMinute: pricingSettings?.payAsYouGo.ai || 0.40, // CA$ per minute from database
       turnaround: '60 mins',
       icon: '/ai_transcription.jpg'
     },
@@ -152,7 +170,7 @@ export default function UploadPage() {
       name: 'Hybrid Review',
       description: 'AI transcription reviewed by human experts',
       creditsPerMinute: 150, // Legacy support
-      costPerMinute: 1.50, // CA$ per minute
+      costPerMinute: pricingSettings?.payAsYouGo.hybrid || 1.50, // CA$ per minute from database
       turnaround: '3-5 days',
       icon: '/hybrid_review.jpg'
     },
@@ -161,7 +179,7 @@ export default function UploadPage() {
       name: 'Human Transcription',
       description: 'Professional human transcription for highest accuracy',
       creditsPerMinute: 200, // Legacy support
-      costPerMinute: 2.50, // CA$ per minute
+      costPerMinute: pricingSettings?.payAsYouGo.human || 2.50, // CA$ per minute from database
       turnaround: '3-5 days',
       icon: '/human_transcription.jpg'
     }
@@ -363,6 +381,11 @@ export default function UploadPage() {
     try {
       const modeDetails = getModeDetails(transcriptionMode as TranscriptionMode);
 
+      // Get cost per minute from database settings
+      const costPerMinute = transcriptionMode === 'ai' ? (pricingSettings?.payAsYouGo.ai || 0.40) :
+                             transcriptionMode === 'hybrid' ? (pricingSettings?.payAsYouGo.hybrid || 1.50) :
+                             (pricingSettings?.payAsYouGo.human || 2.50);
+
       // Track subscription minutes used across all files
       let totalCostProcessed = 0; // Track total cost of files being processed
 
@@ -407,7 +430,7 @@ export default function UploadPage() {
           }
         }
 
-        const costForFile = (billingMinutes * modeDetails.costPerMinute) + fileAddOnCost;
+        const costForFile = (billingMinutes * costPerMinute) + fileAddOnCost;
         
         // Set initial status based on transcription mode
         let initialStatus: 'processing' | 'pending-transcription';

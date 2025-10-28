@@ -21,6 +21,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
+import { PricingSettings, getPricingSettings } from '@/lib/firebase/settings';
 
 // Declare stripe-pricing-table as a valid HTML element
 declare global {
@@ -49,6 +50,20 @@ export default function BillingPage() {
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const transactionsPerPage = 10;
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+
+  // Load pricing settings from database
+  useEffect(() => {
+    const loadPricing = async () => {
+      try {
+        const settings = await getPricingSettings();
+        setPricingSettings(settings);
+      } catch (error) {
+        console.error('Error loading pricing settings:', error);
+      }
+    };
+    loadPricing();
+  }, []);
 
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
   const isTestMode = publishableKey.includes('pk_test');
@@ -127,21 +142,21 @@ export default function BillingPage() {
           name: 'AI Transcription',
           icon: Zap,
           description: 'Fast automated transcription (60 minute turnaround)',
-          standardRate: 0.40
+          standardRate: pricingSettings?.payAsYouGo.ai || 0.40
         };
       case 'hybrid':
         return {
           name: 'Hybrid Review',
           icon: Users,
           description: 'AI + Human review (3-5 business days)',
-          standardRate: 1.50
+          standardRate: pricingSettings?.payAsYouGo.hybrid || 1.50
         };
       case 'human':
         return {
           name: '100% Human',
           icon: Check,
           description: 'Professional human transcription (3-5 business days)',
-          standardRate: 2.50
+          standardRate: pricingSettings?.payAsYouGo.human || 2.50
         };
       default:
         return null;
@@ -214,7 +229,7 @@ export default function BillingPage() {
               <strong>Package Benefits:</strong> Better rates + FREE add-ons | <strong>Wallet Top-up:</strong> Standard rates + add-ons cost extra
             </p>
             <p className="text-sm text-gray-500 mt-1">
-              Standard rates: AI $0.40/min • Hybrid $1.50/min • Human $2.50/min
+              Standard rates: AI ${pricingSettings?.payAsYouGo.ai.toFixed(2) || '0.40'}/min • Hybrid ${pricingSettings?.payAsYouGo.hybrid.toFixed(2) || '1.50'}/min • Human ${pricingSettings?.payAsYouGo.human.toFixed(2) || '2.50'}/min
             </p>
           </AlertDescription>
         </Alert>
@@ -524,9 +539,9 @@ export default function BillingPage() {
                           {amount === '50' ? 'Quick Start' : amount === '200' ? 'Standard' : 'Professional'}
                         </p>
                         <p className="text-xs text-gray-500 mb-4">
-                          ~{Math.floor(parseInt(amount) / 0.40)} AI minutes<br/>
-                          ~{Math.floor(parseInt(amount) / 1.50)} Hybrid minutes<br/>
-                          ~{Math.floor(parseInt(amount) / 2.50)} Human minutes
+                          ~{Math.floor(parseInt(amount) / (pricingSettings?.payAsYouGo.ai || 0.40))} AI minutes<br/>
+                          ~{Math.floor(parseInt(amount) / (pricingSettings?.payAsYouGo.hybrid || 1.50))} Hybrid minutes<br/>
+                          ~{Math.floor(parseInt(amount) / (pricingSettings?.payAsYouGo.human || 2.50))} Human minutes
                         </p>
                         <SecureCheckoutButton
                           amount={parseInt(amount)}
@@ -545,15 +560,15 @@ export default function BillingPage() {
                   <div className="space-y-1 text-sm text-gray-700">
                     <div className="flex justify-between">
                       <span>AI Transcription:</span>
-                      <span className="font-semibold">CA$0.40/minute</span>
+                      <span className="font-semibold">CA${(pricingSettings?.payAsYouGo.ai || 0.40).toFixed(2)}/minute</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Hybrid (AI + Human):</span>
-                      <span className="font-semibold">CA$1.50/minute</span>
+                      <span className="font-semibold">CA${(pricingSettings?.payAsYouGo.hybrid || 1.50).toFixed(2)}/minute</span>
                     </div>
                     <div className="flex justify-between">
                       <span>100% Human:</span>
-                      <span className="font-semibold">CA$2.50/minute</span>
+                      <span className="font-semibold">CA${(pricingSettings?.payAsYouGo.human || 2.50).toFixed(2)}/minute</span>
                     </div>
                   </div>
                 </div>

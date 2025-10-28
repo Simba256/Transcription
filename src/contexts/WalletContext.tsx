@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { TranscriptionMode } from '@/lib/firebase/transcriptions';
+import { PricingSettings, subscribeToPricingSettings } from '@/lib/firebase/settings';
 
 // Package types
 interface Package {
@@ -99,13 +100,6 @@ interface WalletProviderProps {
   children: ReactNode;
 }
 
-// Mode pricing configuration (standard rates)
-const MODE_PRICING = {
-  ai: { standardRate: 0.40, name: 'AI Transcription' },
-  hybrid: { standardRate: 1.50, name: 'Hybrid Review' },
-  human: { standardRate: 2.50, name: 'Human Transcription' }
-};
-
 export function WalletProvider({ children }: WalletProviderProps) {
   const { user, userData, updateUserData } = useAuth();
   const [walletBalance, setWalletBalance] = useState(0);
@@ -117,6 +111,19 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [freeTrialActive, setFreeTrialActive] = useState(false);
   const [freeTrialUsed, setFreeTrialUsed] = useState(0);
   const [freeTrialTotal, setFreeTrialTotal] = useState(0);
+  // Pricing settings from database
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+
+  // Mode pricing configuration (from database)
+  const MODE_PRICING = pricingSettings ? {
+    ai: { standardRate: pricingSettings.payAsYouGo.ai, name: 'AI Transcription' },
+    hybrid: { standardRate: pricingSettings.payAsYouGo.hybrid, name: 'Hybrid Review' },
+    human: { standardRate: pricingSettings.payAsYouGo.human, name: 'Human Transcription' }
+  } : {
+    ai: { standardRate: 0.40, name: 'AI Transcription' },
+    hybrid: { standardRate: 1.50, name: 'Hybrid Review' },
+    human: { standardRate: 2.50, name: 'Human Transcription' }
+  };
 
   // Load wallet data
   const loadWalletData = useCallback(async () => {
@@ -194,6 +201,15 @@ export function WalletProvider({ children }: WalletProviderProps) {
   useEffect(() => {
     loadWalletData();
   }, [loadWalletData]);
+
+  // Subscribe to pricing settings
+  useEffect(() => {
+    const unsubscribe = subscribeToPricingSettings((settings) => {
+      setPricingSettings(settings);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Get active package for a specific mode
   const getActivePackageForMode = (mode: TranscriptionMode): Package | null => {

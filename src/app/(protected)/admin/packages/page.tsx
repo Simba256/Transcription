@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit3, Trash2, Package, Star, Zap, Users, Check, TrendingDown, Calendar, FileAudio, Save, X, RefreshCw } from 'lucide-react';
+import { Plus, Edit3, Trash2, Package, Star, Zap, Users, Check, TrendingDown, Calendar, FileAudio, Save, X, RefreshCw, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info } from 'lucide-react';
 import { usePackages } from '@/contexts/PackageContext';
 import { TranscriptionPackage } from '@/lib/firebase/packages';
+import { PricingSettings, getPricingSettings, updatePricingSettings, subscribeToPricingSettings } from '@/lib/firebase/settings';
 
 export function PackageManager() {
   const { toast } = useToast();
@@ -38,6 +39,37 @@ export function PackageManager() {
   const [editingPackage, setEditingPackage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<TranscriptionPackage>>({});
+
+  // Pay-as-you-go pricing state
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings | null>(null);
+  const [isEditingPricing, setIsEditingPricing] = useState(false);
+  const [pricingFormData, setPricingFormData] = useState({ ai: 0, hybrid: 0, human: 0 });
+  const [isSavingPricing, setIsSavingPricing] = useState(false);
+
+  // Load pricing settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await getPricingSettings();
+        setPricingSettings(settings);
+        setPricingFormData(settings.payAsYouGo);
+      } catch (error) {
+        console.error('Error loading pricing settings:', error);
+      }
+    };
+
+    loadSettings();
+
+    // Subscribe to changes
+    const unsubscribe = subscribeToPricingSettings((settings) => {
+      setPricingSettings(settings);
+      if (!isEditingPricing) {
+        setPricingFormData(settings.payAsYouGo);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isEditingPricing]);
 
   // Check if admin
   useEffect(() => {
@@ -197,6 +229,70 @@ export function PackageManager() {
     }
   };
 
+  const handleEditPricing = () => {
+    setIsEditingPricing(true);
+    if (pricingSettings) {
+      setPricingFormData(pricingSettings.payAsYouGo);
+    }
+  };
+
+  const handleCancelPricingEdit = () => {
+    setIsEditingPricing(false);
+    if (pricingSettings) {
+      setPricingFormData(pricingSettings.payAsYouGo);
+    }
+  };
+
+  const handleSavePricing = async () => {
+    setIsSavingPricing(true);
+    try {
+      // Update pricing settings
+      await updatePricingSettings({
+        payAsYouGo: pricingFormData
+      });
+
+      // Update all packages' standardRate to match the new pay-as-you-go rates
+      const updatePromises = packages.map(async (pkg) => {
+        let newStandardRate = 0;
+        if (pkg.type === 'ai') newStandardRate = pricingFormData.ai;
+        else if (pkg.type === 'hybrid') newStandardRate = pricingFormData.hybrid;
+        else if (pkg.type === 'human') newStandardRate = pricingFormData.human;
+
+        // Recalculate savings based on new standard rate
+        const standardCost = newStandardRate * pkg.minutes;
+        const savingsAmount = standardCost - pkg.price;
+        const savingsPercentage = (savingsAmount / standardCost) * 100;
+
+        await updateExistingPackage(pkg.id, {
+          standardRate: newStandardRate,
+          savingsPercentage: Math.max(0, savingsPercentage),
+          savingsAmount: Math.max(0, savingsAmount)
+        });
+      });
+
+      await Promise.all(updatePromises);
+
+      toast({
+        title: "Pricing updated",
+        description: "Pay-as-you-go rates and all package savings have been updated successfully.",
+      });
+
+      setIsEditingPricing(false);
+
+      // Refresh packages to show updated values
+      await refreshPackages();
+    } catch (error) {
+      console.error('Error updating pricing:', error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update pricing. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPricing(false);
+    }
+  };
+
   const filteredPackages = getPackagesByType(selectedTab, false); // Get all packages (not just active)
 
   if (loading) {
@@ -273,6 +369,135 @@ export function PackageManager() {
             Each transcription type (AI, Hybrid, Human) has three tiers. Only one package per type can be marked as "Popular" at a time.
           </AlertDescription>
         </Alert>
+
+        {/* Pay-as-you-go Pricing Editor */}
+        {pricingSettings && (
+          <Card className="mb-8 border-0 shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-[#003366] to-[#004488] text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  <CardTitle>Pay-As-You-Go Standard Rates</CardTitle>
+                </div>
+                {!isEditingPricing ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEditPricing}
+                    className="bg-white text-[#003366] hover:bg-gray-100"
+                  >
+                    <Edit3 className="h-4 w-4 mr-1" />
+                    Edit Rates
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelPricingEdit}
+                      disabled={isSavingPricing}
+                      className="bg-white text-[#003366] hover:bg-gray-100"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSavePricing}
+                      disabled={isSavingPricing}
+                      className="bg-[#b29dd9] hover:bg-[#9d87c7] text-white"
+                    >
+                      {isSavingPricing ? (
+                        <>
+                          <LoadingSpinner size="sm" className="mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* AI Rate */}
+                <div className="flex items-center gap-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <Zap className="h-8 w-8 text-yellow-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium text-gray-700">AI Transcription</Label>
+                    {isEditingPricing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={pricingFormData.ai}
+                        onChange={(e) => setPricingFormData({ ...pricingFormData, ai: parseFloat(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <div className="mt-1 text-2xl font-bold text-[#003366]">
+                        CA${pricingSettings.payAsYouGo.ai.toFixed(2)}/min
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Hybrid Rate */}
+                <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Users className="h-8 w-8 text-blue-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium text-gray-700">Hybrid (AI + Human)</Label>
+                    {isEditingPricing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={pricingFormData.hybrid}
+                        onChange={(e) => setPricingFormData({ ...pricingFormData, hybrid: parseFloat(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <div className="mt-1 text-2xl font-bold text-[#003366]">
+                        CA${pricingSettings.payAsYouGo.hybrid.toFixed(2)}/min
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Human Rate */}
+                <div className="flex items-center gap-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <Check className="h-8 w-8 text-purple-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium text-gray-700">100% Human</Label>
+                    {isEditingPricing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={pricingFormData.human}
+                        onChange={(e) => setPricingFormData({ ...pricingFormData, human: parseFloat(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <div className="mt-1 text-2xl font-bold text-[#003366]">
+                        CA${pricingSettings.payAsYouGo.human.toFixed(2)}/min
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">
+                <Info className="h-3 w-3 inline mr-1" />
+                These rates are used as the "Standard Price" reference for package savings calculations and wallet top-up estimates.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {packages.length === 0 ? (
           <Card className="border-0 shadow-sm">
