@@ -212,9 +212,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Settings/configuration (admin only)
+    // Settings/configuration
     match /settings/{settingId} {
-      allow read, write: if isAdmin();
+      // Anyone can read settings (needed for public pricing display)
+      allow read: if true;
+
+      // Only admins can write/update settings
+      allow write: if isAdmin();
     }
 
     // Packages collection (for pricing tiers and minute bundles)

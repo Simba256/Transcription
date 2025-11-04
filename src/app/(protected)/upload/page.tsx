@@ -86,6 +86,18 @@ export default function UploadPage() {
   const { toast } = useToast();
   const router = useRouter();
 
+  // Log authentication and configuration status on mount
+  useEffect(() => {
+    console.log('[Upload Page] Component mounted');
+    console.log('[Upload Page] Auth state:', {
+      authenticated: !!user,
+      userId: user?.uid,
+      userEmail: user?.email,
+      hasUserData: !!userData
+    });
+    console.log('[Upload Page] Firebase Storage Bucket:', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  }, [user, userData]);
+
   // Function to get user's location
   const requestLocation = () => {
     if (!navigator.geolocation) {
@@ -565,12 +577,37 @@ export default function UploadPage() {
       setUploadProgress({});
 
       router.push('/transcriptions');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
+
+      // Extract detailed error information
+      let errorTitle = "Upload failed";
+      let errorDescription = "Please try again or contact support.";
+
+      if (error.message) {
+        errorDescription = error.message;
+
+        // Provide specific guidance based on error type
+        if (error.message.includes('storage/unknown')) {
+          errorTitle = "Storage Error";
+          errorDescription = "Firebase Storage error detected. This usually means:\n\n1. Storage quota exceeded (upgrade to Blaze plan required)\n2. Billing not enabled on Firebase project\n3. Storage bucket not properly initialized\n4. Daily usage limits reached\n\nPlease check Firebase Console → Storage → Usage";
+        } else if (error.message.includes('storage/unauthorized')) {
+          errorTitle = "Authorization Error";
+          errorDescription = "Storage access denied. Check Firebase Storage rules or authentication.";
+        } else if (error.message.includes('storage/quota-exceeded')) {
+          errorTitle = "Quota Exceeded";
+          errorDescription = "Storage quota exceeded. Please upgrade to Blaze plan in Firebase Console.";
+        } else if (error.message.includes('Storage bucket not configured')) {
+          errorTitle = "Configuration Error";
+          errorDescription = "Firebase Storage is not properly configured. Please check environment variables.";
+        }
+      }
+
       toast({
-        title: "Upload failed",
-        description: "Please try again or contact support.",
+        title: errorTitle,
+        description: errorDescription,
         variant: "destructive",
+        duration: 10000, // Show longer for important error messages
       });
     } finally {
       setIsUploading(false);

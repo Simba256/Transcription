@@ -10,7 +10,8 @@
     "test": "node tests/run-all-tests.js",
     "test:api": "node tests/api-test.js",
     "test:security": "node tests/security.test.js",
-    "test:rate-limit": "node tests/rate-limit.test.js"
+    "test:rate-limit": "node tests/rate-limit.test.js",
+    "verify:storage": "bash scripts/verify-storage.sh"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
