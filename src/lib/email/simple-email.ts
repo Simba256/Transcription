@@ -36,7 +36,7 @@ Please process this transcription.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Talk To Text <noreply@talktotext.ca>',
+        from: 'Talk To Text Notifications <onboarding@resend.dev>',
         to: 'jennifer@talktotext.ca',
         subject,
         text,
