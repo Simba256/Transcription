@@ -166,11 +166,9 @@ https://www.talktotext.ca
 </html>
 `;
 
-    // Use verified domain in production, test domain elsewhere
-    const isProduction = process.env.VERCEL_ENV === 'production';
-    const fromEmail = isProduction
-      ? 'Talk To Text <noreply@talktotext.ca>'
-      : 'Talk To Text <onboarding@resend.dev>';
+    // Use onboarding@resend.dev for all environments (no domain verification needed)
+    // If you verify talktotext.ca domain in Resend, you can use: 'Talk To Text <noreply@talktotext.ca>'
+    const fromEmail = 'Talk To Text <onboarding@resend.dev>';
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
