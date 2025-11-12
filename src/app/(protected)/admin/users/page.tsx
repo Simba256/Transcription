@@ -482,10 +482,8 @@ export default function UserManagementPage() {
                               Manage Free Trial
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
-                              toast({
-                                title: "Feature not available",
-                                description: "Activity view will be available in a future update.",
-                              });
+                              const userId = user.id || user.uid;
+                              router.push(`/admin/users/${userId}/activity`);
                             }}>
                               <Clock className="mr-2 h-4 w-4" />
                               View Activity
