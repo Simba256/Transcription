@@ -262,7 +262,16 @@ export default function UserManagementPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to send email');
+        console.error('Full error response:', error);
+
+        // Show detailed error with all available info
+        const errorDetails = [
+          error.error,
+          error.details,
+          error.status ? `Status: ${error.status}` : ''
+        ].filter(Boolean).join(' - ');
+
+        throw new Error(errorDetails || 'Failed to send email');
       }
 
       const result = await response.json();
@@ -277,6 +286,7 @@ export default function UserManagementPage() {
         title: "Error sending email",
         description: error instanceof Error ? error.message : 'Failed to send email',
         variant: "destructive",
+        duration: 10000, // Show error longer
       });
     } finally {
       setSendingEmail(false);
