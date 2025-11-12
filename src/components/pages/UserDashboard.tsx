@@ -250,7 +250,8 @@ export function UserDashboard() {
         )}
 
         {/* Legacy Subscription Status (kept for backward compatibility) */}
-        {!activePackages.length && userData?.subscriptionStatus === 'active' ? (
+        {!activePackages.length && userData?.subscriptionStatus === 'active' &&
+         ((userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0)) > 0 ? (
           <Card className="border-0 shadow-sm mb-6 bg-gradient-to-r from-[#003366] to-[#004488]">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
@@ -263,7 +264,7 @@ export function UserDashboard() {
                 <div>
                   <p className="text-sm font-medium text-white/80">Minutes Remaining</p>
                   <p className="text-xl font-bold">
-                    {(userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0)} / {userData.includedMinutesPerMonth || 0}
+                    {Math.max(0, (userData.includedMinutesPerMonth || 0) - (userData.minutesUsedThisMonth || 0))} / {userData.includedMinutesPerMonth || 0}
                   </p>
                 </div>
                 <div>
