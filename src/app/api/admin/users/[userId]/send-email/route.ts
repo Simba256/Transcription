@@ -166,6 +166,12 @@ https://www.talktotext.ca
 </html>
 `;
 
+    // Use verified domain in production, test domain elsewhere
+    const isProduction = process.env.VERCEL_ENV === 'production';
+    const fromEmail = isProduction
+      ? 'Talk To Text <noreply@talktotext.ca>'
+      : 'Talk To Text <onboarding@resend.dev>';
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -173,7 +179,7 @@ https://www.talktotext.ca
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Talk To Text <noreply@talktotext.ca>',
+        from: fromEmail,
         to: userEmail,
         reply_to: 'jennifer@talktotext.ca',
         subject,
