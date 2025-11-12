@@ -108,6 +108,9 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY----
 # Optional integrations
 SPEECHMATICS_API_KEY=your_speechmatics_key
 SPEECHMATICS_API_URL=https://asr.api.speechmatics.com/v2
+
+# Email service (Resend)
+RESEND_API_KEY=your_resend_api_key
 ```
 
 ### Firestore Collections

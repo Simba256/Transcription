@@ -47,6 +47,9 @@ export default function UserManagementPage() {
   const [freeTrialMinutes, setFreeTrialMinutes] = useState('');
   const [freeTrialReason, setFreeTrialReason] = useState('');
 
+  // Email sending state
+  const [sendingEmail, setSendingEmail] = useState(false);
+
   useEffect(() => {
     // Check if user is admin
     if (!authLoading && userData?.role !== 'admin') {
@@ -239,6 +242,44 @@ export default function UserManagementPage() {
       });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleSendEmail = async (selectedUser: UserData) => {
+    const userId = selectedUser.id || selectedUser.uid;
+    const userName = selectedUser.name || 'User';
+
+    setSendingEmail(true);
+    try {
+      const token = await user?.getIdToken();
+      const response = await fetch(`/api/admin/users/${userId}/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to send email');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: "Email sent successfully",
+        description: result.message,
+      });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast({
+        title: "Error sending email",
+        description: error instanceof Error ? error.message : 'Failed to send email',
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -489,14 +530,12 @@ export default function UserManagementPage() {
                               View Activity
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => {
-                              toast({
-                                title: "Feature not available",
-                                description: "Email functionality will be available in a future update.",
-                              });
-                            }}>
+                            <DropdownMenuItem
+                              onClick={() => handleSendEmail(user)}
+                              disabled={sendingEmail}
+                            >
                               <Mail className="mr-2 h-4 w-4" />
-                              Send Email
+                              {sendingEmail ? 'Sending Email...' : 'Send Email'}
                             </DropdownMenuItem>
                             <DropdownMenuItem className="text-red-600" onClick={() => {
                               toast({
