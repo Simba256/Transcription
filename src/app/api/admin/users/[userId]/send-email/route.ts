@@ -10,9 +10,12 @@ export async function POST(
   { params }: { params: { userId: string } }
 ) {
   try {
+    console.log('[Email API] Starting email send process...');
+
     // Verify admin authentication
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
+      console.error('[Email API] Missing auth header');
       return NextResponse.json(
         { error: 'Unauthorized - Missing token' },
         { status: 401 }
@@ -20,13 +23,16 @@ export async function POST(
     }
 
     const token = authHeader.split('Bearer ')[1];
+    console.log('[Email API] Verifying token...');
     const decodedToken = await adminAuth.verifyIdToken(token);
 
     // Check if user is admin
+    console.log('[Email API] Checking admin role...');
     const adminDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
     const adminData = adminDoc.data();
 
     if (adminData?.role !== 'admin') {
+      console.error('[Email API] User is not admin');
       return NextResponse.json(
         { error: 'Forbidden - Admin access required' },
         { status: 403 }
@@ -34,10 +40,12 @@ export async function POST(
     }
 
     const { userId } = params;
+    console.log('[Email API] Fetching user:', userId);
 
     // Get user data
     const userDoc = await adminDb.collection('users').doc(userId).get();
     if (!userDoc.exists) {
+      console.error('[Email API] User not found:', userId);
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
@@ -48,7 +56,10 @@ export async function POST(
     const userEmail = userData?.email;
     const userName = userData?.name || 'Valued User';
 
+    console.log('[Email API] User found:', userName, userEmail);
+
     if (!userEmail) {
+      console.error('[Email API] User email not found');
       return NextResponse.json(
         { error: 'User email not found' },
         { status: 400 }
@@ -58,9 +69,12 @@ export async function POST(
     // Send email using Resend
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
+    console.log('[Email API] Checking Resend API key...', RESEND_API_KEY ? 'Found' : 'Missing');
+
     if (!RESEND_API_KEY) {
+      console.error('[Email API] RESEND_API_KEY not configured');
       return NextResponse.json(
-        { error: 'Email service not configured' },
+        { error: 'Email service not configured - RESEND_API_KEY missing' },
         { status: 500 }
       );
     }
@@ -170,33 +184,43 @@ https://www.talktotext.ca
     // If you verify talktotext.ca domain in Resend, you can use: 'Talk To Text <noreply@talktotext.ca>'
     const fromEmail = 'Talk To Text <onboarding@resend.dev>';
 
+    console.log('[Email API] Sending email via Resend...');
+    console.log('[Email API] From:', fromEmail);
+    console.log('[Email API] To:', userEmail);
+    console.log('[Email API] Subject:', subject);
+
+    const emailPayload = {
+      from: fromEmail,
+      to: userEmail,
+      reply_to: 'jennifer@talktotext.ca',
+      subject,
+      text,
+      html,
+    };
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: userEmail,
-        reply_to: 'jennifer@talktotext.ca',
-        subject,
-        text,
-        html,
-      }),
+      body: JSON.stringify(emailPayload),
     });
+
+    console.log('[Email API] Resend response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Email] Failed to send:', errorText);
+      console.error('[Email API] Resend API error:', errorText);
+      console.error('[Email API] Response status:', response.status);
       return NextResponse.json(
-        { error: 'Failed to send email', details: errorText },
+        { error: 'Failed to send email via Resend', details: errorText, status: response.status },
         { status: 500 }
       );
     }
 
     const result = await response.json();
-    console.log('[Email] Feedback email sent to:', userEmail);
+    console.log('[Email API] Email sent successfully! ID:', result.id);
 
     return NextResponse.json({
       success: true,
@@ -205,11 +229,13 @@ https://www.talktotext.ca
     });
 
   } catch (error) {
-    console.error('[API] Error sending email:', error);
+    console.error('[Email API] Unexpected error:', error);
+    console.error('[Email API] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
       {
         error: 'Failed to send email',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     );
