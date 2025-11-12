@@ -7,10 +7,14 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     console.log('[Email API] Starting email send process...');
+
+    // In Next.js 15, params is now a Promise and must be awaited
+    const { userId } = await params;
+    console.log('[Email API] User ID from params:', userId);
 
     // Verify admin authentication
     const authHeader = request.headers.get('Authorization');
@@ -39,7 +43,6 @@ export async function POST(
       );
     }
 
-    const { userId } = params;
     console.log('[Email API] Fetching user:', userId);
 
     // Get user data
