@@ -428,7 +428,11 @@ export default function TranscriptViewerPage() {
     const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
 
     transcription.timestampedTranscript.forEach((segment, segmentIndex) => {
-      const text = caseSensitive ? segment.text : segment.text.toLowerCase();
+      // Use edited text if available, otherwise use original
+      const segmentText = editedSegments[segmentIndex] !== undefined
+        ? editedSegments[segmentIndex]
+        : segment.text;
+      const text = caseSensitive ? segmentText : segmentText.toLowerCase();
       let startIndex = 0;
       let matchIndex = text.indexOf(query, startIndex);
 
@@ -448,7 +452,106 @@ export default function TranscriptViewerPage() {
         description: `"${searchQuery}" was not found in the transcript`,
         variant: 'default'
       });
+    } else {
+      // Scroll to first match - wait for DOM to update
+      setTimeout(() => {
+        const markElements = document.querySelectorAll('mark.ring-yellow-500');
+        if (markElements.length > 0) {
+          markElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
     }
+  };
+
+  // Helper function to render text with highlighted search matches
+  const renderTextWithHighlights = (text: string, segmentIndices: number[], segments: Array<{text: string, index: number}>) => {
+    if (!searchQuery || searchMatches.length === 0 || !transcription?.timestampedTranscript) {
+      return text;
+    }
+
+    // Build a map of segment index to offset in the combined text
+    // IMPORTANT: Use edited text length if available, not original text
+    const segmentOffsets = new Map<number, number>();
+    let currentOffset = 0;
+    segments.forEach((seg) => {
+      segmentOffsets.set(seg.index, currentOffset);
+      // Use edited text if available for calculating offset
+      const segText = editedSegments[seg.index] !== undefined
+        ? editedSegments[seg.index]
+        : seg.text;
+      currentOffset += segText.length + 1; // +1 for the space between segments
+    });
+
+    // Find all matches in the combined text by searching directly
+    const matches: Array<{position: number, globalIndex: number, isCurrentMatch: boolean}> = [];
+    const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
+    const searchText = caseSensitive ? text : text.toLowerCase();
+
+    let startIndex = 0;
+    let matchPosition = searchText.indexOf(query, startIndex);
+
+    // Map the global match indices to local positions
+    const globalMatchMap = new Map<string, number>();
+    searchMatches.forEach((match, idx) => {
+      if (segmentIndices.includes(match.segmentIndex)) {
+        const offset = segmentOffsets.get(match.segmentIndex) || 0;
+        const adjustedPosition = offset + match.matchIndex;
+        globalMatchMap.set(`${adjustedPosition}`, idx);
+      }
+    });
+
+    while (matchPosition !== -1) {
+      const globalIndex = globalMatchMap.get(`${matchPosition}`) ?? -1;
+      if (globalIndex !== -1) {
+        matches.push({
+          position: matchPosition,
+          globalIndex,
+          isCurrentMatch: globalIndex === currentMatchIndex
+        });
+      }
+      startIndex = matchPosition + query.length;
+      matchPosition = searchText.indexOf(query, startIndex);
+    }
+
+    if (matches.length === 0) {
+      return text;
+    }
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+
+    matches.forEach((match) => {
+      const { position, globalIndex, isCurrentMatch } = match;
+
+      // Add text before the match
+      if (position > lastIndex) {
+        parts.push(text.substring(lastIndex, position));
+      }
+
+      // Add the highlighted match
+      const matchText = text.substring(position, position + searchQuery.length);
+      parts.push(
+        <mark
+          key={`match-${globalIndex}`}
+          className={`${
+            isCurrentMatch
+              ? 'bg-yellow-400 text-gray-900 font-semibold ring-2 ring-yellow-500'
+              : 'bg-yellow-200 text-gray-900'
+          } rounded px-0.5`}
+        >
+          {matchText}
+        </mark>
+      );
+
+      lastIndex = position + searchQuery.length;
+    });
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return <>{parts}</>;
   };
 
   const navigateToMatch = (direction: 'next' | 'prev') => {
@@ -462,16 +565,23 @@ export default function TranscriptViewerPage() {
     }
     setCurrentMatchIndex(newIndex);
 
-    // Scroll to the match
-    const match = searchMatches[newIndex];
-    const element = document.getElementById(`segment-${match.segmentIndex}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('ring-2', 'ring-yellow-400');
-      setTimeout(() => {
-        element.classList.remove('ring-2', 'ring-yellow-400');
-      }, 2000);
-    }
+    // Scroll to the specific highlighted word, not just the segment
+    // Use a timeout to ensure the DOM has updated with the new highlight
+    setTimeout(() => {
+      // Find the mark element with the current match styling (ring-2 ring-yellow-500)
+      const markElements = document.querySelectorAll('mark.ring-yellow-500');
+      if (markElements.length > 0) {
+        // Should only be one element with the "current match" styling
+        markElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        // Fallback to scrolling to the segment if mark element not found
+        const match = searchMatches[newIndex];
+        const element = document.getElementById(`segment-${match.segmentIndex}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }, 50);
   };
 
   const replaceAll = () => {
@@ -539,22 +649,47 @@ export default function TranscriptViewerPage() {
     const afterMatch = currentText.substring(match.matchIndex + searchQuery.length);
     const newText = beforeMatch + replaceQuery + afterMatch;
 
-    setEditedSegments({
-      ...editedSegments,
-      [match.segmentIndex]: newText
+    // Update edited segments state
+    setEditedSegments(prev => {
+      const newEditedSegments = {
+        ...prev,
+        [match.segmentIndex]: newText
+      };
+
+      // Re-run search immediately with the new edited segments
+      // Use setTimeout to ensure React has re-rendered
+      setTimeout(() => {
+        // Manually re-search using the updated segments
+        if (!searchQuery || !transcription?.timestampedTranscript) return;
+
+        const matches: {segmentIndex: number, matchIndex: number}[] = [];
+        const query = caseSensitive ? searchQuery : searchQuery.toLowerCase();
+
+        transcription.timestampedTranscript.forEach((seg, segmentIndex) => {
+          // Use the newly edited text
+          const segmentText = newEditedSegments[segmentIndex] !== undefined
+            ? newEditedSegments[segmentIndex]
+            : seg.text;
+          const text = caseSensitive ? segmentText : segmentText.toLowerCase();
+          let startIndex = 0;
+          let matchIndex = text.indexOf(query, startIndex);
+
+          while (matchIndex !== -1) {
+            matches.push({ segmentIndex, matchIndex });
+            startIndex = matchIndex + query.length;
+            matchIndex = text.indexOf(query, startIndex);
+          }
+        });
+
+        setSearchMatches(matches);
+        // Keep current index if still valid, otherwise reset to 0
+        if (currentMatchIndex >= matches.length) {
+          setCurrentMatchIndex(Math.max(0, matches.length - 1));
+        }
+      }, 50);
+
+      return newEditedSegments;
     });
-
-    // Update the DOM element immediately
-    const element = document.getElementById(`segment-${match.segmentIndex}`)?.querySelector('[contenteditable]') as HTMLElement;
-    if (element) {
-      element.textContent = newText;
-    }
-
-    // Re-run search to update matches
-    setTimeout(() => {
-      performSearch();
-      navigateToMatch('next');
-    }, 100);
 
     toast({
       title: 'Replaced',
@@ -562,6 +697,13 @@ export default function TranscriptViewerPage() {
       variant: 'default'
     });
   };
+
+  // Re-run search when case sensitivity changes
+  useEffect(() => {
+    if (searchQuery && searchMatches.length > 0) {
+      performSearch();
+    }
+  }, [caseSensitive]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1420,7 +1562,11 @@ export default function TranscriptViewerPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            performSearch();
+                            if (searchMatches.length > 0) {
+                              navigateToMatch('next');
+                            } else {
+                              performSearch();
+                            }
                           }
                         }}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1431,6 +1577,15 @@ export default function TranscriptViewerPage() {
                         className="bg-blue-600 text-white hover:bg-blue-700"
                       >
                         Find All
+                      </Button>
+                      <Button
+                        onClick={() => navigateToMatch('next')}
+                        size="sm"
+                        variant="outline"
+                        disabled={searchMatches.length === 0}
+                        className="border-blue-300"
+                      >
+                        Find Next
                       </Button>
                     </div>
 
@@ -1531,23 +1686,19 @@ export default function TranscriptViewerPage() {
 
                 return speakerGroups.map((group, groupIndex) => {
                   const firstSegmentIndex = group.segments[0].index;
-                  const hasMatch = searchMatches.some(m => group.segments.some(seg => seg.index === m.segmentIndex));
-                  const isCurrentMatch = searchMatches.length > 0 && group.segments.some(seg => seg.index === searchMatches[currentMatchIndex]?.segmentIndex);
+                  const segmentIndices = group.segments.map(seg => seg.index);
 
                   // Combine all segments in this group into one continuous text
-                  const groupText = group.segments.map(seg => seg.text).join(' ');
+                  // Use edited text if available, otherwise use original
+                  const groupText = group.segments.map(seg =>
+                    editedSegments[seg.index] !== undefined ? editedSegments[seg.index] : seg.text
+                  ).join(' ');
 
                   return (
                     <div
                       key={groupIndex}
                       id={`segment-${firstSegmentIndex}`}
-                      className={`group rounded-lg border-2 transition-all ${
-                        isCurrentMatch
-                          ? 'border-yellow-400 bg-yellow-50 shadow-lg'
-                          : hasMatch
-                          ? 'border-yellow-200 bg-yellow-25'
-                          : 'border-gray-200 hover:border-blue-300'
-                      }`}
+                      className="group rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-all"
                     >
                       <div className="p-4">
                         {/* Speaker Label */}
@@ -1560,89 +1711,105 @@ export default function TranscriptViewerPage() {
                           </span>
                         </div>
 
-                        {/* Editable grouped content - single contentEditable for entire speaker section */}
+                        {/* Editable grouped content with inline word highlighting */}
                         <div className="pl-4 border-l-2 border-gray-200">
-                          <div
-                            ref={(el) => {
-                              if (el && !el.dataset.initialized) {
-                                el.textContent = groupText;
-                                el.dataset.initialized = 'true';
-                              }
-                            }}
-                            contentEditable
-                            suppressContentEditableWarning
-                            onInput={(e) => {
-                              const newText = e.currentTarget.textContent || '';
-                              console.log(`[Edit] Group ${groupIndex} changed`);
+                          {searchMatches.length > 0 && searchMatches.some(m => segmentIndices.includes(m.segmentIndex)) ? (
+                            // Read-only view with highlights when search is active
+                            <div
+                              className="text-gray-800 leading-relaxed p-2 cursor-text min-h-[3rem]"
+                              onClick={(e) => {
+                                // Make editable when clicked
+                                const target = e.currentTarget;
+                                target.contentEditable = 'true';
+                                target.focus();
+                              }}
+                            >
+                              {renderTextWithHighlights(groupText, segmentIndices, group.segments)}
+                            </div>
+                          ) : (
+                            // Editable view when no search is active
+                            <div
+                              ref={(el) => {
+                                if (el && !el.dataset.initialized) {
+                                  el.textContent = groupText;
+                                  el.dataset.initialized = 'true';
+                                }
+                              }}
+                              contentEditable
+                              suppressContentEditableWarning
+                              onInput={(e) => {
+                                const newText = e.currentTarget.textContent || '';
+                                console.log(`[Edit] Group ${groupIndex} changed`);
 
-                              // Split the edited text back into segments based on word count
-                              const words = newText.trim().split(/\s+/);
-                              let wordIndex = 0;
+                                // Split the edited text back into segments based on word count
+                                const words = newText.trim().split(/\s+/);
+                                let wordIndex = 0;
 
-                              group.segments.forEach((segment) => {
-                                const originalWords = segment.text.trim().split(/\s+/);
-                                const segmentWordCount = originalWords.length;
-                                const segmentWords = words.slice(wordIndex, wordIndex + segmentWordCount);
-                                const segmentText = segmentWords.join(' ');
+                                group.segments.forEach((segment) => {
+                                  const originalWords = segment.text.trim().split(/\s+/);
+                                  const segmentWordCount = originalWords.length;
+                                  const segmentWords = words.slice(wordIndex, wordIndex + segmentWordCount);
+                                  const segmentText = segmentWords.join(' ');
 
-                                if (segmentText !== segment.text) {
+                                  if (segmentText !== segment.text) {
+                                    setEditedSegments(prev => ({
+                                      ...prev,
+                                      [segment.index]: segmentText
+                                    }));
+                                  }
+
+                                  wordIndex += segmentWordCount;
+                                });
+
+                                // Handle any remaining words (in case text was added)
+                                if (wordIndex < words.length) {
+                                  const remainingText = words.slice(wordIndex).join(' ');
+                                  const lastSegment = group.segments[group.segments.length - 1];
+                                  const existingEdit = editedSegments[lastSegment.index] || lastSegment.text;
+                                  setEditedSegments(prev => ({
+                                    ...prev,
+                                    [lastSegment.index]: existingEdit + ' ' + remainingText
+                                  }));
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const newText = e.currentTarget.textContent || '';
+                                console.log(`[Edit] Group ${groupIndex} blur - saving all segments`);
+
+                                // On blur, just save the entire block to all segments proportionally
+                                const words = newText.trim().split(/\s+/);
+                                let wordIndex = 0;
+
+                                group.segments.forEach((segment, segIndex) => {
+                                  const originalWords = segment.text.trim().split(/\s+/);
+                                  const segmentWordCount = originalWords.length;
+                                  const segmentWords = words.slice(wordIndex, wordIndex + segmentWordCount);
+                                  const segmentText = segmentWords.join(' ');
+
                                   setEditedSegments(prev => ({
                                     ...prev,
                                     [segment.index]: segmentText
                                   }));
+
+                                  wordIndex += segmentWordCount;
+                                });
+
+                                // Handle any remaining words
+                                if (wordIndex < words.length) {
+                                  const remainingText = words.slice(wordIndex).join(' ');
+                                  const lastSegment = group.segments[group.segments.length - 1];
+                                  const existingEdit = editedSegments[lastSegment.index] || lastSegment.text;
+                                  setEditedSegments(prev => ({
+                                    ...prev,
+                                    [lastSegment.index]: existingEdit + ' ' + remainingText
+                                  }));
                                 }
-
-                                wordIndex += segmentWordCount;
-                              });
-
-                              // Handle any remaining words (in case text was added)
-                              if (wordIndex < words.length) {
-                                const remainingText = words.slice(wordIndex).join(' ');
-                                const lastSegment = group.segments[group.segments.length - 1];
-                                const existingEdit = editedSegments[lastSegment.index] || lastSegment.text;
-                                setEditedSegments(prev => ({
-                                  ...prev,
-                                  [lastSegment.index]: existingEdit + ' ' + remainingText
-                                }));
-                              }
-                            }}
-                            onBlur={(e) => {
-                              const newText = e.currentTarget.textContent || '';
-                              console.log(`[Edit] Group ${groupIndex} blur - saving all segments`);
-
-                              // On blur, just save the entire block to all segments proportionally
-                              const words = newText.trim().split(/\s+/);
-                              let wordIndex = 0;
-
-                              group.segments.forEach((segment, segIndex) => {
-                                const originalWords = segment.text.trim().split(/\s+/);
-                                const segmentWordCount = originalWords.length;
-                                const segmentWords = words.slice(wordIndex, wordIndex + segmentWordCount);
-                                const segmentText = segmentWords.join(' ');
-
-                                setEditedSegments(prev => ({
-                                  ...prev,
-                                  [segment.index]: segmentText
-                                }));
-
-                                wordIndex += segmentWordCount;
-                              });
-
-                              // Handle any remaining words
-                              if (wordIndex < words.length) {
-                                const remainingText = words.slice(wordIndex).join(' ');
-                                const lastSegment = group.segments[group.segments.length - 1];
-                                const existingEdit = editedSegments[lastSegment.index] || lastSegment.text;
-                                setEditedSegments(prev => ({
-                                  ...prev,
-                                  [lastSegment.index]: existingEdit + ' ' + remainingText
-                                }));
-                              }
-                            }}
-                            className="text-gray-800 leading-relaxed outline-none focus:bg-yellow-50 rounded p-2 cursor-text min-h-[3rem]"
-                          >
-                            {groupText}
-                          </div>
+                              }}
+                              className="text-gray-800 leading-relaxed outline-none focus:bg-yellow-50 rounded p-2 cursor-text min-h-[3rem]"
+                            >
+                              {groupText}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
