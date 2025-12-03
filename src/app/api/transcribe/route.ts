@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
             max_delay: 2,
             diarization: 'speaker',
             punctuation_permitted: true,
-            output_locale: 'en-US'
+            output_locale: 'en-GB' // Use British English spelling for Canadian conventions
           }
         }
       },

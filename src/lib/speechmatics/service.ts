@@ -306,7 +306,8 @@ export class SpeechmaticsService {
       // Create job configuration with webhook and diarization
       const transcriptionConfig: any = {
         language: config.language || 'en',
-        operating_point: config.operatingPoint || 'standard'
+        operating_point: config.operatingPoint || 'standard',
+        output_locale: 'en-GB' // Use British English spelling for Canadian conventions
       };
 
       // Add speaker diarization if enabled
@@ -521,7 +522,8 @@ export class SpeechmaticsService {
       // Build transcription config
       const transcriptionConfig: any = {
         language,
-        operating_point: operatingPoint
+        operating_point: operatingPoint,
+        output_locale: 'en-GB' // Use British English spelling for Canadian conventions
       };
 
       // Add diarization if enabled
@@ -612,7 +614,8 @@ export class SpeechmaticsService {
               type: 'transcription',
               transcription_config: {
                 language,
-                operating_point: 'standard'
+                operating_point: 'standard',
+                output_locale: 'en-GB' // Use British English spelling for Canadian conventions
               }
             };
 
