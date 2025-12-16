@@ -12,6 +12,20 @@ import { ProcessTranscriptionJobSchema, validateData } from '@/lib/validation/sc
  * Handle OPTIONS requests for CORS preflight
  */
 export async function OPTIONS(request: NextRequest) {
+  const timestamp = new Date().toISOString();
+  const headers = {
+    'origin': request.headers.get('origin') || 'none',
+    'referer': request.headers.get('referer') || 'none',
+    'user-agent': request.headers.get('user-agent')?.substring(0, 100) || 'none',
+    'x-forwarded-for': request.headers.get('x-forwarded-for') || 'none',
+  };
+
+  console.log(`[OPTIONS] ${timestamp} - CORS preflight request`, {
+    url: request.url,
+    method: request.method,
+    headers
+  });
+
   return new NextResponse(null, {
     status: 200,
     headers: {
@@ -24,48 +38,89 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const timestamp = new Date().toISOString();
+
+  // Log detailed request information
+  console.log(`[POST][${requestId}] ${timestamp} - Transcription processing request START`, {
+    url: request.url,
+    method: request.method,
+    headers: {
+      'content-type': request.headers.get('content-type'),
+      'origin': request.headers.get('origin'),
+      'referer': request.headers.get('referer'),
+      'user-agent': request.headers.get('user-agent')?.substring(0, 100),
+      'x-forwarded-for': request.headers.get('x-forwarded-for'),
+      'x-real-ip': request.headers.get('x-real-ip'),
+      'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
+      'host': request.headers.get('host'),
+    },
+    ip: request.ip || 'unknown',
+    geo: {
+      country: request.geo?.country,
+      region: request.geo?.region,
+      city: request.geo?.city,
+    }
+  });
+
   // Apply rate limiting first
+  console.log(`[POST][${requestId}] Applying rate limiting...`);
   const rateLimitResponse = await rateLimiters.transcription(request);
   if (rateLimitResponse) {
+    console.log(`[POST][${requestId}] Rate limit exceeded`);
     return rateLimitResponse;
   }
-
-  // Force recompilation to ensure latest Speechmatics changes are loaded
+  console.log(`[POST][${requestId}] Rate limit check passed`);
 
   try {
-    console.log('[API] Processing transcription request received');
+    console.log(`[POST][${requestId}] Processing transcription request...`);
 
     // Parse and validate request body
     let body: unknown;
     try {
+      console.log(`[POST][${requestId}] Parsing request body...`);
       body = await request.json();
-    } catch {
+      console.log(`[POST][${requestId}] Request body parsed successfully:`, {
+        hasJobId: !!(body as any)?.jobId,
+        hasLanguage: !!(body as any)?.language,
+        hasOperatingPoint: !!(body as any)?.operatingPoint,
+        bodyKeys: Object.keys(body as object || {})
+      });
+    } catch (error) {
+      console.error(`[POST][${requestId}] Failed to parse request body:`, error);
       return NextResponse.json(
-        { error: 'Invalid JSON in request body' },
-        { status: 400 }
+        { error: 'Invalid JSON in request body', requestId },
+        { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
       );
     }
 
+    console.log(`[POST][${requestId}] Validating request data...`);
     const validation = validateData(body, ProcessTranscriptionJobSchema);
 
     if (!validation.success) {
+      console.error(`[POST][${requestId}] Validation failed:`, validation.errors);
       return NextResponse.json(
         {
           error: 'Invalid request data',
-          details: validation.errors
+          details: validation.errors,
+          requestId
         },
-        { status: 400 }
+        { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
       );
     }
 
     const { jobId, language, operatingPoint } = validation.data;
 
-    console.log(`[API] Processing request for job: ${jobId}, language: ${language}, operatingPoint: ${operatingPoint}`);
+    console.log(`[POST][${requestId}] Request validated successfully`, {
+      jobId,
+      language,
+      operatingPoint
+    });
 
     // Check if Speechmatics is configured
-    console.log(`[API] Checking if Speechmatics is ready...`);
+    console.log(`[POST][${requestId}] Checking if Speechmatics is ready...`);
     if (!speechmaticsService.isReady()) {
-      console.warn(`[API] Speechmatics not configured for job ${jobId}. Marking as pending.`);
+      console.warn(`[POST][${requestId}] Speechmatics not configured for job ${jobId}. Marking as pending.`);
       
       // Update job status to indicate manual processing needed
       await updateTranscriptionStatusAdmin(jobId, 'pending-transcription', {
@@ -76,43 +131,71 @@ export async function POST(request: NextRequest) {
         success: false,
         message: 'Speechmatics API not configured. Job marked for manual processing.',
         jobId,
-        status: 'pending-transcription'
-      }, { status: 200 }); // Return 200 since it's not really an error
+        status: 'pending-transcription',
+        requestId
+      }, {
+        status: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      }); // Return 200 since it's not really an error
     }
 
-    console.log(`[API] Speechmatics is ready, proceeding with job ${jobId}`);
+    console.log(`[POST][${requestId}] Speechmatics is ready, proceeding with job ${jobId}`);
 
     // Get the transcription job details
+    console.log(`[POST][${requestId}] Fetching transcription job details from database...`);
     const transcriptionJob = await getTranscriptionByIdAdmin(jobId);
-    
+
     if (!transcriptionJob) {
+      console.error(`[POST][${requestId}] Transcription job not found in database: ${jobId}`);
       return NextResponse.json(
-        { error: 'Transcription job not found' },
-        { status: 404 }
+        { error: 'Transcription job not found', jobId, requestId },
+        {
+          status: 404,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
       );
     }
+
+    console.log(`[POST][${requestId}] Job details retrieved:`, {
+      mode: transcriptionJob.mode,
+      status: transcriptionJob.status,
+      duration: transcriptionJob.duration,
+      hasDownloadURL: !!transcriptionJob.downloadURL
+    });
 
     // Only process AI and hybrid mode jobs
     if (!['ai', 'hybrid'].includes(transcriptionJob.mode)) {
+      console.error(`[POST][${requestId}] Invalid mode for this endpoint:`, transcriptionJob.mode);
       return NextResponse.json(
-        { error: 'This endpoint only processes AI and hybrid transcription jobs' },
-        { status: 400 }
+        { error: 'This endpoint only processes AI and hybrid transcription jobs', mode: transcriptionJob.mode, requestId },
+        {
+          status: 400,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
       );
     }
 
-    // Check if job is already completed 
+    // Check if job is already completed
     if (['complete', 'pending-review'].includes(transcriptionJob.status)) {
+      console.warn(`[POST][${requestId}] Job already completed:`, transcriptionJob.status);
       return NextResponse.json(
-        { error: `Job is already ${transcriptionJob.status}` },
-        { status: 400 }
+        { error: `Job is already ${transcriptionJob.status}`, status: transcriptionJob.status, requestId },
+        {
+          status: 400,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
       );
     }
 
     // Only process jobs that are in processing status or failed (for retry)
     if (!['processing', 'failed'].includes(transcriptionJob.status)) {
+      console.error(`[POST][${requestId}] Invalid job status:`, transcriptionJob.status);
       return NextResponse.json(
-        { error: `Cannot process job with status: ${transcriptionJob.status}. Expected 'processing' or 'failed'.` },
-        { status: 400 }
+        { error: `Cannot process job with status: ${transcriptionJob.status}. Expected 'processing' or 'failed'.`, status: transcriptionJob.status, requestId },
+        {
+          status: 400,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
       );
     }
 
@@ -220,6 +303,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log(`[POST][${requestId}] ✅ Processing completed successfully`);
+
     return NextResponse.json({
       success: true,
       message: useWebhook
@@ -227,7 +312,8 @@ export async function POST(request: NextRequest) {
         : 'Transcription completed successfully',
       jobId,
       speechmaticsJobId: result.speechmaticsJobId,
-      status: useWebhook ? 'processing' : 'complete'
+      status: useWebhook ? 'processing' : 'complete',
+      requestId
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',

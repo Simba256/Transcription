@@ -357,6 +357,25 @@ export default function UploadPage() {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Diagnostic function to check API endpoint health
+  const checkAPIHealth = async () => {
+    console.log('[Health Check] Starting API endpoint health check...');
+    try {
+      const response = await fetch('/api/transcriptions/process', {
+        method: 'OPTIONS',
+      });
+      console.log('[Health Check] OPTIONS request result:', {
+        status: response.status,
+        ok: response.ok,
+        headers: Array.from(response.headers.entries()),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('[Health Check] Failed to reach API endpoint:', error);
+      return false;
+    }
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       toast({
@@ -383,6 +402,23 @@ export default function UploadPage() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Run health check before starting upload
+    console.log('[Upload] ==================== UPLOAD SESSION START ====================');
+    console.log('[Upload] Session info:', {
+      timestamp: new Date().toISOString(),
+      filesCount: uploadedFiles.length,
+      mode: transcriptionMode,
+      userId: user.uid,
+      userAgent: navigator.userAgent,
+    });
+
+    const healthCheckPassed = await checkAPIHealth();
+    if (!healthCheckPassed) {
+      console.warn('[Upload] API health check failed - proceeding anyway but may encounter issues');
+    } else {
+      console.log('[Upload] API health check passed ✅');
     }
 
     setIsUploading(true);
@@ -525,12 +561,38 @@ export default function UploadPage() {
         if (transcriptionMode === 'ai' || transcriptionMode === 'hybrid') {
           // Start processing with retry logic
           const processWithRetry = async (retries = 3, delayMs = 1000) => {
+            const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            console.log(`[Upload][${clientId}] ==================== TRANSCRIPTION PROCESSING START ====================`);
+            console.log(`[Upload][${clientId}] Client Environment:`, {
+              userAgent: navigator.userAgent,
+              language: navigator.language,
+              online: navigator.onLine,
+              cookiesEnabled: navigator.cookieEnabled,
+              platform: navigator.platform,
+              timestamp: new Date().toISOString(),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              windowLocation: window.location.href,
+            });
+
             for (let attempt = 1; attempt <= retries; attempt++) {
+              const attemptStartTime = Date.now();
               try {
-                console.log(`[Upload] Starting processing for job ${jobId} (attempt ${attempt}/${retries})`);
+                console.log(`[Upload][${clientId}][Attempt ${attempt}/${retries}] Starting processing for job ${jobId}`);
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Request payload:`, {
+                  jobId: jobId,
+                  language: transcriptionLanguage,
+                  operatingPoint: 'standard'
+                });
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                const timeoutId = setTimeout(() => {
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] Request timeout after 30 seconds`);
+                  controller.abort();
+                }, 30000); // 30 second timeout
+
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Sending POST request to /api/transcriptions/process...`);
+                const fetchStartTime = Date.now();
 
                 const transcriptionResponse = await fetch('/api/transcriptions/process', {
                   method: 'POST',
@@ -545,18 +607,48 @@ export default function UploadPage() {
                   signal: controller.signal
                 });
 
+                const fetchDuration = Date.now() - fetchStartTime;
                 clearTimeout(timeoutId);
 
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Response received after ${fetchDuration}ms`, {
+                  status: transcriptionResponse.status,
+                  statusText: transcriptionResponse.statusText,
+                  ok: transcriptionResponse.ok,
+                  headers: {
+                    'content-type': transcriptionResponse.headers.get('content-type'),
+                    'x-ratelimit-limit': transcriptionResponse.headers.get('x-ratelimit-limit'),
+                    'x-ratelimit-remaining': transcriptionResponse.headers.get('x-ratelimit-remaining'),
+                  },
+                  url: transcriptionResponse.url,
+                  redirected: transcriptionResponse.redirected,
+                  type: transcriptionResponse.type,
+                });
+
                 if (!transcriptionResponse.ok) {
-                  const errorData = await transcriptionResponse.json();
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] Response not OK, status: ${transcriptionResponse.status}`);
+
+                  let errorData;
+                  try {
+                    errorData = await transcriptionResponse.json();
+                    console.error(`[Upload][${clientId}][Attempt ${attempt}] Error response body:`, errorData);
+                  } catch (parseError) {
+                    console.error(`[Upload][${clientId}][Attempt ${attempt}] Failed to parse error response:`, parseError);
+                    errorData = { error: 'Failed to parse error response', originalStatus: transcriptionResponse.status };
+                  }
 
                   // Don't retry on 405 or 400 errors
                   if (transcriptionResponse.status === 405 || transcriptionResponse.status === 400) {
-                    console.error(`[Upload] Processing failed with ${transcriptionResponse.status} for job ${jobId}:`, errorData);
+                    console.error(`[Upload][${clientId}][Attempt ${attempt}] Non-retryable error ${transcriptionResponse.status}:`, {
+                      status: transcriptionResponse.status,
+                      errorData,
+                      headers: Array.from(transcriptionResponse.headers.entries()),
+                      url: transcriptionResponse.url,
+                    });
                     toast({
                       title: "Processing Issue",
-                      description: `Unable to start processing (Error ${transcriptionResponse.status}). Please contact support if this persists.`,
+                      description: `Unable to start processing (Error ${transcriptionResponse.status}). Please contact support with client ID: ${clientId}`,
                       variant: "destructive",
+                      duration: 10000,
                     });
                     return;
                   }
@@ -564,40 +656,65 @@ export default function UploadPage() {
                   throw new Error(`HTTP ${transcriptionResponse.status}: ${errorData.error || errorData.message}`);
                 }
 
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Parsing success response...`);
                 const responseData = await transcriptionResponse.json();
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Response data:`, responseData);
+
                 if (responseData.success === false) {
-                  console.info(`[Upload] Speechmatics not available for job ${jobId}, marked for manual processing:`, responseData.message);
+                  console.info(`[Upload][${clientId}][Attempt ${attempt}] Speechmatics not available for job ${jobId}:`, responseData.message);
                 } else {
-                  console.log(`[Upload] Successfully started Speechmatics processing for job ${jobId}`);
+                  console.log(`[Upload][${clientId}][Attempt ${attempt}] ✅ SUCCESS - Processing started for job ${jobId}`);
                 }
+
+                const totalDuration = Date.now() - attemptStartTime;
+                console.log(`[Upload][${clientId}][Attempt ${attempt}] Total attempt duration: ${totalDuration}ms`);
                 return; // Success, exit retry loop
 
               } catch (error: any) {
-                console.warn(`[Upload] Processing attempt ${attempt}/${retries} failed for job ${jobId}:`, error.message);
+                const totalDuration = Date.now() - attemptStartTime;
+                console.error(`[Upload][${clientId}][Attempt ${attempt}] ❌ FAILED after ${totalDuration}ms:`, {
+                  errorName: error.name,
+                  errorMessage: error.message,
+                  errorStack: error.stack?.split('\n').slice(0, 3).join('\n'),
+                  errorType: error.constructor.name,
+                });
 
                 // Check if it's a network error
                 if (error.name === 'AbortError') {
-                  console.error(`[Upload] Request timeout for job ${jobId}`);
-                } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-                  console.error(`[Upload] Network error for job ${jobId}`);
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] Timeout error - request aborted after 30 seconds`);
+                } else if (error.message?.includes('Failed to fetch')) {
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] Network error - fetch failed (possible CORS, DNS, or connection issue)`);
+                } else if (error.message?.includes('NetworkError')) {
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] Browser reported network error`);
+                } else if (error.message?.includes('ERR_')) {
+                  console.error(`[Upload][${clientId}][Attempt ${attempt}] System error code detected`);
                 }
 
                 // Retry with exponential backoff
                 if (attempt < retries) {
                   const backoffDelay = delayMs * Math.pow(2, attempt - 1);
-                  console.log(`[Upload] Retrying in ${backoffDelay}ms...`);
+                  console.log(`[Upload][${clientId}][Attempt ${attempt}] Retrying in ${backoffDelay}ms...`);
                   await new Promise(resolve => setTimeout(resolve, backoffDelay));
                 } else {
                   // Final attempt failed
-                  console.error(`[Upload] All ${retries} attempts failed for job ${jobId}`);
+                  console.error(`[Upload][${clientId}] ==================== ALL ATTEMPTS FAILED ====================`);
+                  console.error(`[Upload][${clientId}] Final error summary:`, {
+                    jobId,
+                    totalAttempts: retries,
+                    lastError: error.message,
+                    clientId,
+                    timestamp: new Date().toISOString(),
+                  });
                   toast({
                     title: "Processing delayed",
-                    description: "Your file was uploaded but processing couldn't start immediately. We'll retry automatically.",
+                    description: `Your file was uploaded but processing couldn't start. Client ID: ${clientId.substring(0, 20)}...`,
                     variant: "default",
+                    duration: 10000,
                   });
                 }
               }
             }
+            console.log(`[Upload][${clientId}] ==================== TRANSCRIPTION PROCESSING END ====================`);
           };
 
           // Execute retry logic without blocking upload completion
