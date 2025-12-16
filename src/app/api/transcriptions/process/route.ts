@@ -8,6 +8,21 @@ import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, Transcriptio
 import { rateLimiters } from '@/lib/middleware/rate-limit';
 import { ProcessTranscriptionJobSchema, validateData } from '@/lib/validation/schemas';
 
+/**
+ * Handle OPTIONS requests for CORS preflight
+ */
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400', // 24 hours
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   // Apply rate limiting first
   const rateLimitResponse = await rateLimiters.transcription(request);
@@ -213,17 +228,26 @@ export async function POST(request: NextRequest) {
       jobId,
       speechmaticsJobId: result.speechmaticsJobId,
       status: useWebhook ? 'processing' : 'complete'
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      }
     });
 
   } catch (error) {
     console.error('[API] Error processing transcription job:', error);
-    
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to process transcription job',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
     );
   }
 }

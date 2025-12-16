@@ -521,37 +521,88 @@ export default function UploadPage() {
           await Promise.all([refreshWallet(), refreshUser()]);
         }
 
-        // For AI and hybrid modes, start Speechmatics transcription processing (async, don't wait)
+        // For AI and hybrid modes, start Speechmatics transcription processing with retry logic
         if (transcriptionMode === 'ai' || transcriptionMode === 'hybrid') {
-          // Start processing in the background without waiting
-          fetch('/api/transcriptions/process', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              jobId: jobId,
-              language: transcriptionLanguage, // Use selected language
-              operatingPoint: 'standard'
-            })
-          }).then(async (transcriptionResponse) => {
-            if (!transcriptionResponse.ok) {
-              const errorData = await transcriptionResponse.json();
-              console.warn(`[Upload] Speechmatics processing failed for job ${jobId} (${transcriptionResponse.status}):`, errorData.error || errorData.message);
-              // This is expected if Speechmatics is not configured or has issues
-              // The job will still be created and can be processed manually
-            } else {
-              // Check the response body for success status
-              const responseData = await transcriptionResponse.json();
-              if (responseData.success === false) {
-                console.info(`[Upload] Speechmatics not available for job ${jobId}, marked for manual processing:`, responseData.message);
-              } else {
-                console.log(`[Upload] Successfully started Speechmatics processing for job ${jobId}`);
+          // Start processing with retry logic
+          const processWithRetry = async (retries = 3, delayMs = 1000) => {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+              try {
+                console.log(`[Upload] Starting processing for job ${jobId} (attempt ${attempt}/${retries})`);
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+                const transcriptionResponse = await fetch('/api/transcriptions/process', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    jobId: jobId,
+                    language: transcriptionLanguage,
+                    operatingPoint: 'standard'
+                  }),
+                  signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!transcriptionResponse.ok) {
+                  const errorData = await transcriptionResponse.json();
+
+                  // Don't retry on 405 or 400 errors
+                  if (transcriptionResponse.status === 405 || transcriptionResponse.status === 400) {
+                    console.error(`[Upload] Processing failed with ${transcriptionResponse.status} for job ${jobId}:`, errorData);
+                    toast({
+                      title: "Processing Issue",
+                      description: `Unable to start processing (Error ${transcriptionResponse.status}). Please contact support if this persists.`,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  throw new Error(`HTTP ${transcriptionResponse.status}: ${errorData.error || errorData.message}`);
+                }
+
+                const responseData = await transcriptionResponse.json();
+                if (responseData.success === false) {
+                  console.info(`[Upload] Speechmatics not available for job ${jobId}, marked for manual processing:`, responseData.message);
+                } else {
+                  console.log(`[Upload] Successfully started Speechmatics processing for job ${jobId}`);
+                }
+                return; // Success, exit retry loop
+
+              } catch (error: any) {
+                console.warn(`[Upload] Processing attempt ${attempt}/${retries} failed for job ${jobId}:`, error.message);
+
+                // Check if it's a network error
+                if (error.name === 'AbortError') {
+                  console.error(`[Upload] Request timeout for job ${jobId}`);
+                } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+                  console.error(`[Upload] Network error for job ${jobId}`);
+                }
+
+                // Retry with exponential backoff
+                if (attempt < retries) {
+                  const backoffDelay = delayMs * Math.pow(2, attempt - 1);
+                  console.log(`[Upload] Retrying in ${backoffDelay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, backoffDelay));
+                } else {
+                  // Final attempt failed
+                  console.error(`[Upload] All ${retries} attempts failed for job ${jobId}`);
+                  toast({
+                    title: "Processing delayed",
+                    description: "Your file was uploaded but processing couldn't start immediately. We'll retry automatically.",
+                    variant: "default",
+                  });
+                }
               }
             }
-          }).catch(error => {
-            console.warn(`[Upload] Network error starting Speechmatics processing for job ${jobId}:`, error.message);
-            // Job is still uploaded successfully, processing will be handled separately
+          };
+
+          // Execute retry logic without blocking upload completion
+          processWithRetry().catch(error => {
+            console.error(`[Upload] Unexpected error in retry handler for job ${jobId}:`, error);
           });
         }
 
