@@ -376,6 +376,80 @@ export default function UploadPage() {
     }
   };
 
+  // Test API endpoint directly from upload page
+  const testAPIDirectly = async () => {
+    console.log('[Direct Test] ==================== DIRECT API TEST FROM UPLOAD PAGE ====================');
+
+    try {
+      // Test OPTIONS
+      console.log('[Direct Test] Testing OPTIONS...');
+      const optionsRes = await fetch('/api/transcriptions/process', {
+        method: 'OPTIONS',
+      });
+      console.log('[Direct Test] OPTIONS result:', {
+        status: optionsRes.status,
+        ok: optionsRes.ok,
+        headers: Object.fromEntries(optionsRes.headers.entries()),
+      });
+
+      // Test POST
+      console.log('[Direct Test] Testing POST...');
+      const testJobId = `direct-test-${Date.now()}`;
+      const postRes = await fetch('/api/transcriptions/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobId: testJobId,
+          language: 'en',
+          operatingPoint: 'standard',
+        }),
+      });
+
+      const postHeaders = Object.fromEntries(postRes.headers.entries());
+      let postBody;
+      try {
+        const text = await postRes.text();
+        postBody = JSON.parse(text);
+      } catch {
+        postBody = await postRes.text();
+      }
+
+      console.log('[Direct Test] POST result:', {
+        status: postRes.status,
+        ok: postRes.ok,
+        headers: postHeaders,
+        body: postBody,
+      });
+
+      if (postRes.status === 405) {
+        toast({
+          title: "🔴 API Test Failed!",
+          description: `Got 405 error even from direct test. Status: ${postRes.status}`,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "✅ API Test Passed!",
+          description: `API is accessible. Status: ${postRes.status} (404/400 expected for test)`,
+          duration: 10000,
+        });
+      }
+    } catch (error: any) {
+      console.error('[Direct Test] Test failed:', error);
+      toast({
+        title: "❌ API Test Error",
+        description: error.message,
+        variant: "destructive",
+        duration: 10000,
+      });
+    }
+
+    console.log('[Direct Test] ==================== DIRECT API TEST END ====================');
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       toast({
@@ -1591,6 +1665,14 @@ export default function UploadPage() {
 
           {/* Submit Button */}
           <div className="flex justify-end space-x-4 pt-4">
+            <Button
+              variant="outline"
+              onClick={testAPIDirectly}
+              disabled={isUploading}
+              className="px-6 py-3 bg-yellow-50 border-yellow-300 text-yellow-800 hover:bg-yellow-100"
+            >
+              🧪 Test API
+            </Button>
             <Button
               variant="outline"
               onClick={() => router.push('/dashboard')}
