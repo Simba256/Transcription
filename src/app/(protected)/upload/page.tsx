@@ -450,6 +450,65 @@ export default function UploadPage() {
     console.log('[Direct Test] ==================== DIRECT API TEST END ====================');
   };
 
+  // Test real upload flow (create job + process)
+  const testRealFlow = async () => {
+    console.log('[Real Flow Test] ==================== TESTING REAL UPLOAD FLOW ====================');
+
+    try {
+      const testRes = await fetch('/api/test-real-flow', {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      let testBody;
+      try {
+        testBody = await testRes.json();
+      } catch {
+        testBody = await testRes.text();
+      }
+
+      console.log('[Real Flow Test] Result:', {
+        status: testRes.status,
+        body: testBody,
+      });
+
+      if (testBody.success) {
+        const processStatus = testBody.results?.processApiStatus;
+        if (processStatus === 405) {
+          toast({
+            title: "🔴 405 Error Reproduced!",
+            description: "The test reproduced the 405 error with a real job. This confirms the issue.",
+            variant: "destructive",
+            duration: 15000,
+          });
+        } else {
+          toast({
+            title: "✅ Real Flow Test Passed!",
+            description: `Process API returned ${processStatus}. Check console for details.`,
+            duration: 10000,
+          });
+        }
+      } else {
+        toast({
+          title: "❌ Test Failed",
+          description: testBody.error || "Unknown error",
+          variant: "destructive",
+          duration: 10000,
+        });
+      }
+    } catch (error: any) {
+      console.error('[Real Flow Test] Error:', error);
+      toast({
+        title: "❌ Test Error",
+        description: error.message,
+        variant: "destructive",
+        duration: 10000,
+      });
+    }
+
+    console.log('[Real Flow Test] ==================== TEST END ====================');
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       toast({
@@ -1672,6 +1731,14 @@ export default function UploadPage() {
               className="px-6 py-3 bg-yellow-50 border-yellow-300 text-yellow-800 hover:bg-yellow-100"
             >
               🧪 Test API
+            </Button>
+            <Button
+              variant="outline"
+              onClick={testRealFlow}
+              disabled={isUploading}
+              className="px-6 py-3 bg-orange-50 border-orange-300 text-orange-800 hover:bg-orange-100"
+            >
+              🔬 Test Real Flow
             </Button>
             <Button
               variant="outline"
