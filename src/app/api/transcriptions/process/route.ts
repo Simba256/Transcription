@@ -5,7 +5,6 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 import { speechmaticsService } from '@/lib/speechmatics/service';
 import { getTranscriptionByIdAdmin, updateTranscriptionStatusAdmin, TranscriptionMode } from '@/lib/firebase/transcriptions-admin';
-import { rateLimiters } from '@/lib/middleware/rate-limit';
 import { ProcessTranscriptionJobSchema, validateData } from '@/lib/validation/schemas';
 
 /**
@@ -65,21 +64,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Apply rate limiting - NOW INSIDE try-catch
-    console.log(`[POST][${requestId}] Applying rate limiting...`);
-    try {
-      const rateLimitResponse = await rateLimiters.transcription(request);
-      if (rateLimitResponse) {
-        console.log(`[POST][${requestId}] Rate limit exceeded`);
-        return rateLimitResponse;
-      }
-      console.log(`[POST][${requestId}] Rate limit check passed`);
-    } catch (rateLimitError) {
-      console.error(`[POST][${requestId}] Rate limiter crashed:`, rateLimitError);
-      // Continue without rate limiting if it fails - don't block the request
-      console.log(`[POST][${requestId}] Continuing without rate limiting due to error`);
-    }
-
+    // Rate limiting removed - relying on Firebase auth, credit system, and Vercel edge protection
     console.log(`[POST][${requestId}] Processing transcription request...`);
 
     // Parse and validate request body
