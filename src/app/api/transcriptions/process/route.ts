@@ -41,38 +41,45 @@ export async function POST(request: NextRequest) {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const timestamp = new Date().toISOString();
 
-  // Log detailed request information
-  console.log(`[POST][${requestId}] ${timestamp} - Transcription processing request START`, {
-    url: request.url,
-    method: request.method,
-    headers: {
-      'content-type': request.headers.get('content-type'),
-      'origin': request.headers.get('origin'),
-      'referer': request.headers.get('referer'),
-      'user-agent': request.headers.get('user-agent')?.substring(0, 100),
-      'x-forwarded-for': request.headers.get('x-forwarded-for'),
-      'x-real-ip': request.headers.get('x-real-ip'),
-      'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
-      'host': request.headers.get('host'),
-    },
-    ip: request.ip || 'unknown',
-    geo: {
-      country: request.geo?.country,
-      region: request.geo?.region,
-      city: request.geo?.city,
-    }
-  });
-
-  // Apply rate limiting first
-  console.log(`[POST][${requestId}] Applying rate limiting...`);
-  const rateLimitResponse = await rateLimiters.transcription(request);
-  if (rateLimitResponse) {
-    console.log(`[POST][${requestId}] Rate limit exceeded`);
-    return rateLimitResponse;
-  }
-  console.log(`[POST][${requestId}] Rate limit check passed`);
-
+  // CRITICAL: Wrap ENTIRE handler in try-catch to prevent unhandled errors from causing 405
   try {
+    // Log detailed request information
+    console.log(`[POST][${requestId}] ${timestamp} - Transcription processing request START`, {
+      url: request.url,
+      method: request.method,
+      headers: {
+        'content-type': request.headers.get('content-type'),
+        'origin': request.headers.get('origin'),
+        'referer': request.headers.get('referer'),
+        'user-agent': request.headers.get('user-agent')?.substring(0, 100),
+        'x-forwarded-for': request.headers.get('x-forwarded-for'),
+        'x-real-ip': request.headers.get('x-real-ip'),
+        'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
+        'host': request.headers.get('host'),
+      },
+      ip: request.ip || 'unknown',
+      geo: {
+        country: request.geo?.country,
+        region: request.geo?.region,
+        city: request.geo?.city,
+      }
+    });
+
+    // Apply rate limiting - NOW INSIDE try-catch
+    console.log(`[POST][${requestId}] Applying rate limiting...`);
+    try {
+      const rateLimitResponse = await rateLimiters.transcription(request);
+      if (rateLimitResponse) {
+        console.log(`[POST][${requestId}] Rate limit exceeded`);
+        return rateLimitResponse;
+      }
+      console.log(`[POST][${requestId}] Rate limit check passed`);
+    } catch (rateLimitError) {
+      console.error(`[POST][${requestId}] Rate limiter crashed:`, rateLimitError);
+      // Continue without rate limiting if it fails - don't block the request
+      console.log(`[POST][${requestId}] Continuing without rate limiting due to error`);
+    }
+
     console.log(`[POST][${requestId}] Processing transcription request...`);
 
     // Parse and validate request body
@@ -216,13 +223,17 @@ export async function POST(request: NextRequest) {
     const audioBuffer = await downloadAudioFile(transcriptionJob.downloadURL);
 
     if (!audioBuffer) {
+      console.error(`[POST][${requestId}] Failed to download audio file from Firebase Storage`);
       await updateTranscriptionStatusAdmin(jobId, 'failed', {
         specialInstructions: 'Failed to download audio file'
       });
 
       return NextResponse.json(
-        { error: 'Failed to download audio file' },
-        { status: 500 }
+        { error: 'Failed to download audio file', requestId },
+        {
+          status: 500,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
       );
     }
 
@@ -321,12 +332,17 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[API] Error processing transcription job:', error);
+    console.error(`[POST][${requestId}] ⚠️ CAUGHT ERROR - Preventing 405 crash:`, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 5) : undefined,
+      timestamp: new Date().toISOString()
+    });
 
     return NextResponse.json(
       {
         error: 'Failed to process transcription job',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
+        requestId
       },
       {
         status: 500,
@@ -343,19 +359,41 @@ export async function POST(request: NextRequest) {
  */
 async function downloadAudioFile(downloadURL: string): Promise<Buffer | null> {
   try {
-    console.log(`[API] Downloading audio file from: ${downloadURL}`);
-    
-    const response = await fetch(downloadURL);
-    
+    console.log(`[API] Downloading audio file from: ${downloadURL.substring(0, 100)}...`);
+
+    const response = await fetch(downloadURL, {
+      method: 'GET',
+      // Add timeout to prevent hanging
+      signal: AbortSignal.timeout(30000) // 30 second timeout
+    });
+
     if (!response.ok) {
+      console.error(`[API] Failed to download audio file:`, {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length')
+      });
       throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
     }
-    
+
+    console.log(`[API] Audio file download successful:`, {
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length')
+    });
+
     const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-    
+    const buffer = Buffer.from(arrayBuffer);
+    console.log(`[API] Audio file converted to buffer: ${buffer.length} bytes`);
+    return buffer;
+
   } catch (error) {
-    console.error('[API] Error downloading audio file:', error);
+    console.error('[API] Error downloading audio file:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      name: error instanceof Error ? error.name : 'Unknown',
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined
+    });
     return null;
   }
 }
