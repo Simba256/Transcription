@@ -44,7 +44,7 @@ export default function BillingPage() {
   const { user, userData } = useAuth();
   const { transactions, purchaseCredits } = useCredits();
   const { activePackages, loading: packagesLoading } = usePackages();
-  const { freeTrialMinutes, freeTrialActive, freeTrialUsed, freeTrialTotal } = useWallet();
+  const { freeTrialMinutes, freeTrialActive, freeTrialUsed, freeTrialTotal, refreshWallet } = useWallet();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState('ai');
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
@@ -64,6 +64,46 @@ export default function BillingPage() {
     };
     loadPricing();
   }, []);
+
+  // Auto-refresh wallet data after successful Stripe checkout
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const canceled = urlParams.get('canceled');
+
+    if (success === 'true') {
+      console.log('[Billing] Payment successful, refreshing wallet data...');
+
+      // Give webhook a moment to process (1 second delay)
+      setTimeout(async () => {
+        try {
+          await refreshWallet();
+          console.log('[Billing] Wallet data refreshed successfully');
+
+          toast({
+            title: "Purchase Successful! 🎉",
+            description: "Your package has been added to your account. Check your dashboard to see it.",
+            duration: 6000,
+          });
+        } catch (error) {
+          console.error('[Billing] Error refreshing wallet:', error);
+        }
+      }, 1000);
+
+      // Clean up URL (remove success parameter)
+      window.history.replaceState({}, document.title, '/billing');
+    } else if (canceled === 'true') {
+      toast({
+        title: "Payment Canceled",
+        description: "Your payment was canceled. No charges were made.",
+        variant: "destructive",
+        duration: 5000,
+      });
+
+      // Clean up URL
+      window.history.replaceState({}, document.title, '/billing');
+    }
+  }, [refreshWallet, toast]);
 
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
   const isTestMode = publishableKey.includes('pk_test');
