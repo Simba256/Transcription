@@ -1,0 +1,36 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    // Enforce proper async/await usage
+    "require-await": "warn",
+    "@typescript-eslint/no-floating-promises": "error",
+    "@typescript-eslint/await-thenable": "error",
+
+    // Catch missing await on Next.js Dynamic APIs
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.name='cookies']:not(AwaitExpression > CallExpression[callee.name='cookies'])",
+        "message": "cookies() must be awaited in Next.js 15+. Use: await cookies()"
+      },
+      {
+        "selector": "CallExpression[callee.name='headers']:not(AwaitExpression > CallExpression[callee.name='headers'])",
+        "message": "headers() must be awaited in Next.js 15+. Use: await headers()"
+      },
+      {
+        "selector": "CallExpression[callee.name='draftMode']:not(AwaitExpression > CallExpression[callee.name='draftMode'])",
+        "message": "draftMode() must be awaited in Next.js 15+. Use: await draftMode()"
+      }
+    ],
+
+    // Prevent common mistakes
+    "@typescript-eslint/no-misused-promises": "error",
+    "@typescript-eslint/promise-function-async": "warn"
+  },
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  }
+}
