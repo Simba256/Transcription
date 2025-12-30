@@ -63,3 +63,20 @@ textarea::-moz-selection {
   background-color: #b29dd980;
   color: #003366;
 }
+
+/* Example: move AudioEye to left */
+#audioeye-launcher,
+.audioeye-launcher,
+iframe[src*="audioeye"] {
+  left: 20px !important;
+  right: auto !important;
+}
+
+/* Example: keep Chat widget on right */
+#webchat-launcher,
+.webchat-launcher,
+iframe[src*="apigateway"] {
+  right: 20px !important;
+  left: auto !important;
+}
+
